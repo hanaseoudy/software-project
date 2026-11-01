@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { UsersModule } from './users/users.module';
 
 
 @Module({
@@ -15,16 +16,17 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 
       useFactory:(configService:ConfigService)=>{
         const uri=configService.get<string>('MONGODB_URI');
-
+        
         if(!uri){
           throw new Error(
             'MongoDB URI is missing check env file',);
            }
-
         console.log('uri loaded...');
+        
 
         return {
          uri,
+         autoCreate: true,
          connectionFactory: (connection) => {
             console.log('MongoDB connected successfully!');
            return connection;
@@ -32,6 +34,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
            };
          },
         }),
+    UsersModule,
       ],
   
   controllers: [AppController],
