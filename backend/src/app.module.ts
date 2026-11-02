@@ -3,12 +3,13 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
 
 
 @Module({
   imports: [
-    ConfigModule.forRoot( {
+    ConfigModule.forRoot({
       isGlobal: true,
     }),
     MongooseModule.forRootAsync({
@@ -25,18 +26,20 @@ import { UsersModule } from './users/users.module';
         
 
         return {
-         uri,
-         autoCreate: true,
-         connectionFactory: (connection) => {
-            console.log('MongoDB connected successfully!');
-           return connection;
-             },
-           };
-         },
-        }),
-    UsersModule,
-      ],
-  
+
+      uri,
+      autoCreate: true,
+      connectionFactory: (connection) => {
+        console.log('MongoDB connected successfully!');
+        return connection;
+      },
+    };
+  },
+}),
+HotelsModule,
+UsersModule,
+],
+
   controllers: [AppController],
   providers: [AppService],
 })
