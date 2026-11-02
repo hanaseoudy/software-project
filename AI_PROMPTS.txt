@@ -1,0 +1,16 @@
+================================================
+Date: 2026-11-02
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: HTL-16, HTL-17, HTL-18, HTL-23, GEN-11, PAY-02
+
+Prompt:
+Help me create the Hotel Booking and Review Mongoose entities (TASK-5)
+based on the project PDF and the requirements sheet.
+
+How the output was used:
+Used the generated schemas (HotelBooking, BookedRoom, Review) after
+reviewing them against the requirements sheet. Updated them based on
+team leader review (booking reference, hold expiry, per-room price,
+EXPIRED status).
+================================================
