@@ -1,26 +1,24 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
+import { integerValidator, timeRegex } from './validators';
 
 export type HotelDocument = HydratedDocument<Hotel>;
 
 @Schema({ _id: false })
-export class CancellationRule {
-  @Prop({ required: true, min: 0 })
-  hoursBeforeCheckIn: number;
+export class CancellationTier {
+  @Prop({ required: true, min: 0, validate: integerValidator })
+  daysBeforeCheckIn: number;
 
   @Prop({ required: true, min: 0, max: 100 })
   refundPercentage: number;
 }
-export const CancellationRuleSchema =
-  SchemaFactory.createForClass(CancellationRule);
+export const CancellationTierSchema =
+  SchemaFactory.createForClass(CancellationTier);
 
 @Schema({ _id: false })
 export class HotelPolicy {
-  @Prop({ type: [CancellationRuleSchema], default: [] })
-  cancellationRules: CancellationRule[];
-
-  @Prop({ trim: true, default: '' })
-  houseRules: string;
+  @Prop({ type: [CancellationTierSchema], default: [] })
+  cancellationTiers: CancellationTier[];
 }
 export const HotelPolicySchema = SchemaFactory.createForClass(HotelPolicy);
 
@@ -32,33 +30,35 @@ export class Hotel {
   @Prop({ trim: true, maxlength: 3000, default: '' })
   description: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'City', required: true, index: true })
-  city: Types.ObjectId;
-
   @Prop({ required: true, trim: true })
   address: string;
 
-  @Prop({ min: 1, max: 5, required: true })
+  @Prop({ type: Types.ObjectId, ref: 'City', required: true, index: true })
+  city: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Country', required: true, index: true })
+  country: Types.ObjectId;
+
+  @Prop({ required: true, min: 1, max: 5, validate: integerValidator })
   starRating: number;
 
   @Prop({ type: [String], default: [] })
   amenities: string[];
 
-  @Prop({ type: [String], default: [] })
+  @Prop({
+    type: [String],
+    default: [],
+    validate: [
+      (v: string[]) => v.length <= 5,
+      'A hotel can have at most 5 images',
+    ],
+  })
   images: string[];
 
-  @Prop({
-    required: true,
-    default: '14:00',
-    match: /^([01]\d|2[0-3]):[0-5]\d$/,
-  })
+  @Prop({ required: true, default: '14:00', match: timeRegex })
   checkInTime: string;
 
-  @Prop({
-    required: true,
-    default: '12:00',
-    match: /^([01]\d|2[0-3]):[0-5]\d$/,
-  })
+  @Prop({ required: true, default: '12:00', match: timeRegex })
   checkOutTime: string;
 
   @Prop({ type: HotelPolicySchema, default: () => ({}) })
@@ -80,4 +80,5 @@ export class Hotel {
 export const HotelSchema = SchemaFactory.createForClass(Hotel);
 
 HotelSchema.index({ city: 1, isActive: 1 });
+HotelSchema.index({ country: 1, isActive: 1 });
 HotelSchema.index({ name: 'text' });
