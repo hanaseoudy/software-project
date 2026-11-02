@@ -4,11 +4,14 @@ import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BlogModule } from './blog/blog.module';
+import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
+import { HotelsModule } from './hotels/hotels.module';
+import { UsersModule } from './users/users.module';
 
 
 @Module({
   imports: [
-    ConfigModule.forRoot( {
+    ConfigModule.forRoot({
       isGlobal: true,
     }),
     MongooseModule.forRootAsync({
@@ -16,26 +19,34 @@ import { BlogModule } from './blog/blog.module';
 
       useFactory:(configService:ConfigService)=>{
         const uri=configService.get<string>('MONGODB_URI');
-
+        
         if(!uri){
           throw new Error(
             'MongoDB URI is missing check env file',);
            }
-
         console.log('uri loaded...');
+        
 
         return {
-         uri,
-         connectionFactory: (connection) => {
-            console.log('MongoDB connected successfully!');
-           return connection;
-             },
-           };
-         },
-        }),
-    BlogModule,
-      ],
-  
+
+
+
+      uri,
+      autoCreate: true,
+      connectionFactory: (connection) => {
+        console.log('MongoDB connected successfully!');
+        return connection;
+      },
+    };
+  },
+}),
+BlogModule,
+HotelBookingsModule,
+HotelsModule,
+UsersModule,
+],
+
+
   controllers: [AppController],
   providers: [AppService],
 })
