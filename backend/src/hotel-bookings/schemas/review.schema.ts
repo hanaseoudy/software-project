@@ -17,8 +17,11 @@ export class Review {
   @Prop({ required: true, min: 1, max: 5 })
   rating!: number;
 
-  @Prop()
+  @Prop({ maxlength: 1000 })
   comment?: string;
+
+  @Prop({ default: false })
+  hidden!: boolean;
 }
 
 export const ReviewSchema = SchemaFactory.createForClass(Review);
