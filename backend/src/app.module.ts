@@ -4,6 +4,8 @@ import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { HotelsModule } from './hotels/hotels.module';
+import { UsersModule } from './users/users.module';
+
 
 @Module({
   imports: [
@@ -11,27 +13,33 @@ import { HotelsModule } from './hotels/hotels.module';
       isGlobal: true,
     }),
     MongooseModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        const uri = configService.get<string>('MONGODB_URI');
+      inject:[ConfigService],
 
-        if (!uri) {
-          throw new Error('MongoDB URI is missing check env file');
-        }
-
+      useFactory:(configService:ConfigService)=>{
+        const uri=configService.get<string>('MONGODB_URI');
+        
+        if(!uri){
+          throw new Error(
+            'MongoDB URI is missing check env file',);
+           }
         console.log('uri loaded...');
+        
 
         return {
-          uri,
-          connectionFactory: (connection) => {
-            console.log('MongoDB connected successfully!');
-            return connection;
-          },
-        };
+
+      uri,
+      autoCreate: true,
+      connectionFactory: (connection) => {
+        console.log('MongoDB connected successfully!');
+        return connection;
       },
-    }),
-    HotelsModule,
-  ],
+    };
+  },
+}),
+HotelsModule,
+UsersModule,
+],
+
   controllers: [AppController],
   providers: [AppService],
 })
