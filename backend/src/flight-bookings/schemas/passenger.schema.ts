@@ -6,6 +6,21 @@ export enum PassengerType {
   INFANT = 'INFANT',
 }
 
+export enum DocumentType {
+  PASSPORT = 'PASSPORT',
+  NATIONAL_ID = 'NATIONAL_ID',
+}
+
+@Schema({ _id: false })
+export class BaggageItem {
+  @Prop({ required: true, min: 0 })
+  weightKg: number;
+
+  @Prop({ default: false })
+  isExtra: boolean;
+}
+export const BaggageItemSchema = SchemaFactory.createForClass(BaggageItem);
+
 @Schema({ _id: true })
 export class Passenger {
   @Prop({ required: true, trim: true })
@@ -20,14 +35,17 @@ export class Passenger {
   @Prop({ required: true })
   dateOfBirth: Date;
 
-  @Prop({ required: true })
-  passportNumber: string;
+  @Prop({ required: true, enum: DocumentType })
+  documentType: DocumentType;
+
+  @Prop({ required: true, trim: true })
+  documentNumber: string;
 
   @Prop()
   nationality?: string;
 
-  @Prop({ default: 0, min: 0 })
-  extraBags: number;
+  @Prop({ type: [BaggageItemSchema], default: [] })
+  baggage: BaggageItem[];
 
   @Prop()
   seatNumber?: string;
