@@ -14,8 +14,8 @@ export enum IntercityTransportMode {
 
 @Schema({ timestamps: true })
 export class TransportCost {
-  @Prop({ type: Types.ObjectId, ref: 'Itinerary', required: true, index: true })
-  itineraryId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'ItineraryDay', required: true, index: true })
+  dayId: Types.ObjectId;
 
   @Prop({ type: String, required: true, trim: true })
   fromCityId: string;
@@ -31,9 +31,6 @@ export class TransportCost {
 
   @Prop({ type: String, required: true, uppercase: true, match: /^[A-Z]{3}$/ })
   currency: string;
-
-  @Prop({ type: Date })
-  travelDate?: Date;
 }
 
 export const TransportCostSchema = SchemaFactory.createForClass(TransportCost);

@@ -9,26 +9,25 @@ export class Activity {
   dayId: Types.ObjectId;
 
   @Prop({ type: String, required: true, trim: true })
-  title: string;
+  name: string;
 
-  @Prop({ type: String, trim: true })
-  description?: string;
+  @Prop({ type: String, required: true, trim: true })
+  description: string;
 
-  @Prop({ type: String, trim: true })
-  attractionId?: string;
+  // Optional time displayed within the day, e.g. "14:30".
+  @Prop({ type: String, match: /^([01]\d|2[0-3]):[0-5]\d$/ })
+  time?: string;
 
-  @Prop({ type: Date })
-  startTime?: Date;
+  @Prop({ type: Number, min: 0 })
+  cost?: number;
 
-  @Prop({ type: Date })
-  endTime?: Date;
+  // Required by service when cost is provided; validate against supported currencies.
+  @Prop({ type: String, uppercase: true, match: /^[A-Z]{3}$/ })
+  currency?: string;
 
-  @Prop({ type: Number, min: 0, default: 0 })
-  order: number;
-
-  @Prop({ type: [String], default: [] })
+  // GEN-08: upload endpoint checks JPG/PNG and <=5MB per file.
+  @Prop({ type: [String], default: [], validate: [(v: string[]) => v.length <= 5, 'Maximum 5 images per activity'] })
   images: string[];
 }
 
 export const ActivitySchema = SchemaFactory.createForClass(Activity);
-ActivitySchema.index({ dayId: 1, order: 1 });

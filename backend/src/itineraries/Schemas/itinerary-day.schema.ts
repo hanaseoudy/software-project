@@ -8,11 +8,11 @@ export class ItineraryDay {
   @Prop({ type: Types.ObjectId, ref: 'Itinerary', required: true, index: true })
   itineraryId: Types.ObjectId;
 
-  // 1-based order; service derives the date from itinerary.startDate.
-  @Prop({ type: Number, required: true, min: 1 })
+  // Date = itinerary.startDate + (dayNumber - 1) days; do not store it.
+  @Prop({ type: Number, required: true, min: 1, max: 60 })
   dayNumber: number;
 
-  // Identifier from the provided cities dataset.
+  // Service validates this against the shared seeded city list.
   @Prop({ type: String, required: true, trim: true })
   cityId: string;
 
@@ -22,3 +22,4 @@ export class ItineraryDay {
 
 export const ItineraryDaySchema = SchemaFactory.createForClass(ItineraryDay);
 ItineraryDaySchema.index({ itineraryId: 1, dayNumber: 1 }, { unique: true });
+ItineraryDaySchema.index({ cityId: 1 });

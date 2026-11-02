@@ -13,12 +13,12 @@ export class Itinerary {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   userId: Types.ObjectId;
 
-  @Prop({ type: String, required: true, trim: true })
+  @Prop({ type: String, required: true, trim: true, maxlength: 100 })
   title: string;
 
-  // Store a country identifier from the official reference dataset.
-  @Prop({ type: String, required: true, trim: true })
-  countryId: string;
+  // Values must be checked against the seeded country list by the service.
+  @Prop({ type: [String], required: true, validate: [(v: string[]) => v.length > 0, 'At least one country is required'] })
+  countryIds: string[];
 
   @Prop({ type: Date, required: true })
   startDate: Date;
@@ -26,16 +26,19 @@ export class Itinerary {
   @Prop({ type: String, enum: ItineraryVisibility, default: ItineraryVisibility.PRIVATE, index: true })
   visibility: ItineraryVisibility;
 
-  @Prop({ type: String, uppercase: true, default: 'USD', match: /^[A-Z]{3}$/ })
-  displayCurrency: string;
-
-  // Attribution is retained even if the original itinerary is later removed.
+  // Optional source link; clone must not depend on the original remaining available.
   @Prop({ type: Types.ObjectId, ref: 'Itinerary' })
   clonedFromId?: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   originalAuthorId?: Types.ObjectId;
+
+  // Snapshot keeps attribution available if the source itinerary/user changes.
+  @Prop({ type: String, trim: true })
+  originalAuthorName?: string;
 }
 
 export const ItinerarySchema = SchemaFactory.createForClass(Itinerary);
-ItinerarySchema.index({ visibility: 1, title: 1 });
+ItinerarySchema.index({ visibility: 1, updatedAt: -1 });
+ItinerarySchema.index({ userId: 1, updatedAt: -1 });
+ItinerarySchema.index({ title: 'text', countryIds: 'text' });

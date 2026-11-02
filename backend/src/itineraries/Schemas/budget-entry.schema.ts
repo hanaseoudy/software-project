@@ -6,8 +6,8 @@ export type BudgetEntryDocument = HydratedDocument<BudgetEntry>;
 export enum BudgetCategory {
   FOOD = 'FOOD',
   ACCOMMODATION = 'ACCOMMODATION',
-  LOCAL_TRANSPORT = 'LOCAL_TRANSPORT',
-  ACTIVITY = 'ACTIVITY',
+  IN_CITY_TRANSPORT = 'IN_CITY_TRANSPORT',
+  ACTIVITIES = 'ACTIVITIES',
 }
 
 @Schema({ timestamps: true })
