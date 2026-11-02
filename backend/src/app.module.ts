@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
 
@@ -27,6 +28,7 @@ import { UsersModule } from './users/users.module';
 
         return {
 
+
       uri,
       autoCreate: true,
       connectionFactory: (connection) => {
@@ -36,9 +38,11 @@ import { UsersModule } from './users/users.module';
     };
   },
 }),
+HotelBookingsModule,
 HotelsModule,
 UsersModule,
 ],
+
 
   controllers: [AppController],
   providers: [AppService],

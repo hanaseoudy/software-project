@@ -1,7 +1,7 @@
 # software-project
 
 Hana Seoudy
-Nour Hussam 
+Nour Hossam 
 Mariam Haithem
 Kenzy Sherif
 Seifeldin Karim
