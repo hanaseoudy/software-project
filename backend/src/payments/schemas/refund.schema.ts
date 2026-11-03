@@ -31,7 +31,7 @@ export class Refund {
   })
   status: RefundStatus;
 
-  @Prop()
+  @Prop({ unique: true, sparse: true })
   stripeRefundId?: string;
 
   @Prop()

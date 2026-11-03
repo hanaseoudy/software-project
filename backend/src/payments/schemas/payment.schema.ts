@@ -50,7 +50,14 @@ export class Payment {
   @Prop()
   failureReason?: string;
 
-  @Prop({ default: 0 })
+  @Prop({
+    default: 0,
+    min: 0,
+    validate: {
+      validator: Number.isInteger,
+      message: 'retryCount must be an integer',
+    },
+  })
   retryCount: number;
 
   @Prop()
