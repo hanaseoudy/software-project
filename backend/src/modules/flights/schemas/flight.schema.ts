@@ -5,23 +5,10 @@ import { CabinClass } from './airline.schema';
 export type FlightDocument = HydratedDocument<Flight>;
 
 export enum FlightStatus {
-  SCHEDULED = 'scheduled',
-  CANCELLED = 'cancelled',
+  SCHEDULED = 'SCHEDULED',
+  CANCELLED = 'CANCELLED',
+  DEPARTED = 'DEPARTED',
 }
-
-// Price per passenger type for one cabin
-@Schema({ _id: false })
-export class CabinPrice {
-  @Prop({ required: true, min: 0 })
-  adult: number;
-
-  @Prop({ required: true, min: 0 })
-  child: number;
-
-  @Prop({ required: true, min: 0 })
-  infant: number;
-}
-export const CabinPriceSchema = SchemaFactory.createForClass(CabinPrice);
 
 // One "section" of the plane. Needs an _id so PATCH /flights/:id/cabins/:cabinId works.
 @Schema()
@@ -32,11 +19,20 @@ export class Cabin {
   @Prop({ required: true, min: 1 })
   totalSeats: number;
 
-  @Prop({ required: true, min: 0 })
-  availableSeats: number;
+  @Prop({ default: 0, min: 0 })
+  bookedSeats: number; // paid, confirmed
 
-  @Prop({ type: CabinPriceSchema, required: true })
-  price: CabinPrice;
+  @Prop({ default: 0, min: 0 })
+  heldSeats: number; // in a 10-minute pending hold
+
+  @Prop({ required: true, min: 0.01 })
+  price: number; // adult/child fare; infants pay 10% (calculated at booking)
+
+  @Prop({ required: true, min: 0 })
+  freeBags: number;
+
+  @Prop({ required: true, min: 0 })
+  maxBagWeightKg: number; // also applies to extra bags (FLT-08)
 }
 export const CabinSchema = SchemaFactory.createForClass(Cabin);
 
@@ -61,6 +57,12 @@ export class Flight {
   @Prop({ required: true })
   arrivalTime: Date;
 
+  @Prop({ required: true })
+  departureLocalDate: string; // "2026-12-05", date at the departure airport
+
+  @Prop({ required: true, min: 1 })
+  durationMinutes: number;
+
   @Prop({ required: true, enum: FlightStatus, default: FlightStatus.SCHEDULED })
   status: FlightStatus;
 
@@ -70,15 +72,21 @@ export class Flight {
 
 export const FlightSchema = SchemaFactory.createForClass(Flight);
 
-// Speeds up the search endpoint (route + date)
-FlightSchema.index({ departureAirport: 1, arrivalAirport: 1, departureTime: 1 });
+FlightSchema.index({ departureAirport: 1, arrivalAirport: 1, departureLocalDate: 1 });
+FlightSchema.index({ airline: 1, flightNumber: 1, departureLocalDate: 1 }, { unique: true });
 
-// The same airline can't reuse a flight number at the same departure time
-FlightSchema.index({ airline: 1, flightNumber: 1, departureTime: 1 }, { unique: true });
-
-// Arrival must be after departure
 FlightSchema.pre('validate', function () {
+  if (this.departureAirport.equals(this.arrivalAirport)) {
+    throw new Error('Departure and arrival airports must be different');
+  }
   if (this.arrivalTime <= this.departureTime) {
     throw new Error('arrivalTime must be after departureTime');
   }
+  const classes = this.cabins.map((c) => c.cabinClass);
+  if (new Set(classes).size !== classes.length) {
+    throw new Error('Each cabin class can be used only once per flight');
+  }
+  this.durationMinutes = Math.round(
+    (this.arrivalTime.getTime() - this.departureTime.getTime()) / 60000,
+  );
 });

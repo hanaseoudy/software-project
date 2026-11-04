@@ -5,7 +5,7 @@ export type AirportDocument = HydratedDocument<Airport>;
 
 @Schema({ timestamps: true })
 export class Airport {
-  @Prop({ required: true, unique: true, uppercase: true, length: 3 })
+  @Prop({ required: true, unique: true, uppercase: true, minlength: 3, maxlength: 3 })
   iataCode: string; // e.g. "CAI"
 
   @Prop({ required: true })
