@@ -61,3 +61,26 @@ assertAccepted() is exposed so PAY-01 can block payment until the
 policies are accepted. Added @nestjs/swagger, installed and ran
 npm run build to verify the code compiles.
 ================================================
+
+================================================
+Date: 2026-11-07
+Student: Kenzy ellkany 
+Tool: Claude
+Related Requirement: GEN-01
+
+Prompt:
+Help me implement GEN-01 (in-app notifications with unread count,
+notification list and mark as read) in our NestJS backend, based on
+the project PDF and the requirements sheet. Match it to our existing
+backend structure and schemas.
+
+How the output was used:
+Used the generated NotificationsModule (schema, enum, service,
+controller, module) after reviewing it. The service exposes create()
+and createForMany() so other modules (payments, flights, admin) can
+send notifications for booking confirmation, cancellation, refund,
+flight schedule change and suspension. Endpoints: list, unread count,
+mark one as read, mark all as read, all restricted to the owner.
+Registered the module in app.module.ts, ran npm run build, started the
+app and confirmed the routes respond with 401 until auth is merged.
+================================================
