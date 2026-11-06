@@ -40,3 +40,24 @@ The CI setup was designed to support automated pull request
 validation while preserving existing application logic and tests.
 
 ================================================
+
+================================================
+Date: 2026-11-06
+Student: Kenzy ellkany
+Tool: Claude
+Related Requirement: PAY-02
+
+Prompt:
+Help me implement PAY-02 (provider policy display and recorded
+acceptance before payment) in our NestJS backend, based on the project
+PDF and the requirements sheet. Then match it to our real Flight,
+Airline, Hotel, FlightBooking and HotelBooking schemas.
+
+How the output was used:
+Used the generated PoliciesModule (controller, service, module) after
+adapting it to our existing schemas. Acceptance is stored in the
+existing policiesAcceptedAt field on both booking types, and
+assertAccepted() is exposed so PAY-01 can block payment until the
+policies are accepted. Added @nestjs/swagger, installed and ran
+npm run build to verify the code compiles.
+================================================
