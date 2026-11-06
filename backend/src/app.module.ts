@@ -8,6 +8,7 @@ import { BlogModule } from './blog/blog.module';
 import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
+import { PoliciesModule } from './policies/policies.module';
 
 
 @Module({
@@ -44,6 +45,7 @@ BlogModule,
 HotelBookingsModule,
 HotelsModule,
 UsersModule,
+PoliciesModule,
 ],
 
 
