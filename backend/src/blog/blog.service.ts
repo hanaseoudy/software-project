@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -7,7 +8,9 @@ import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model, Types } from 'mongoose';
 import { Post, PostDocument, PostStatus } from './schemas/post.schema';
 import { Comment, CommentDocument } from './schemas/comment.schema';
+import { Like, LikeDocument } from './schemas/like.schema';
 import { CreatePostDto } from './dto/create-post.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 
 @Injectable()
@@ -16,19 +19,26 @@ export class BlogService {
     @InjectModel(Post.name) private readonly postModel: Model<PostDocument>,
     @InjectModel(Comment.name)
     private readonly commentModel: Model<CommentDocument>,
+    @InjectModel(Like.name) private readonly likeModel: Model<LikeDocument>,
   ) {}
+
+  private normalizeTags(tags: string[]) {
+    return [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))];
+  }
+
+  private requireUser(userId: string) {
+    if (!userId || !isValidObjectId(userId)) {
+      throw new UnauthorizedException('Login required');
+    }
+  }
 
   // BLG-01: create a post as draft or published
   async createPost(authorId: string, dto: CreatePostDto) {
-    const tags = [
-      ...new Set(
-        (dto.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean),
-      ),
-    ];
+    this.requireUser(authorId);
     return this.postModel.create({
       title: dto.title,
       content: dto.content,
-      tags,
+      tags: this.normalizeTags(dto.tags ?? []),
       status: dto.status ?? PostStatus.DRAFT,
       author: new Types.ObjectId(authorId),
     });
@@ -72,9 +82,7 @@ export class BlogService {
 
   // BLG-03: my own posts, including drafts
   async listMine(authorId: string, query: ListPostsQueryDto) {
-    if (!authorId || !isValidObjectId(authorId)) {
-      throw new UnauthorizedException('Login required');
-    }
+    this.requireUser(authorId);
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const filter = { author: new Types.ObjectId(authorId) };
@@ -90,5 +98,38 @@ export class BlogService {
       this.postModel.countDocuments(filter),
     ]);
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  // finds a post and checks that the caller is its author
+  private async getOwnedPost(userId: string, id: string) {
+    this.requireUser(userId);
+    if (!isValidObjectId(id)) throw new NotFoundException('Post not found');
+    const post = await this.postModel.findById(id);
+    if (!post) throw new NotFoundException('Post not found');
+    if (post.author.toString() !== userId) {
+      throw new ForbiddenException('You can only change your own posts');
+    }
+    return post;
+  }
+
+  // BLG-04: edit my own post
+  async updatePost(userId: string, id: string, dto: UpdatePostDto) {
+    const post = await this.getOwnedPost(userId, id);
+    if (dto.title !== undefined) post.title = dto.title;
+    if (dto.content !== undefined) post.content = dto.content;
+    if (dto.tags !== undefined) post.tags = this.normalizeTags(dto.tags);
+    if (dto.status !== undefined) post.status = dto.status;
+    return post.save();
+  }
+
+  // BLG-04: delete my own post together with its comments and likes
+  async deletePost(userId: string, id: string) {
+    const post = await this.getOwnedPost(userId, id);
+    await Promise.all([
+      this.commentModel.deleteMany({ post: post._id }),
+      this.likeModel.deleteMany({ post: post._id }),
+    ]);
+    await post.deleteOne();
+    return { message: 'Post deleted' };
   }
 }
