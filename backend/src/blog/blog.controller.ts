@@ -13,6 +13,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { BlogService } from './blog.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { CreateCommentDto } from './dto/create-comment.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 
 @ApiTags('Blog')
@@ -64,5 +65,16 @@ export class BlogController {
   @ApiOperation({ summary: 'Delete my own post (BLG-04)' })
   remove(@Req() req: any, @Param('id') id: string) {
     return this.blogService.deletePost(this.userId(req), id);
+  }
+
+  // TODO: add the auth guard here (ACC-04)
+  @Post(':id/comments')
+  @ApiOperation({ summary: 'Comment on a published post (BLG-05)' })
+  addComment(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: CreateCommentDto,
+  ) {
+    return this.blogService.addComment(this.userId(req), id, dto);
   }
 }

@@ -11,7 +11,7 @@ export class Comment {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   author: Types.ObjectId;
 
-  @Prop({ required: true, trim: true, maxlength: 1000 })
+  @Prop({ required: true, trim: true, maxlength: 500 })
   text: string;
 
   @Prop({ default: false })

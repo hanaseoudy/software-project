@@ -11,6 +11,7 @@ import { Comment, CommentDocument } from './schemas/comment.schema';
 import { Like, LikeDocument } from './schemas/like.schema';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { CreateCommentDto } from './dto/create-comment.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 
 @Injectable()
@@ -66,7 +67,7 @@ export class BlogService {
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  // BLG-02: one published post with its comments
+  // BLG-02 + BLG-05: one published post with its comments, oldest first
   async getPublishedById(id: string) {
     if (!isValidObjectId(id)) throw new NotFoundException('Post not found');
     const post = await this.postModel
@@ -131,5 +132,28 @@ export class BlogService {
     ]);
     await post.deleteOne();
     return { message: 'Post deleted' };
+  }
+
+  // BLG-05: comment on a published post (1-500 chars)
+  async addComment(userId: string, postId: string, dto: CreateCommentDto) {
+    this.requireUser(userId);
+    if (!isValidObjectId(postId)) throw new NotFoundException('Post not found');
+    const post = await this.postModel.findOne({
+      _id: postId,
+      status: PostStatus.PUBLISHED,
+      isHidden: false,
+    });
+    if (!post) throw new NotFoundException('Post not found');
+
+    const comment = await this.commentModel.create({
+      post: post._id,
+      author: new Types.ObjectId(userId),
+      text: dto.text,
+    });
+    await this.postModel.updateOne(
+      { _id: post._id },
+      { $inc: { commentsCount: 1 } },
+    );
+    return comment;
   }
 }
