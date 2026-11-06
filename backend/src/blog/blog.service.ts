@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model, Types } from 'mongoose';
 import { Post, PostDocument, PostStatus } from './schemas/post.schema';
@@ -64,5 +68,27 @@ export class BlogService {
       .sort({ createdAt: 1 })
       .lean();
     return { ...post, comments };
+  }
+
+  // BLG-03: my own posts, including drafts
+  async listMine(authorId: string, query: ListPostsQueryDto) {
+    if (!authorId || !isValidObjectId(authorId)) {
+      throw new UnauthorizedException('Login required');
+    }
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const filter = { author: new Types.ObjectId(authorId) };
+
+    const [items, total] = await Promise.all([
+      this.postModel
+        .find(filter)
+        .select('title status createdAt likesCount commentsCount')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      this.postModel.countDocuments(filter),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 }

@@ -24,7 +24,15 @@ export class BlogController {
     return this.blogService.listPublished(query);
   }
 
-  // NOTE: when you add GET /posts/mine (BLG-03), put it ABOVE this route
+  // Must stay ABOVE @Get(':id'), otherwise "mine" is read as an id
+  // TODO: add the auth guard here (ACC-04)
+  @Get('mine')
+  @ApiOperation({ summary: 'List my own posts including drafts (BLG-03)' })
+  listMine(@Req() req: any, @Query() query: ListPostsQueryDto) {
+    const userId = req.user?.userId ?? req.user?.id ?? req.user?.sub;
+    return this.blogService.listMine(userId, query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get one published post with comments (BLG-02)' })
   getOne(@Param('id') id: string) {
