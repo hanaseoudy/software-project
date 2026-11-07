@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PaymentsModule } from './payments/payments.module';
 import { BlogModule } from './blog/blog.module';
 import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
@@ -10,6 +11,7 @@ import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
+import { FlightBookingsModule } from './flight-bookings/flight-bookings.module';
 
 
 @Module({
@@ -41,6 +43,7 @@ import { AirportsModule } from './airports/airports.module';
     };
   },
 }),
+ScheduleModule.forRoot(),
 AirportsModule,
 PaymentsModule,
 BlogModule,
@@ -48,6 +51,7 @@ HotelBookingsModule,
 HotelsModule,
 UsersModule,
 AuthModule,
+FlightBookingsModule,
 ],
 
 
