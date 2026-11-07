@@ -13,7 +13,7 @@ export enum FlightStatus {
 // One "section" of the plane. Needs an _id so PATCH /flights/:id/cabins/:cabinId works.
 @Schema()
 export class Cabin {
-  @Prop({ required: true, enum: CabinClass })
+  @Prop({ type: String, required: true, enum: CabinClass })
   cabinClass: CabinClass;
 
   @Prop({ required: true, min: 1 })

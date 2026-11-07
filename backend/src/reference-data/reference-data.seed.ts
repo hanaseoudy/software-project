@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { createConnection, Model } from 'mongoose';
-import { Airport, AirportSchema } from '../flights/schemas/airport.schema';
+import { Airport, AirportSchema } from '../airports/schemas/airport.schema';
 import {
   airports,
   attractions,

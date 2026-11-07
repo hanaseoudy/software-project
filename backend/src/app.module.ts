@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -8,6 +9,8 @@ import { BlogModule } from './blog/blog.module';
 import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
+import { AirportsModule } from './airports/airports.module';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
 
 @Module({
@@ -44,10 +47,14 @@ BlogModule,
 HotelBookingsModule,
 HotelsModule,
 UsersModule,
+AirportsModule,
 ],
 
 
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_FILTER, useClass: GlobalExceptionFilter },
+  ],
 })
 export class AppModule {}

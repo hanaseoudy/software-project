@@ -71,3 +71,81 @@ was added, and the shared Atlas database was not modified.
 
 The changes are prepared for Hana's review, commit and push.
 ================================================
+
+================================================
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: FLT-02 (TASK-26), dependency GEN-12
+
+Prompt :
+Help me understand and implement FLT-02 using the reviewed requirements and
+updated project description. Explain its dependency on GEN-12 and distinguish
+the airport-list endpoint from the flight creation and search tasks assigned
+to teammates. Explain why the proposed response DTO and test files would be
+useful, show a DTO example, and explain how Swagger works without a DTO.
+
+
+How the output was used:
+Hana questioned the original PDF endpoint mapping and clarified the scope
+before authorizing implementation. The updated PDF maps GET /api/airports
+explicitly to FLT-02. After discussing DTOs and Swagger, Hana chose an inline
+Swagger response schema and requested no new test files.
+Hana subsequently requested a response DTO. Codex moved the Swagger field
+definitions into AirportResponseDto and added explicit return types to the
+controller and service, preserving the response fields and airport validation.
+Codex implemented the airport controller and service, reused GEN-12's official
+airport codes and the existing schema, registered the module, enabled Swagger,
+and documented the API and reusable airport-membership check. Flight creation
+and search still need to call that check in their respective implementations.
+At Hana's request, Codex moved the controller, service, response DTO and schema
+under src/airports and created AirportsModule. AppModule registers it, while
+FlightsModule imports it for the shared model and service. The GEN-12 seed
+runner imports the relocated schema, whose fields and collection are unchanged.
+
+
+================================================
+
+================================================
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: GEN-13 (supporting infrastructure), Project PDF Section 6.7
+
+Prompt (summary of the conversation, not a verbatim prompt):
+Add a global error handler. After reviewing the proposed behavior and file
+list, approve creating the exception filter and updating AppModule, the
+backend README and this AI log. Keep the existing preference of no new
+spec/E2E files.
+
+How the output was used:
+Codex implemented a global HTTP exception filter registered with APP_FILTER.
+It retains explicit HTTP statuses, validation message arrays and custom
+response fields while adding a timestamp and request path. Unexpected errors
+receive a generic 500 response. Raw exceptions and request data are excluded
+from the filter's logs, and paths exclude query parameters. Middleware HTTP
+errors retain Nest's handling. The README explains the error contract and
+that DTOs, pipes and services still enforce validation and business rules.
+
+
+================================================
+
+================================================
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: FLT-02, Project PDF Section 8 (shared API routing)
+
+Prompt (summary of the conversation, not a verbatim prompt):
+After reviewing the ACC-01 PR and discussing its global API prefix, configure
+the shared /api prefix in our main.ts and update our files to use it.
+
+How the output was used:
+Codex added setGlobalPrefix('api') to main.ts and changed the airport
+controller's path to airports so the endpoint remains /api/airports.
+Swagger now uses the global prefix and keeps /api/docs and /api/docs-json.
+The existing E2E test applies the same prefix and checks the starter endpoint
+at /api. The README documents the shared routing convention. No new spec/E2E
+files were added, and ACC-01's registration code was not imported.
+
+================================================
