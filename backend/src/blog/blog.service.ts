@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -31,6 +32,18 @@ export class BlogService {
     if (!userId || !isValidObjectId(userId)) {
       throw new UnauthorizedException('Login required');
     }
+  }
+
+  // finds a published, visible post or throws 404
+  private async getVisiblePost(postId: string) {
+    if (!isValidObjectId(postId)) throw new NotFoundException('Post not found');
+    const post = await this.postModel.findOne({
+      _id: postId,
+      status: PostStatus.PUBLISHED,
+      isHidden: false,
+    });
+    if (!post) throw new NotFoundException('Post not found');
+    return post;
   }
 
   // BLG-01: create a post as draft or published
@@ -137,14 +150,7 @@ export class BlogService {
   // BLG-05: comment on a published post (1-500 chars)
   async addComment(userId: string, postId: string, dto: CreateCommentDto) {
     this.requireUser(userId);
-    if (!isValidObjectId(postId)) throw new NotFoundException('Post not found');
-    const post = await this.postModel.findOne({
-      _id: postId,
-      status: PostStatus.PUBLISHED,
-      isHidden: false,
-    });
-    if (!post) throw new NotFoundException('Post not found');
-
+    const post = await this.getVisiblePost(postId);
     const comment = await this.commentModel.create({
       post: post._id,
       author: new Types.ObjectId(userId),
@@ -155,5 +161,45 @@ export class BlogService {
       { $inc: { commentsCount: 1 } },
     );
     return comment;
+  }
+
+  // BLG-06: like a post once (unique index post + user blocks duplicates)
+  async likePost(userId: string, postId: string) {
+    this.requireUser(userId);
+    const post = await this.getVisiblePost(postId);
+    try {
+      await this.likeModel.create({
+        post: post._id,
+        user: new Types.ObjectId(userId),
+      });
+    } catch (err: any) {
+      if (err?.code === 11000) {
+        throw new ConflictException('You already liked this post');
+      }
+      throw err;
+    }
+    const updated = await this.postModel
+      .findByIdAndUpdate(post._id, { $inc: { likesCount: 1 } }, { new: true })
+      .select('likesCount')
+      .lean();
+    return { liked: true, likesCount: updated?.likesCount ?? 0 };
+  }
+
+  // BLG-06: remove my like
+  async unlikePost(userId: string, postId: string) {
+    this.requireUser(userId);
+    const post = await this.getVisiblePost(postId);
+    const result = await this.likeModel.deleteOne({
+      post: post._id,
+      user: new Types.ObjectId(userId),
+    });
+    if (result.deletedCount === 0) {
+      throw new NotFoundException('You have not liked this post');
+    }
+    const updated = await this.postModel
+      .findByIdAndUpdate(post._id, { $inc: { likesCount: -1 } }, { new: true })
+      .select('likesCount')
+      .lean();
+    return { liked: false, likesCount: Math.max(updated?.likesCount ?? 0, 0) };
   }
 }

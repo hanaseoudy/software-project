@@ -77,4 +77,18 @@ export class BlogController {
   ) {
     return this.blogService.addComment(this.userId(req), id, dto);
   }
+
+  // TODO: add the auth guard here (ACC-04)
+  @Post(':id/like')
+  @ApiOperation({ summary: 'Like a post, once per user (BLG-06)' })
+  like(@Req() req: any, @Param('id') id: string) {
+    return this.blogService.likePost(this.userId(req), id);
+  }
+
+  // TODO: add the auth guard here (ACC-04)
+  @Delete(':id/like')
+  @ApiOperation({ summary: 'Remove my like from a post (BLG-06)' })
+  unlike(@Req() req: any, @Param('id') id: string) {
+    return this.blogService.unlikePost(this.userId(req), id);
+  }
 }
