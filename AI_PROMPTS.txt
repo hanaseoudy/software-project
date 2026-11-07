@@ -163,3 +163,29 @@ email, invalid email, suspended with correct and wrong password). Lint,
 build, unit tests and E2E tests passed locally.
 ================================================
 
+
+================================================
+================================================
+================================================
+
+Date: 2026-11-07
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-01 (TASK-44)
+Prompt (summary of the conversation):
+I asked AI to implement HTL-01 (hotel profile creation by an admin and editing by the
+assigned hotel moderator) on top of the existing Hotel schema in develop. After AI inspected
+the repo and listed the files it would change, I approved the plan. I asked it to reuse the
+existing ModeratorAssignment collection to decide which moderator owns a hotel, and to prepare
+role checks without login because login (ACC-04) is not in develop yet.
+
+How the output was used:
+AI created the hotels controller, service and DTOs (create, update, response), a reusable
+@Roles() decorator and RolesGuard, and unit tests for the service, controller and guard. I
+reviewed the code and updated hotels.module.ts to register the new files and the City, Country
+and ModeratorAssignment models. POST /api/hotels is admin only; PATCH /api/hotels/:id is for the
+assigned hotel moderator only. City and country are validated against the reference data.
+Verification performed:
+Lint and build passed and all unit tests passed under Node 24. E2E tests were not run locally
+(no MongoDB available); they run in CI. Swagger and Postman checks need the login (ACC-04)
+to be merged first.
