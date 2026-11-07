@@ -95,3 +95,22 @@ email, short password, missing digit, missing consent). Lint, build, unit
 tests and E2E tests passed locally.
 ================================================
 
+================================================
+Date: 2026-11-07
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-01 (TASK-10), GEN-13
+
+Prompt (summary of the conversation):
+Address team leader review on the registration PR: document RegisterDto and
+the 201, 400 and 409 responses (with field-level errors) in Swagger, and
+handle passwords longer than bcrypt's 72-byte limit.
+
+How the output was used:
+Added Swagger setup at /api/docs, ApiProperty documentation on RegisterDto,
+response DTOs for 201 and field-level errors, and documented 400/409
+examples. Added a 72-byte maximum on passwords so bcrypt never silently
+truncates them. Verified in Swagger and Postman; lint, build, unit and
+E2E tests passed locally.
+================================================
+
