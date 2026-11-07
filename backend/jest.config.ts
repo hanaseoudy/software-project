@@ -15,10 +15,7 @@ const config: Config = {
   rootDir: '.',
   testRegex: '.*\\.spec\\.ts$',
   transform: {
-    '^.+\\.(t|j)s$': [
-      'ts-jest',
-      { tsconfig: '<rootDir>/tsconfig.spec.json' },
-    ],
+    '^.+\\.(t|j)s$': 'ts-jest',
   },
   moduleNameMapper: pathsToModuleNameMapper(paths, { prefix: '<rootDir>/' }),
   collectCoverageFrom: [
