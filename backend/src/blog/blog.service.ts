@@ -13,6 +13,7 @@ import { Like, LikeDocument } from './schemas/like.schema';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
+import { UpdateCommentDto } from './dto/update-comment.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 
 @Injectable()
@@ -202,4 +203,36 @@ export class BlogService {
       .lean();
     return { liked: false, likesCount: Math.max(updated?.likesCount ?? 0, 0) };
   }
-}
+
+  // finds a comment and checks that the caller wrote it
+  private async getOwnedComment(userId: string, id: string) {
+    this.requireUser(userId);
+    if (!isValidObjectId(id)) throw new NotFoundException('Comment not found');
+    const comment = await this.commentModel.findById(id);
+    if (!comment || comment.isHidden) {
+      throw new NotFoundException('Comment not found');
+    }
+    if (comment.author.toString() !== userId) {
+      throw new ForbiddenException('You can only change your own comments');
+    }
+    return comment;
+  }
+
+  // BLG-07: edit my own comment
+  async updateComment(userId: string, id: string, dto: UpdateCommentDto) {
+    const comment = await this.getOwnedComment(userId, id);
+    comment.text = dto.text;
+    return comment.save();
+  }
+
+  // BLG-07: delete my own comment and update the post's comment count
+  async deleteComment(userId: string, id: string) {
+    const comment = await this.getOwnedComment(userId, id);
+    await comment.deleteOne();
+    await this.postModel.updateOne(
+      { _id: comment.post, commentsCount: { $gt: 0 } },
+      { $inc: { commentsCount: -1 } },
+    );
+    return { message: 'Comment deleted' };
+  }
+} 
