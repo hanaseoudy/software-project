@@ -15,6 +15,7 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
+import { ListTagsQueryDto } from './dto/list-tags-query.dto';
 
 @Injectable()
 export class BlogService {
@@ -127,7 +128,7 @@ export class BlogService {
     return post;
   }
 
-  // BLG-04: edit my own post
+  // BLG-04 + BLG-08: edit my own post (tags can be changed later)
   async updatePost(userId: string, id: string, dto: UpdatePostDto) {
     const post = await this.getOwnedPost(userId, id);
     if (dto.title !== undefined) post.title = dto.title;
@@ -234,5 +235,33 @@ export class BlogService {
       { $inc: { commentsCount: -1 } },
     );
     return { message: 'Comment deleted' };
+  }
+
+  // BLG-08: clickable tag -> published posts with that tag
+  async listByTag(tag: string, query: ListPostsQueryDto) {
+    return this.listPublished({ ...query, tag });
+  }
+
+  // BLG-08: searchable tags with the number of published posts for each
+  async listTags(query: ListTagsQueryDto) {
+    const limit = query.limit ?? 20;
+    const pipeline: any[] = [
+      { $match: { status: PostStatus.PUBLISHED, isHidden: false } },
+      { $unwind: '$tags' },
+    ];
+    if (query.search) {
+      const term = query.search
+        .trim()
+        .toLowerCase()
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      pipeline.push({ $match: { tags: { $regex: term } } });
+    }
+    pipeline.push(
+      { $group: { _id: '$tags', postsCount: { $sum: 1 } } },
+      { $sort: { postsCount: -1, _id: 1 } },
+      { $limit: limit },
+      { $project: { _id: 0, tag: '$_id', postsCount: 1 } },
+    );
+    return this.postModel.aggregate(pipeline);
   }
 }
