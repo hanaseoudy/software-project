@@ -136,3 +136,29 @@ I successfully ran the unit tests and E2E tests after resolving a Jest ES module
 I also tested GET /api/airports through Swagger and received a 200 OK response containing the predefined 
 airport records. The recovered implementation is working and ready for final review, commit, and Pull Request.
 ================================================
+
+================================================
+Date: 2026-11-07
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-18 (TASK-105)
+
+Prompt (summary of the conversation):
+Help me implement admin-account seeding (ACC-18): admin accounts are created
+by a setup command instead of self-registration, following the same pattern
+as the existing reference-data seed.
+
+How the output was used:
+Used the generated admin.seed.ts and the seed:admin npm script after
+reviewing them against ACC-18. Admin details come from ADMIN_* environment
+variables (placeholders documented in .env.example), the password follows
+the registration rules and is hashed with bcrypt (GEN-13). The command is
+safe to rerun and refuses to promote an existing non-admin account.
+Self-registration already forces the user role (ACC-01 whitelist).
+
+Verification:
+Ran npm run seed:admin twice (created, then "already exists"), checked the
+refusal for an existing non-admin email, and confirmed in Postman that
+registering with "role": "admin" still creates a normal user. Lint, build,
+unit tests and E2E tests passed locally.
+================================================
