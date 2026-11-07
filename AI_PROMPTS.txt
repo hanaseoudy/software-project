@@ -114,3 +114,30 @@ truncates them. Verified in Swagger and Postman; lint, build, unit and
 E2E tests passed locally.
 ================================================
 
+================================================
+Date: 2026-11-07
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-04 (TASK-11)
+
+Prompt (summary of the conversation):
+Help me implement role-based login (ACC-04): log in with email and password,
+return a generic "invalid email or password" message on failure, show
+"account suspended" for suspended accounts, and return what the frontend
+needs to open each role's home page.
+
+How the output was used:
+Used the generated LoginDto, login response DTO and the login method in
+AuthService/AuthController after reviewing them against ACC-04. The password
+is checked before the account status so suspension is not revealed without
+the correct password; deactivated accounts get the generic message (ACC-12).
+The response includes role, providerType (from ModeratorAssignment, to tell
+hotel and airline moderators apart) and mustChangePassword. Swagger documents
+the 200, 400, 401 and 403 responses.
+
+Verification:
+Tested POST /api/auth/login in Postman (success, wrong password, unknown
+email, invalid email, suspended with correct and wrong password). Lint,
+build, unit tests and E2E tests passed locally.
+================================================
+
