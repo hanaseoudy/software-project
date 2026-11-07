@@ -71,3 +71,27 @@ was added, and the shared Atlas database was not modified.
 
 The changes are prepared for Hana's review, commit and push.
 ================================================
+
+================================================
+Date: 2026-11-07
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-01 (TASK-10), GEN-13
+
+Prompt (summary of the conversation):
+Help me implement guest registration (ACC-01) using the existing User schema:
+name, unique email, password rules (8+ characters, a letter and a digit) and a
+mandatory terms-and-privacy consent, with field-level error messages.
+
+How the output was used:
+Used the generated AuthModule, AuthService, AuthController and RegisterDto
+after reviewing them against ACC-01. Passwords are hashed with bcrypt (GEN-13)
+and consent is stored as termsAcceptedAt. Added a global ValidationPipe and
+the /api prefix in main.ts after team leader approval.
+
+Verification:
+Tested POST /api/auth/register in Postman (success, duplicate email, invalid
+email, short password, missing digit, missing consent). Lint, build, unit
+tests and E2E tests passed locally.
+================================================
+
