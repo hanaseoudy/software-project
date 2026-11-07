@@ -1,13 +1,18 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
-import { User, UserDocument } from '../users/schemas/user.schema';
+import { AccountStatus, User, UserDocument, UserRole } from '../users/schemas/user.schema';
+import { ModeratorAssignment, ModeratorAssignmentDocument } from '../users/schemas/moderatorassignment.schema';
 import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
-  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(ModeratorAssignment.name) private assignmentModel: Model<ModeratorAssignmentDocument>,
+  ) {}
 
   async register(dto: RegisterDto) {
     const exists = await this.userModel.exists({ email: dto.email });
@@ -41,10 +46,47 @@ export class AuthService {
     }
   }
 
+  async login(dto: LoginDto) {
+    const user = await this.userModel.findOne({ email: dto.email }).select('+passwordHash');
+    const passwordOk = user ? await bcrypt.compare(dto.password, user.passwordHash) : false;
+
+    if (!user || !passwordOk) {
+      throw this.invalidCredentials();
+    }
+
+    if (user.status === AccountStatus.SUSPENDED) {
+      throw new ForbiddenException('Account suspended');
+    }
+
+    if (user.status === AccountStatus.DEACTIVATED) {
+      throw this.invalidCredentials();
+    }
+
+    let providerType: string | null = null;
+    if (user.role === UserRole.MODERATOR) {
+      const assignment = await this.assignmentModel.findOne({ moderatorId: user._id });
+      providerType = assignment?.providerType ?? null;
+    }
+
+    return {
+      id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      providerType,
+      mustChangePassword: user.mustChangePassword,
+    };
+  }
+
   private emailTaken() {
     return new ConflictException({
       message: 'Validation failed',
       errors: { email: ['Email is already registered'] },
     });
+  }
+
+  private invalidCredentials() {
+    return new UnauthorizedException('Invalid email or password');
   }
 }
