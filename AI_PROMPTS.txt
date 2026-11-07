@@ -136,3 +136,34 @@ I successfully ran the unit tests and E2E tests after resolving a Jest ES module
 I also tested GET /api/airports through Swagger and received a 200 OK response containing the predefined 
 airport records. The recovered implementation is working and ready for final review, commit, and Pull Request.
 ================================================
+
+================================================
+Date: 2026-11-07
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-22 (TASK-39)
+
+Prompt (summary of the conversation):
+Help me implement FLT-22 using our existing Flight (with Cabin seat counters) and
+FlightBooking schemas: atomically hold the requested seats only if enough remain,
+create a PENDING_PAYMENT booking held for 10 minutes, expire it automatically
+if payment does not happen, and never allow concurrent requests to book more
+seats than available. Guide me step by step in NestJS + MongoDB.
+
+How the output was used:
+Used the generated HoldFlightBookingDto, FlightBookingsService, FlightBookingsController,
+FlightBookingsModule and FlightHoldExpiryService after reviewing them against FLT-22.
+The seat check (totalSeats - bookedSeats - heldSeats >= requested seats) and the
+heldSeats increment happen in one atomic updateOne, so concurrent requests cannot
+oversell. Infants do not take a seat; for round trips the first leg is released if
+the second leg fails. The booking is created as PENDING_PAYMENT with
+holdExpiresAt = now + 10 minutes, and a @Cron job (every minute) marks expired
+holds as EXPIRED and releases their seats. The userId currently comes from req.user
+until the ACC-04 auth guard is merged.
+
+Verification:
+Tested POST /api/flight-bookings/hold in Postman against a test flight with 2
+economy seats: 201 with PENDING_PAYMENT on the first hold, 409 when the seats
+were exhausted. Tested validation errors (400) and the documented responses in
+Swagger. The TypeScript build compiles with no errors.
+================================================
