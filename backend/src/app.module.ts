@@ -10,6 +10,9 @@ import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
 import { PoliciesModule } from './policies/policies.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { AuthModule } from './auth/auth.module';
+import { AirportsModule } from './airports/airports.module';
+
 
 @Module({
   imports: [
@@ -40,6 +43,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     };
   },
 }),
+AirportsModule,
 PaymentsModule,
 BlogModule,
 HotelBookingsModule,
@@ -47,6 +51,7 @@ HotelsModule,
 UsersModule,
 PoliciesModule,
 NotificationsModule,
+AuthModule,
 ],
 
 

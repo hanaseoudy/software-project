@@ -60,6 +60,57 @@ existing policiesAcceptedAt field on both booking types, and
 assertAccepted() is exposed so PAY-01 can block payment until the
 policies are accepted. Added @nestjs/swagger, installed and ran
 npm run build to verify the code compiles.
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: GEN-12 (TASK-107), Project PDF Section 5.1
+
+Prompt (summary of the conversation):
+Help me Implement reference-data seeding using the official Google Sheets dataset.
+Preserve the supplied records and identifiers and reuse the existing airport
+schema without modifying teammates' feature code. Include countries, cities,
+airports, supported currencies and the PDF-required attractions. Add the
+package.json seed command, but leave out the proposed new test file.
+
+How the output was used:
+Codex created an offline snapshot of the four official dataset tabs, derived
+the seven supported currency codes, and added Country, City, Currency and
+Attraction schemas. It implemented a standalone seed runner with validation,
+a dry-run option, unique indexes and upserts, plus setup documentation.
+The implementation preserves official identifiers and existing MongoDB IDs
+when rerun. Existing unrelated records and fields are not deleted.
+
+Verification performed by Codex:
+Build, lint, five existing unit tests and the existing E2E test passed.
+A temporary local MongoDB instance was used to check all 39 reference records,
+repeat-run safety, stable IDs, preservation of unrelated data, invalid-input
+rejection and handling of existing duplicate identifiers. No new test file
+was added, and the shared Atlas database was not modified.
+
+The changes are prepared for Hana's review, commit and push.
+================================================
+
+================================================
+Date: 2026-11-07
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-01 (TASK-10), GEN-13
+
+Prompt (summary of the conversation):
+Help me implement guest registration (ACC-01) using the existing User schema:
+name, unique email, password rules (8+ characters, a letter and a digit) and a
+mandatory terms-and-privacy consent, with field-level error messages.
+
+How the output was used:
+Used the generated AuthModule, AuthService, AuthController and RegisterDto
+after reviewing them against ACC-01. Passwords are hashed with bcrypt (GEN-13)
+and consent is stored as termsAcceptedAt. Added a global ValidationPipe and
+the /api prefix in main.ts after team leader approval.
+
+Verification:
+Tested POST /api/auth/register in Postman (success, duplicate email, invalid
+email, short password, missing digit, missing consent). Lint, build, unit
+tests and E2E tests passed locally.
 ================================================
 
 ================================================
@@ -83,4 +134,42 @@ flight schedule change and suspension. Endpoints: list, unread count,
 mark one as read, mark all as read, all restricted to the owner.
 Registered the module in app.module.ts, ran npm run build, started the
 app and confirmed the routes respond with 401 until auth is merged.
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-01 (TASK-10), GEN-13
+
+Prompt (summary of the conversation):
+Address team leader review on the registration PR: document RegisterDto and
+the 201, 400 and 409 responses (with field-level errors) in Swagger, and
+handle passwords longer than bcrypt's 72-byte limit.
+
+How the output was used:
+Added Swagger setup at /api/docs, ApiProperty documentation on RegisterDto,
+response DTOs for 201 and field-level errors, and documented 400/409
+examples. Added a 72-byte maximum on passwords so bcrypt never silently
+truncates them. Verified in Swagger and Postman; lint, build, unit and
+E2E tests passed locally.
+================================================
+================================================
+
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: ChatGPT and Codex
+Related Requirement: FLT-02 (TASK-26)
+Prompt (summary of the conversation):
+I asked AI to help me implement FLT-02, which requires a predefined, read-only airport
+list using the official reference data from GEN-12. I wanted to reuse the existing airport 
+schema and make sure only airports from the official dataset were returned. I also asked AI
+to explain the controller and service, help me test the endpoint using Swagger, and guide me through
+ recovering my work after accidentally merging and reverting Pull Requests on GitHub.
+
+How the output was used:
+With Codex's help, I created the airport controller, service, module, and response DTO. The service 
+retrieves airports from MongoDB, sorts them by IATA code, and provides a method to validate airport 
+selections for flight creation and search. I also used ChatGPT to understand the implementation, fix 
+incorrect import paths, and recover my changes on a new feature branch without overwriting my teammates' work.
+Verification performed:
+I successfully ran the unit tests and E2E tests after resolving a Jest ES module compatibility issue
+I also tested GET /api/airports through Swagger and received a 200 OK response containing the predefined 
+airport records. The recovered implementation is working and ready for final review, commit, and Pull Request.
 ================================================
