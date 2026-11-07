@@ -9,6 +9,7 @@ import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { AirportsModule } from './airports/airports.module';
 
 
 @Module({
@@ -40,6 +41,7 @@ import { AuthModule } from './auth/auth.module';
     };
   },
 }),
+AirportsModule,
 PaymentsModule,
 BlogModule,
 HotelBookingsModule,
