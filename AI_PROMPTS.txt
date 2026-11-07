@@ -125,8 +125,7 @@ list using the official reference data from GEN-12. I wanted to reuse the existi
 schema and make sure only airports from the official dataset were returned. I also asked AI
 to explain the controller and service, help me test the endpoint using Swagger, and guide me through
  recovering my work after accidentally merging and reverting Pull Requests on GitHub.
-
-How the output was used:
+ How the output was used:
 With Codex's help, I created the airport controller, service, module, and response DTO. The service 
 retrieves airports from MongoDB, sorts them by IATA code, and provides a method to validate airport 
 selections for flight creation and search. I also used ChatGPT to understand the implementation, fix 
@@ -136,3 +135,31 @@ I successfully ran the unit tests and E2E tests after resolving a Jest ES module
 I also tested GET /api/airports through Swagger and received a 200 OK response containing the predefined 
 airport records. The recovered implementation is working and ready for final review, commit, and Pull Request.
 ================================================
+
+================================================
+Date: 2026-11-07
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-04 (TASK-11)
+
+Prompt (summary of the conversation):
+Help me implement role-based login (ACC-04): log in with email and password,
+return a generic "invalid email or password" message on failure, show
+"account suspended" for suspended accounts, and return what the frontend
+needs to open each role's home page.
+
+How the output was used:
+Used the generated LoginDto, login response DTO and the login method in
+AuthService/AuthController after reviewing them against ACC-04. The password
+is checked before the account status so suspension is not revealed without
+the correct password; deactivated accounts get the generic message (ACC-12).
+The response includes role, providerType (from ModeratorAssignment, to tell
+hotel and airline moderators apart) and mustChangePassword. Swagger documents
+the 200, 400, 401 and 403 responses.
+
+Verification:
+Tested POST /api/auth/login in Postman (success, wrong password, unknown
+email, invalid email, suspended with correct and wrong password). Lint,
+build, unit tests and E2E tests passed locally.
+================================================
+
