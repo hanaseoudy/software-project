@@ -16,6 +16,11 @@ import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { ListTagsQueryDto } from './dto/list-tags-query.dto';
+import {
+  PAGE_SIZE,
+  paginate,
+  skipFor,
+} from '../common/pagination/pagination';
 
 @Injectable()
 export class BlogService {
@@ -60,10 +65,9 @@ export class BlogService {
     });
   }
 
-  // BLG-02: paginated list of published posts, optional tag filter
+  // BLG-02 + GEN-05: published posts, optional tag filter, page size 10
   async listPublished(query: ListPostsQueryDto) {
     const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
     const filter: Record<string, any> = {
       status: PostStatus.PUBLISHED,
       isHidden: false,
@@ -74,12 +78,12 @@ export class BlogService {
       this.postModel
         .find(filter)
         .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
+        .skip(skipFor(page))
+        .limit(PAGE_SIZE)
         .lean(),
       this.postModel.countDocuments(filter),
     ]);
-    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return paginate(items, total, page);
   }
 
   // BLG-02 + BLG-05: one published post with its comments, oldest first
@@ -96,11 +100,10 @@ export class BlogService {
     return { ...post, comments };
   }
 
-  // BLG-03: my own posts, including drafts
+  // BLG-03 + GEN-05: my own posts, including drafts, page size 10
   async listMine(authorId: string, query: ListPostsQueryDto) {
     this.requireUser(authorId);
     const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
     const filter = { author: new Types.ObjectId(authorId) };
 
     const [items, total] = await Promise.all([
@@ -108,12 +111,12 @@ export class BlogService {
         .find(filter)
         .select('title status createdAt likesCount commentsCount')
         .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
+        .skip(skipFor(page))
+        .limit(PAGE_SIZE)
         .lean(),
       this.postModel.countDocuments(filter),
     ]);
-    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return paginate(items, total, page);
   }
 
   // finds a post and checks that the caller is its author
@@ -242,9 +245,9 @@ export class BlogService {
     return this.listPublished({ ...query, tag });
   }
 
-  // BLG-08: searchable tags with the number of published posts for each
+  // BLG-08 + GEN-05: searchable tags with post counts, page size 10
   async listTags(query: ListTagsQueryDto) {
-    const limit = query.limit ?? 20;
+    const page = query.page ?? 1;
     const pipeline: any[] = [
       { $match: { status: PostStatus.PUBLISHED, isHidden: false } },
       { $unwind: '$tags' },
@@ -259,9 +262,18 @@ export class BlogService {
     pipeline.push(
       { $group: { _id: '$tags', postsCount: { $sum: 1 } } },
       { $sort: { postsCount: -1, _id: 1 } },
-      { $limit: limit },
-      { $project: { _id: 0, tag: '$_id', postsCount: 1 } },
+      {
+        $facet: {
+          items: [
+            { $skip: skipFor(page) },
+            { $limit: PAGE_SIZE },
+            { $project: { _id: 0, tag: '$_id', postsCount: 1 } },
+          ],
+          total: [{ $count: 'n' }],
+        },
+      },
     );
-    return this.postModel.aggregate(pipeline);
+    const [result] = await this.postModel.aggregate(pipeline);
+    return paginate(result?.items ?? [], result?.total?.[0]?.n ?? 0, page);
   }
 }
