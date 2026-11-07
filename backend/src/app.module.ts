@@ -1,13 +1,21 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { PaymentsModule } from './payments/payments.module';
+import { BlogModule } from './blog/blog.module';
+import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
+import { HotelsModule } from './hotels/hotels.module';
+import { UsersModule } from './users/users.module';
+import { AirportsModule } from './airports/airports.module';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
 
 @Module({
   imports: [
-    ConfigModule.forRoot( {
+    ConfigModule.forRoot({
       isGlobal: true,
     }),
     MongooseModule.forRootAsync({
@@ -15,26 +23,38 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 
       useFactory:(configService:ConfigService)=>{
         const uri=configService.get<string>('MONGODB_URI');
-
+        
         if(!uri){
           throw new Error(
             'MongoDB URI is missing check env file',);
            }
-
         console.log('uri loaded...');
+        
 
         return {
-         uri,
-         connectionFactory: (connection) => {
-            console.log('MongoDB connected successfully!');
-           return connection;
-             },
-           };
-         },
-        }),
-      ],
-  
+
+      uri,
+      autoCreate: true,
+      connectionFactory: (connection) => {
+        console.log('MongoDB connected successfully!');
+        return connection;
+      },
+    };
+  },
+}),
+PaymentsModule,
+BlogModule,
+HotelBookingsModule,
+HotelsModule,
+UsersModule,
+AirportsModule,
+],
+
+
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_FILTER, useClass: GlobalExceptionFilter },
+  ],
 })
 export class AppModule {}
