@@ -22,4 +22,4 @@ export class TagsController {
   postsByTag(@Param('tag') tag: string, @Query() query: ListPostsQueryDto) {
     return this.blogService.listByTag(tag, query);
   }
-}
+} 
