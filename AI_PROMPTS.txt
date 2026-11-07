@@ -40,3 +40,34 @@ The CI setup was designed to support automated pull request
 validation while preserving existing application logic and tests.
 
 ================================================
+
+================================================
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: GEN-12 (TASK-107), Project PDF Section 5.1
+
+Prompt (summary of the conversation):
+Help me Implement reference-data seeding using the official Google Sheets dataset.
+Preserve the supplied records and identifiers and reuse the existing airport
+schema without modifying teammates' feature code. Include countries, cities,
+airports, supported currencies and the PDF-required attractions. Add the
+package.json seed command, but leave out the proposed new test file.
+
+How the output was used:
+Codex created an offline snapshot of the four official dataset tabs, derived
+the seven supported currency codes, and added Country, City, Currency and
+Attraction schemas. It implemented a standalone seed runner with validation,
+a dry-run option, unique indexes and upserts, plus setup documentation.
+The implementation preserves official identifiers and existing MongoDB IDs
+when rerun. Existing unrelated records and fields are not deleted.
+
+Verification performed by Codex:
+Build, lint, five existing unit tests and the existing E2E test passed.
+A temporary local MongoDB instance was used to check all 39 reference records,
+repeat-run safety, stable IDs, preservation of unrelated data, invalid-input
+rejection and handling of existing duplicate identifiers. No new test file
+was added, and the shared Atlas database was not modified.
+
+The changes are prepared for Hana's review, commit and push.
+================================================
