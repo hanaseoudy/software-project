@@ -25,10 +25,26 @@ export class CreatePostDto {
   @IsNotEmpty()
   content: string;
 
-  @ApiPropertyOptional({ type: [String], example: ['rome', 'food'] })
+  // BLG-08: up to 5 tags, max 30 characters each (trimmed, lowercase, no duplicates)
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 5,
+    example: ['rome', 'food'],
+  })
   @IsOptional()
+  @Transform(({ value }) =>
+    Array.isArray(value)
+      ? [
+          ...new Set(
+            value
+              .map((t) => (typeof t === 'string' ? t.trim().toLowerCase() : t))
+              .filter((t) => t !== ''),
+          ),
+        ]
+      : value,
+  )
   @IsArray()
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(5)
   @IsString({ each: true })
   @MaxLength(30, { each: true })
   tags?: string[];
