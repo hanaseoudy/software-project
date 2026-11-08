@@ -7,6 +7,7 @@ import {
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import sharp from 'sharp';
 import { ImageCategory, MAX_IMAGE_SIZE_BYTES, MAX_IMAGES } from './uploads.constants';
 
 export interface UploadedImage {
@@ -24,6 +25,7 @@ const URL_PATTERN = new RegExp(`^/api/uploads/(post|activity|hotel|airline)/(${U
 export class UploadsService {
   private readonly root = process.env.UPLOADS_DIR ?? path.join(process.cwd(), 'uploads');
 
+  /** Quick check of the first bytes of the file. */
   private detectType(buffer: Buffer): 'png' | 'jpg' | null {
     const isPng =
       buffer.length >= 8 &&
@@ -34,6 +36,24 @@ export class UploadsService {
     return null;
   }
 
+  /** Full check: the image must open and decode completely (rejects corrupted or cut-off files). */
+  private async validateImage(file: UploadedImage): Promise<'png' | 'jpg'> {
+    const sig = this.detectType(file.buffer);
+    if (!sig) throw new BadRequestException(`"${file.originalname}" must be a JPG or PNG image`);
+    try {
+      const image = sharp(file.buffer, { failOn: 'warning' });
+      const meta = await image.metadata();
+      if (meta.format !== (sig === 'png' ? 'png' : 'jpeg') || !meta.width || !meta.height) {
+        throw new Error('format mismatch');
+      }
+      await image.clone().raw().toBuffer();
+    } catch {
+      throw new BadRequestException(`"${file.originalname}" is corrupted or not a valid JPG/PNG image`);
+    }
+    return sig;
+  }
+
+  /** Validates ALL files first, then stores them (all or nothing). Returns the served URLs. */
   async saveImages(files: UploadedImage[] | undefined, category: ImageCategory): Promise<string[]> {
     if (!files || files.length === 0) throw new BadRequestException('No image was provided');
 
@@ -42,16 +62,12 @@ export class UploadsService {
       throw new BadRequestException(`At most ${max} image(s) can be uploaded for ${category}`);
     }
 
-    const types = files.map((file) => {
+    for (const file of files) {
       if (file.size > MAX_IMAGE_SIZE_BYTES) {
         throw new PayloadTooLargeException(`"${file.originalname}" is larger than 5 MB`);
       }
-      const type = this.detectType(file.buffer);
-      if (!type) {
-        throw new BadRequestException(`"${file.originalname}" must be a JPG or PNG image`);
-      }
-      return type;
-    });
+    }
+    const types = await Promise.all(files.map((file) => this.validateImage(file)));
 
     const dir = path.join(this.root, category);
     await fs.mkdir(dir, { recursive: true });
@@ -67,11 +83,21 @@ export class UploadsService {
         urls.push(`/api/uploads/${category}/${filename}`);
       }
     } catch (err) {
-      // if one write fails, remove the files already written
       await Promise.all(written.map((p) => fs.unlink(p).catch(() => undefined)));
       throw err;
     }
     return urls;
+  }
+
+  /** Feature modules call this, passing the owner's current image URLs, to enforce the limit across uploads. */
+  async saveForOwner(
+    files: UploadedImage[] | undefined,
+    category: ImageCategory,
+    existingUrls: string[] = [],
+  ): Promise<string[]> {
+    if (!files || files.length === 0) throw new BadRequestException('No image was provided');
+    this.assertWithinLimit(category, existingUrls.length, files.length);
+    return this.saveImages(files, category);
   }
 
   assertWithinLimit(category: ImageCategory, existingCount: number, newCount: number) {
@@ -83,7 +109,7 @@ export class UploadsService {
     }
   }
 
-  /** Other modules call this to make sure a URL was really created by this service. */
+  /** Makes sure a URL was really created by this service. */
   isStoredUrl(category: ImageCategory, url: string): boolean {
     const m = URL_PATTERN.exec(url);
     return !!m && m[1] === category;
