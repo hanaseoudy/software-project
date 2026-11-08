@@ -8,7 +8,6 @@ import { BlogModule } from './blog/blog.module';
 import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
-import { PoliciesModule } from './policies/policies.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
@@ -49,7 +48,6 @@ BlogModule,
 HotelBookingsModule,
 HotelsModule,
 UsersModule,
-PoliciesModule,
 NotificationsModule,
 AuthModule,
 ],
