@@ -189,3 +189,26 @@ Verification performed:
 Lint and build passed and all unit tests passed under Node 24. E2E tests were not run locally
 (no MongoDB available); they run in CI. Swagger and Postman checks need the login (ACC-04)
 to be merged first.
+
+================================================
+================================================
+================================================
+
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-09 (TASK-51)
+Prompt (summary of the conversation):
+I asked AI to implement HTL-09 (hotel moderator sets the hotel's check-in and check-out
+times). I asked for one separate branch per ticket. After AI read the Jira ticket and listed
+the files it would change, I approved the plan. The endpoint reuses the same "assigned
+moderator only" check as the hotel edit endpoint from HTL-01.
+
+How the output was used:
+AI added PUT /api/hotels/:id/check-times with a DTO that validates both times as 24-hour
+HH:mm, a service method, the controller route with Swagger documentation, and unit tests for
+the DTO, service and controller.
+
+Verification performed:
+Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
+the student after pulling the branch (results are added to the pull request).

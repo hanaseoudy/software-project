@@ -15,6 +15,7 @@ import {
 } from '../users/schemas/moderatorassignment.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
+import { UpdateCheckTimesDto } from './dto/update-check-times.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { Hotel, HotelDocument } from './schemas/hotel.schema';
 
@@ -68,6 +69,22 @@ export class HotelsService {
     await this.assertCityAndCountryExist(dto.city, dto.country);
 
     hotel.set(changes);
+    await hotel.save();
+
+    return this.toResponse(hotel);
+  }
+
+  /** HTL-09: the assigned moderator sets the standard check-in/check-out times. */
+  async updateCheckTimes(
+    id: string,
+    dto: UpdateCheckTimesDto,
+    user: RequestUser,
+  ): Promise<HotelResponseDto> {
+    const hotel = await this.findHotelOrFail(id);
+    await this.assertModeratorOwnsHotel(user, hotel);
+
+    hotel.checkInTime = dto.checkInTime;
+    hotel.checkOutTime = dto.checkOutTime;
     await hotel.save();
 
     return this.toResponse(hotel);
