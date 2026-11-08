@@ -7,17 +7,26 @@ import {
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
+import { Review } from '../hotel-bookings/schemas/review.schema';
 import { HotelBooking } from '../hotel-bookings/schemas/hotel-booking.schema';
 import { City } from '../reference-data/schemas/city.schema';
 import { Country } from '../reference-data/schemas/country.schema';
 import { ModeratorAssignment } from '../users/schemas/moderatorassignment.schema';
-import { UserRole } from '../users/schemas/user.schema';
+import { User, UserRole } from '../users/schemas/user.schema';
 import { HotelsService } from './hotels.service';
 import { Hotel } from './schemas/hotel.schema';
 import { Room } from './schemas/room.schema';
 import { RoomAvailability } from './schemas/room-availability.schema';
 
 const execResult = <T>(value: T) => ({ exec: () => Promise.resolve(value) });
+
+// A query that supports .sort().limit().select().lean().exec() chains.
+const chain = <T>(value: T) => {
+  const q: Record<string, unknown> = {};
+  for (const m of ['sort', 'limit', 'select', 'lean']) q[m] = () => q;
+  q.exec = () => Promise.resolve(value);
+  return q;
+};
 
 const makeHotelDoc = () => {
   const doc: Record<string, unknown> = {
@@ -47,15 +56,22 @@ describe('HotelsService', () => {
   let service: HotelsService;
   const hotelModel = { create: jest.fn(), findById: jest.fn() };
   const roomModel = {
+    find: jest.fn(),
     exists: jest.fn(),
     create: jest.fn(),
     findOne: jest.fn(),
   };
-  const availabilityModel = { findOne: jest.fn(), create: jest.fn() };
+  const availabilityModel = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+  };
   const cityModel = { exists: jest.fn() };
   const countryModel = { exists: jest.fn() };
   const assignmentModel = { exists: jest.fn() };
-  const bookingModel = { exists: jest.fn() };
+  const bookingModel = { exists: jest.fn(), find: jest.fn() };
+  const reviewModel = { find: jest.fn() };
+  const userModel = { find: jest.fn() };
 
   const moderator = {
     id: new Types.ObjectId().toString(),
@@ -87,6 +103,8 @@ describe('HotelsService', () => {
           useValue: assignmentModel,
         },
         { provide: getModelToken(HotelBooking.name), useValue: bookingModel },
+        { provide: getModelToken(Review.name), useValue: reviewModel },
+        { provide: getModelToken(User.name), useValue: userModel },
       ],
     }).compile();
     service = moduleRef.get(HotelsService);
@@ -786,6 +804,253 @@ describe('HotelsService', () => {
       expect(found.deleteOne).toHaveBeenCalled();
       expect(result.startDate).toBe('2026-12-01');
       expect(result.endDate).toBe('2026-12-31');
+    });
+  });
+
+  describe('getDetails', () => {
+    const day = (d: string) => new Date(`${d}T00:00:00.000Z`);
+    const hotelWithPolicy = () => {
+      const doc = makeHotelDoc();
+      doc.amenities = ['wifi'];
+      doc.images = ['https://example.com/1.jpg'];
+      doc.policies = {
+        cancellationTiers: [{ daysBeforeCheckIn: 7, refundPercentage: 100 }],
+      };
+      doc.averageRating = 4.5;
+      doc.reviewCount = 2;
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      return doc;
+    };
+    const room = (roomNumber: string) => ({
+      _id: new Types.ObjectId(),
+      roomNumber,
+      type: 'Double',
+      beds: 2,
+      maxOccupancy: 3,
+      pricePerNight: 1500,
+    });
+    const rangeOf = (
+      roomDoc: { _id: Types.ObjectId },
+      start: string,
+      end: string,
+      type = 'available',
+    ) => ({
+      room: roomDoc._id,
+      type,
+      startDate: day(start),
+      endDate: day(end),
+    });
+    const withRooms = (
+      rooms: ReturnType<typeof room>[],
+      ranges: unknown[] = [],
+      bookings: unknown[] = [],
+    ) => {
+      roomModel.find.mockReturnValue(chain(rooms));
+      availabilityModel.find.mockReturnValue(chain(ranges));
+      bookingModel.find.mockReturnValue(chain(bookings));
+    };
+    const stay = { checkIn: '2026-12-10', checkOut: '2026-12-13' };
+    const idOf = () => new Types.ObjectId().toString();
+
+    beforeEach(() => {
+      reviewModel.find.mockReturnValue(chain([]));
+    });
+
+    it('returns 404 for a malformed id', async () => {
+      await expect(service.getDetails('nope', {})).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('returns 404 when the hotel does not exist', async () => {
+      hotelModel.findById.mockReturnValue(execResult(null));
+      await expect(service.getDetails(idOf(), {})).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('returns 404 for an inactive hotel', async () => {
+      const doc = makeHotelDoc();
+      doc.isActive = false;
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      await expect(service.getDetails(idOf(), {})).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('returns the profile, policy and rating without rooms when no dates are sent', async () => {
+      hotelWithPolicy();
+      const result = await service.getDetails(idOf(), {});
+      expect(result.name).toBe('Nile Palace');
+      expect(result.amenities).toEqual(['wifi']);
+      expect(result.images).toHaveLength(1);
+      expect(result.checkInTime).toBe('14:00');
+      expect(result.cancellationTiers).toEqual([
+        { daysBeforeCheckIn: 7, refundPercentage: 100 },
+      ]);
+      expect(result.averageRating).toBe(4.5);
+      expect(result.availableRooms).toBeUndefined();
+      expect(roomModel.find).not.toHaveBeenCalled();
+    });
+
+    it('returns an empty cancellation policy when none is set', async () => {
+      hotelModel.findById.mockReturnValue(execResult(makeHotelDoc()));
+      const result = await service.getDetails(idOf(), {});
+      expect(result.cancellationTiers).toEqual([]);
+    });
+
+    it('shows reviews with the reviewer first name and last initial', async () => {
+      hotelWithPolicy();
+      const userId = new Types.ObjectId();
+      reviewModel.find.mockReturnValue(
+        chain([
+          {
+            _id: new Types.ObjectId(),
+            user: userId,
+            rating: 4,
+            comment: 'Nice',
+            createdAt: day('2026-11-01'),
+          },
+        ]),
+      );
+      userModel.find.mockReturnValue(
+        chain([{ _id: userId, firstName: 'Sara', lastName: 'Mohamed' }]),
+      );
+      const result = await service.getDetails(idOf(), {});
+      expect(reviewModel.find).toHaveBeenCalledWith(
+        expect.objectContaining({ hidden: false }),
+      );
+      expect(result.reviews).toEqual([
+        expect.objectContaining({
+          reviewer: 'Sara M.',
+          rating: 4,
+          comment: 'Nice',
+        }),
+      ]);
+    });
+
+    it.each([
+      [{ checkIn: '2026-12-10' }, 'checkOut'],
+      [{ checkOut: '2026-12-13' }, 'checkIn'],
+      [{ checkIn: '2026-12-13', checkOut: '2026-12-10' }, 'checkOut'],
+      [{ checkIn: '2026-12-10', checkOut: '2026-12-10' }, 'checkOut'],
+      [{ checkIn: '2026-02-30', checkOut: '2026-03-02' }, 'checkIn'],
+      [{ checkIn: 'tomorrow', checkOut: '2026-03-02' }, 'checkIn'],
+    ])('rejects bad stay dates %j', async (query, field) => {
+      hotelWithPolicy();
+      const error = await service
+        .getDetails(idOf(), query)
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = (error as BadRequestException).getResponse() as {
+        errors: Record<string, string[]>;
+      };
+      expect(Object.keys(response.errors)).toContain(field);
+    });
+
+    it('lists a room whose bookable range covers the stay', async () => {
+      hotelWithPolicy();
+      const a = room('A101');
+      withRooms([a], [rangeOf(a, '2026-12-01', '2026-12-31')]);
+      const result = await service.getDetails(idOf(), stay);
+      expect(result.availableRooms).toEqual([
+        expect.objectContaining({ roomNumber: 'A101', pricePerNight: 1500 }),
+      ]);
+    });
+
+    it('lists a room when two touching ranges together cover the stay', async () => {
+      hotelWithPolicy();
+      const a = room('A101');
+      withRooms(
+        [a],
+        [
+          rangeOf(a, '2026-12-01', '2026-12-11'),
+          rangeOf(a, '2026-12-12', '2026-12-31'),
+        ],
+      );
+      const result = await service.getDetails(idOf(), stay);
+      expect(result.availableRooms).toHaveLength(1);
+    });
+
+    it('does not list a room that has no bookable range for the stay', async () => {
+      hotelWithPolicy();
+      const a = room('A101');
+      withRooms([a], []);
+      const result = await service.getDetails(idOf(), stay);
+      expect(result.availableRooms).toEqual([]);
+    });
+
+    it('does not list a room whose range ends before the last night', async () => {
+      hotelWithPolicy();
+      const a = room('A101');
+      withRooms([a], [rangeOf(a, '2026-12-01', '2026-12-11')]);
+      const result = await service.getDetails(idOf(), stay);
+      expect(result.availableRooms).toEqual([]);
+    });
+
+    it('lists a room when the check-out day is just after the range end', async () => {
+      hotelWithPolicy();
+      const a = room('A101');
+      withRooms([a], [rangeOf(a, '2026-12-01', '2026-12-12')]);
+      const result = await service.getDetails(idOf(), stay);
+      expect(result.availableRooms).toHaveLength(1);
+    });
+
+    it('does not list a room blocked during the stay', async () => {
+      hotelWithPolicy();
+      const a = room('A101');
+      withRooms(
+        [a],
+        [
+          rangeOf(a, '2026-12-01', '2026-12-31'),
+          rangeOf(a, '2026-12-11', '2026-12-11', 'blocked'),
+        ],
+      );
+      const result = await service.getDetails(idOf(), stay);
+      expect(result.availableRooms).toEqual([]);
+    });
+
+    it('does not list a room that has an overlapping booking', async () => {
+      hotelWithPolicy();
+      const a = room('A101');
+      const b = room('A102');
+      withRooms(
+        [a, b],
+        [
+          rangeOf(a, '2026-12-01', '2026-12-31'),
+          rangeOf(b, '2026-12-01', '2026-12-31'),
+        ],
+        [{ rooms: [{ room: a._id }] }],
+      );
+      const result = await service.getDetails(idOf(), stay);
+      expect(result.availableRooms?.map((r) => r.roomNumber)).toEqual(['A102']);
+    });
+
+    it('asks only for confirmed bookings and live holds that overlap', async () => {
+      hotelWithPolicy();
+      const a = room('A101');
+      withRooms([a], [rangeOf(a, '2026-12-01', '2026-12-31')]);
+      await service.getDetails(idOf(), stay);
+      expect(bookingModel.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          checkIn: { $lt: day('2026-12-13') },
+          checkOut: { $gt: day('2026-12-10') },
+          $or: [
+            { status: 'CONFIRMED' },
+            {
+              status: 'PENDING_PAYMENT',
+              holdExpiresAt: { $gt: expect.any(Date) },
+            },
+          ],
+        }),
+      );
+    });
+
+    it('returns an empty list when the hotel has no active rooms', async () => {
+      hotelWithPolicy();
+      roomModel.find.mockReturnValue(chain([]));
+      const result = await service.getDetails(idOf(), stay);
+      expect(result.availableRooms).toEqual([]);
     });
   });
 });

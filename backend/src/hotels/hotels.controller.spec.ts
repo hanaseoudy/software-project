@@ -13,6 +13,7 @@ describe('HotelsController', () => {
     setCancellationTiers: jest.fn(),
     createRoom: jest.fn(),
     addRoomBookableRange: jest.fn(),
+    getDetails: jest.fn(),
     updateRoom: jest.fn(),
     removeRoomBookableRange: jest.fn(),
   };
@@ -131,5 +132,14 @@ describe('HotelsController', () => {
       'a1',
       user,
     );
+  });
+
+  it('getDetails passes the id and the stay dates', async () => {
+    const query = { checkIn: '2026-12-10', checkOut: '2026-12-13' };
+    service.getDetails.mockResolvedValue({ id: 'h1' });
+
+    await controller.getDetails('h1', query);
+
+    expect(service.getDetails).toHaveBeenCalledWith('h1', query);
   });
 });

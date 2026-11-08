@@ -19,6 +19,8 @@ import {
   HotelBooking,
   HotelBookingSchema,
 } from '../hotel-bookings/schemas/hotel-booking.schema';
+import { Review, ReviewSchema } from '../hotel-bookings/schemas/review.schema';
+import { User, UserSchema } from '../users/schemas/user.schema';
 import { HotelsController } from './hotels.controller';
 import { HotelsService } from './hotels.service';
 
@@ -32,6 +34,8 @@ import { HotelsService } from './hotels.service';
       { name: Country.name, schema: CountrySchema },
       { name: ModeratorAssignment.name, schema: ModeratorAssignmentSchema },
       { name: HotelBooking.name, schema: HotelBookingSchema },
+      { name: Review.name, schema: ReviewSchema },
+      { name: User.name, schema: UserSchema },
     ]),
   ],
   controllers: [HotelsController],

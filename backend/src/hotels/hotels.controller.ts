@@ -2,10 +2,12 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Param,
   Patch,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -29,6 +31,8 @@ import { UserRole } from '../users/schemas/user.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { CreateRoomAvailabilityDto } from './dto/create-room-availability.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
+import { HotelDetailsQueryDto } from './dto/hotel-details-query.dto';
+import { HotelDetailsResponseDto } from './dto/hotel-details-response.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
 import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dto';
 import { RoomResponseDto } from './dto/room-response.dto';
@@ -294,5 +298,30 @@ export class HotelsController {
       rangeId,
       req.user!,
     );
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Hotel details page (HTL-02)',
+    description:
+      'Public: no login needed. Shows the profile, photos, amenities, check-in/check-out times, cancellation policy, average rating and recent reviews. Send checkIn and checkOut (YYYY-MM-DD) together to also get the rooms that are free for the whole stay.',
+  })
+  @ApiOkResponse({
+    description: 'Hotel details',
+    type: HotelDetailsResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid stay dates; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: { checkOut: ['Check-out must be after the check-in day'] },
+    },
+  })
+  @ApiNotFoundResponse({ description: 'Hotel not found or not active' })
+  getDetails(
+    @Param('id') id: string,
+    @Query() query: HotelDetailsQueryDto,
+  ): Promise<HotelDetailsResponseDto> {
+    return this.hotelsService.getDetails(id, query);
   }
 }
