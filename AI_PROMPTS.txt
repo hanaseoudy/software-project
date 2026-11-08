@@ -163,3 +163,31 @@ email, invalid email, suspended with correct and wrong password). Lint,
 build, unit tests and E2E tests passed locally.
 ================================================
 
+
+================================================
+Date: 2026-11-08
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: GEN-11 (TASK-103)
+
+Prompt (summary of the conversation):
+Help me implement GEN-11: flight bookings and hotel reservations follow
+Pending Payment -> Confirmed -> Completed, with Pending Payment -> Expired
+(hold timeout) and Confirmed -> Cancelled as the only other transitions. Build
+it standalone, without depending on FLT-22, HTL-18 or PAY-01.
+
+How the output was used:
+Used the generated shared helper (BookingStatus, the allowed-transition map,
+canTransitionBooking, assertBookingTransition, isTerminalBookingStatus and
+InvalidBookingTransitionError) and its unit tests after reviewing them against
+GEN-11. The helper has no framework dependency, so callers map the error to a
+409. Existing schemas and enums were not changed. Note: FlightBookingStatus on
+develop has HELD and no COMPLETED, so wiring flights to this helper needs a
+decision from the leader.
+
+Verification:
+New unit tests (9) pass, and tsc and oxlint pass. Five other existing test
+suites on develop (app, users, blog) fail on a Jest ES module issue that is
+unrelated to this change. The helper is not wired into the booking services
+yet, so no endpoint was tested in Swagger or Postman.
+================================================
