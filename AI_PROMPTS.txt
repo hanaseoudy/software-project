@@ -163,3 +163,33 @@ email, invalid email, suspended with correct and wrong password). Lint,
 build, unit tests and E2E tests passed locally.
 ================================================
 
+
+================================================
+Date: 2026-11-08
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: HTL-18 (TASK-58)
+
+Prompt (summary of the conversation):
+Help me implement HTL-18: hold all selected rooms together for 10 minutes as
+one PENDING_PAYMENT reservation, reject the whole request if any room overlaps
+a confirmed reservation, an unexpired hold or a blocked range, release unpaid
+holds when they expire, and validate that check-out is after check-in and
+check-in is not in the past.
+
+How the output was used:
+Used the generated HoldHotelBookingDto, RoomLock schema, HotelBookingsService
+and HotelBookingsController after reviewing them against HTL-18 and HTL-16.
+The service runs the overlap checks and the booking insert inside one MongoDB
+transaction, and updates a per-room lock document inside it so two concurrent
+holds on the same room cannot both succeed. An expired hold is ignored by the
+overlap check (holdExpiresAt <= now). The per-room adults rule was changed to
+"at least one adult in the whole reservation" to match HTL-16. Swagger
+documents the 201, 400, 404 and 409 responses.
+
+Verification:
+TypeScript type-check (tsc --noEmit) passed. The endpoint has NOT been tested
+against the database yet; Swagger and Postman tests (201, 409 on overlap, 400
+on invalid dates) will be added to the PR. The expiry cron job and the auth
+guard are not included yet (waiting for FLT-22 and the JWT guard to be merged).
+================================================
