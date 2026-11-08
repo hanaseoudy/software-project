@@ -262,3 +262,29 @@ documentation, and unit tests for the DTO, service and controller.
 Verification performed:
 Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
 the student after pulling the branch (results are added to the pull request).
+
+================================================
+================================================
+================================================
+
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-04 (TASK-47)
+Prompt (summary of the conversation):
+I asked AI to implement HTL-04 (a hotel moderator defines the date ranges when a room can be
+booked, without overlaps) on its own branch, built on top of the HTL-03 branch. The ticket
+depends on HTL-03 (room creation), which is not merged yet. After AI read the Jira ticket and
+the existing RoomAvailability schema, I asked it to continue the same way as the previous
+tickets.
+
+How the output was used:
+AI added POST /api/hotels/:id/rooms/:roomId/availability for the assigned hotel moderator. The
+range uses plain dates (YYYY-MM-DD), both days included. The service checks that the dates are
+real, that the end is not before the start, and that the range does not overlap another
+bookable range of the same room (409 with the conflicting dates). It also added the DTOs,
+Swagger documentation and unit tests for the DTO, service and controller.
+
+Verification performed:
+Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
+the student after pulling the branch (results are added to the pull request).

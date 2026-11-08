@@ -26,8 +26,10 @@ import {
 } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
+import { CreateRoomAvailabilityDto } from './dto/create-room-availability.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
+import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dto';
 import { RoomResponseDto } from './dto/room-response.dto';
 import {
   CancellationTiersResponseDto,
@@ -190,5 +192,41 @@ export class HotelsController {
   ): Promise<RoomResponseDto> {
     // RolesGuard guarantees req.user is set on this route.
     return this.hotelsService.createRoom(id, dto, req.user!);
+  }
+
+  @Post(':id/rooms/:roomId/availability')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Add a bookable date range to a room (HTL-04)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Both days are included. A range must not overlap another bookable range of the same room.',
+  })
+  @ApiCreatedResponse({
+    description: 'Bookable range created',
+    type: RoomAvailabilityResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: { endDate: ['End date must be on or after the start date'] },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel or room not found' })
+  @ApiConflictResponse({
+    description: 'The dates overlap an existing bookable range of this room',
+  })
+  addRoomBookableRange(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Body() dto: CreateRoomAvailabilityDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomAvailabilityResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.addRoomBookableRange(id, roomId, dto, req.user!);
   }
 }

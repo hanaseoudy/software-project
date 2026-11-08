@@ -15,8 +15,10 @@ import {
   ProviderType,
 } from '../users/schemas/moderatorassignment.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
+import { CreateRoomAvailabilityDto } from './dto/create-room-availability.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
+import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dto';
 import { RoomResponseDto } from './dto/room-response.dto';
 import {
   CancellationTiersResponseDto,
@@ -26,12 +28,19 @@ import { UpdateCheckTimesDto } from './dto/update-check-times.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { Hotel, HotelDocument } from './schemas/hotel.schema';
 import { Room, RoomDocument } from './schemas/room.schema';
+import {
+  AvailabilityType,
+  RoomAvailability,
+  RoomAvailabilityDocument,
+} from './schemas/room-availability.schema';
 
 @Injectable()
 export class HotelsService {
   constructor(
     @InjectModel(Hotel.name) private readonly hotelModel: Model<Hotel>,
     @InjectModel(Room.name) private readonly roomModel: Model<Room>,
+    @InjectModel(RoomAvailability.name)
+    private readonly availabilityModel: Model<RoomAvailability>,
     @InjectModel(City.name) private readonly cityModel: Model<City>,
     @InjectModel(Country.name) private readonly countryModel: Model<Country>,
     @InjectModel(ModeratorAssignment.name)
@@ -210,6 +219,104 @@ export class HotelsService {
       }
       throw error;
     }
+  }
+
+  /** HTL-04: the assigned moderator defines a date range when a room can be booked. */
+  async addRoomBookableRange(
+    hotelId: string,
+    roomId: string,
+    dto: CreateRoomAvailabilityDto,
+    user: RequestUser,
+  ): Promise<RoomAvailabilityResponseDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+    const room = await this.findRoomOrFail(hotel, roomId);
+
+    const start = this.parseDay(dto.startDate);
+    const end = this.parseDay(dto.endDate);
+    const errors: Record<string, string[]> = {};
+    if (!start) {
+      errors.startDate = [
+        'Start date must be a real date in YYYY-MM-DD format',
+      ];
+    }
+    if (!end) {
+      errors.endDate = ['End date must be a real date in YYYY-MM-DD format'];
+    }
+    if (start && end && end < start) {
+      errors.endDate = ['End date must be on or after the start date'];
+    }
+    if (!start || !end || Object.keys(errors).length > 0) {
+      throw new BadRequestException({ message: 'Validation failed', errors });
+    }
+
+    // Both days are included, so two ranges overlap when each starts on or before the other ends.
+    const overlapping = await this.availabilityModel
+      .findOne({
+        room: room._id,
+        type: AvailabilityType.AVAILABLE,
+        startDate: { $lte: end },
+        endDate: { $gte: start },
+      })
+      .exec();
+    if (overlapping) {
+      throw new ConflictException(
+        `These dates overlap an existing bookable range (${this.formatDay(overlapping.startDate)} to ${this.formatDay(overlapping.endDate)})`,
+      );
+    }
+
+    const range = await this.availabilityModel.create({
+      room: room._id,
+      hotel: hotel._id,
+      type: AvailabilityType.AVAILABLE,
+      startDate: start,
+      endDate: end,
+    });
+    return this.toAvailabilityResponse(range);
+  }
+
+  private async findRoomOrFail(
+    hotel: HotelDocument,
+    roomId: string,
+  ): Promise<RoomDocument> {
+    if (!isValidObjectId(roomId)) {
+      throw new NotFoundException('Room not found');
+    }
+    const room = await this.roomModel
+      .findOne({ _id: roomId, hotel: hotel._id })
+      .exec();
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+    return room;
+  }
+
+  /** Reads YYYY-MM-DD as midnight UTC; returns null for anything that is not a real calendar day. */
+  private parseDay(value: string): Date | null {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return null;
+    }
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return Number.isNaN(date.getTime()) || this.formatDay(date) !== value
+      ? null
+      : date;
+  }
+
+  private formatDay(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private toAvailabilityResponse(
+    range: RoomAvailabilityDocument,
+  ): RoomAvailabilityResponseDto {
+    return {
+      id: range._id.toString(),
+      roomId: range.room.toString(),
+      hotelId: range.hotel.toString(),
+      type: range.type,
+      startDate: this.formatDay(range.startDate),
+      endDate: this.formatDay(range.endDate),
+    };
   }
 
   private toRoomResponse(room: RoomDocument): RoomResponseDto {
