@@ -213,3 +213,32 @@ Tested in Postman: /me without cookies (401), login sets both cookies with
 HttpOnly and Secure (200), /me after login (200), /me with a fake token (401).
 Lint, build, unit tests and E2E tests passed locally.
 ================================================
+================================================
+Date: 2026-11-08
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: GEN-13 (backend validation; shared ObjectId reference schemas)
+
+Prompt:
+Verify the report that type: Types.ObjectId in NestJS schema decorators
+produces Mixed fields and prevents automatic string-ID query casting.
+After the issue was confirmed, I approved the fix: "okay fix it".
+
+How the output was used:
+Changed 40 reference definitions in 19 schema files to use
+MongooseSchema.Types.ObjectId in @Prop options while retaining
+Types.ObjectId property annotations and existing field options.
+Added regression tests for query casting, existing ObjectId values,
+invalid IDs, and embedded booked-room references. Work is on
+fix/mongoose-objectid-schema, created from the latest origin/develop.
+
+Verification:
+Lint passed. All 20 unit tests passed, including 15 new regression tests.
+An additional check of emitted schema modules verified all 40 corrected
+fields are ObjectId paths, cast valid string IDs, and reject invalid IDs.
+The full application build failed because @nestjs/jwt and cookie-parser
+from the existing develop lockfile are not installed locally. E2E tests
+could not start because @nestjs/jwt is missing. Dependency installation
+was declined. No database was connected to or changed; existing stored
+reference values have not been audited or migrated.
+================================================

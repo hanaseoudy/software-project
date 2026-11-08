@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 
 export type PostDocument = HydratedDocument<Post>;
 
@@ -16,7 +16,7 @@ export class Post {
   @Prop({ required: true })
   content: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
   author: Types.ObjectId;
 
   @Prop({ enum: PostStatus, default: PostStatus.DRAFT, index: true })
@@ -37,7 +37,7 @@ export class Post {
   @Prop({ default: 0 })
   commentsCount: number;
 
-  @Prop({ type: Types.ObjectId, ref: 'Itinerary', default: null })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Itinerary', default: null })
   itinerary?: Types.ObjectId | null;
 }
 
