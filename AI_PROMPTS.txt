@@ -163,8 +163,6 @@ email, invalid email, suspended with correct and wrong password). Lint,
 build, unit tests and E2E tests passed locally.
 ================================================
 
-
-
 ================================================
 Date: 2026-11-08
 Student: Kenzy ellkany
@@ -172,19 +170,16 @@ Tool: Claude
 Related Requirement: GEN-08
 
 Prompt:
-Help me implement GEN-08 (validated image uploads served by URL: JPG or
-PNG only, max 5 MB each, up to 5 images per post, activity or hotel and
-1 logo per airline) in our NestJS backend, based on the project PDF and
-the requirements sheet. Match it to our existing backend structure.
+Review my GEN-08 upload code and help me address the reviewer's comments: make the upload
+service reusable without authentication, validate the real image structure, and enforce the
+5-images-per-record and 1-logo-per-airline limits across multiple uploads.
 
 How the output was used:
-Used the generated UploadsModule (constants, service, controller,
-module) after reviewing it. The service checks the real file bytes
-(not just the extension) so only JPG and PNG are accepted, rejects files
-over 5 MB, limits the number of images per upload, stores files under
-backend/uploads/<category>/ with generated names, and serves them at
-/uploads/<category>/<file>. It also exposes assertWithinLimit() and
-deleteByUrl() for the post, activity, hotel and airline tasks.
-Registered the module in app.module.ts, added backend/uploads/ to
-.gitignore, merged develop and ran npm run build successfully.
+Removed the standalone upload routes and the auth dependency, keeping only the public serve
+route. Fixed the served URL to include the /api prefix. Added sharp decoding in UploadsService
+so corrupted or truncated images are rejected, and added file cleanup if a write fails. Added
+saveForOwner() and isStoredUrl() on top of assertWithinLimit() and deleteByUrl(), plus shared
+Multer options (image-upload.options.ts), so the post, activity, hotel and airline owners can
+enforce the per-record limits.
 ================================================
+
