@@ -237,3 +237,28 @@ The new list replaces the old one; an empty list removes all tiers.
 Verification performed:
 Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
 the student after pulling the branch (results are added to the pull request).
+
+================================================
+================================================
+================================================
+
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-03 (TASK-46)
+Prompt (summary of the conversation):
+I asked AI to implement HTL-03 (a hotel moderator adds an individually bookable room) on its own
+branch, built on top of the HTL-10 branch. After AI read the Jira ticket and listed the files it
+would change, I approved the plan. The endpoint reuses the "assigned moderator only" check from
+HTL-01 and the existing Room schema, which already has a unique room number per hotel.
+
+How the output was used:
+AI added POST /api/hotels/:id/rooms with a DTO that validates the room number, type, beds
+(whole number >= 1), maximum occupancy (whole number >= 1) and price per night (> 0, at most
+2 decimals), a service method that returns 409 for a duplicate room number in the same hotel
+(also when the database unique index rejects a race), the controller route with Swagger
+documentation, and unit tests for the DTO, service and controller.
+
+Verification performed:
+Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
+the student after pulling the branch (results are added to the pull request).

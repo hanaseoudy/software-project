@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,6 +13,7 @@ import { ModeratorAssignment } from '../users/schemas/moderatorassignment.schema
 import { UserRole } from '../users/schemas/user.schema';
 import { HotelsService } from './hotels.service';
 import { Hotel } from './schemas/hotel.schema';
+import { Room } from './schemas/room.schema';
 
 const execResult = <T>(value: T) => ({ exec: () => Promise.resolve(value) });
 
@@ -42,6 +44,7 @@ const makeHotelDoc = () => {
 describe('HotelsService', () => {
   let service: HotelsService;
   const hotelModel = { create: jest.fn(), findById: jest.fn() };
+  const roomModel = { exists: jest.fn(), create: jest.fn() };
   const cityModel = { exists: jest.fn() };
   const countryModel = { exists: jest.fn() };
   const assignmentModel = { exists: jest.fn() };
@@ -64,6 +67,7 @@ describe('HotelsService', () => {
       providers: [
         HotelsService,
         { provide: getModelToken(Hotel.name), useValue: hotelModel },
+        { provide: getModelToken(Room.name), useValue: roomModel },
         { provide: getModelToken(City.name), useValue: cityModel },
         { provide: getModelToken(Country.name), useValue: countryModel },
         {
@@ -379,6 +383,103 @@ describe('HotelsService', () => {
           moderator,
         ),
       ).resolves.toBeDefined();
+    });
+  });
+
+  describe('createRoom', () => {
+    const idOf = () => new Types.ObjectId().toString();
+    const dto = {
+      roomNumber: ' a101 ',
+      type: 'Double',
+      beds: 2,
+      maxOccupancy: 3,
+      pricePerNight: 1500.5,
+    };
+    const assignedHotel = () => {
+      const doc = makeHotelDoc();
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+      return doc;
+    };
+
+    it('returns 404 when the hotel does not exist', async () => {
+      hotelModel.findById.mockReturnValue(execResult(null));
+      await expect(
+        service.createRoom(idOf(), dto, moderator),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('returns 403 when the moderator is not assigned to the hotel', async () => {
+      hotelModel.findById.mockReturnValue(execResult(makeHotelDoc()));
+      assignmentModel.exists.mockReturnValue(execResult(null));
+
+      await expect(
+        service.createRoom(idOf(), dto, moderator),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(roomModel.create).not.toHaveBeenCalled();
+    });
+
+    it('creates the room with an upper-case room number', async () => {
+      const hotel = assignedHotel();
+      roomModel.exists.mockReturnValue(execResult(null));
+      roomModel.create.mockImplementation((data: Record<string, unknown>) =>
+        Promise.resolve({
+          _id: new Types.ObjectId(),
+          isActive: true,
+          ...data,
+        }),
+      );
+
+      const result = await service.createRoom(idOf(), dto, moderator);
+
+      expect(roomModel.exists.mock.calls[0][0]).toEqual({
+        hotel: hotel._id,
+        roomNumber: 'A101',
+      });
+      expect(roomModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({ hotel: hotel._id, roomNumber: 'A101' }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          hotelId: String(hotel._id),
+          roomNumber: 'A101',
+          type: 'Double',
+          beds: 2,
+          maxOccupancy: 3,
+          pricePerNight: 1500.5,
+          isActive: true,
+        }),
+      );
+    });
+
+    it('returns 409 when the room number already exists in the hotel', async () => {
+      assignedHotel();
+      roomModel.exists.mockReturnValue(execResult({ _id: 'r' }));
+
+      await expect(
+        service.createRoom(idOf(), dto, moderator),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(roomModel.create).not.toHaveBeenCalled();
+    });
+
+    it('returns 409 when the database unique index rejects a race', async () => {
+      assignedHotel();
+      roomModel.exists.mockReturnValue(execResult(null));
+      roomModel.create.mockRejectedValue({ code: 11000 });
+
+      await expect(
+        service.createRoom(idOf(), dto, moderator),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('does not hide other database errors', async () => {
+      assignedHotel();
+      roomModel.exists.mockReturnValue(execResult(null));
+      roomModel.create.mockRejectedValue(new Error('db down'));
+
+      await expect(service.createRoom(idOf(), dto, moderator)).rejects.toThrow(
+        'db down',
+      );
     });
   });
 });
