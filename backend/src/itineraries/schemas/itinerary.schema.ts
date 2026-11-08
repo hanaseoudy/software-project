@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 
 export type ItineraryDocument = HydratedDocument<Itinerary>;
 
@@ -10,7 +10,7 @@ export enum ItineraryVisibility {
 
 @Schema({ timestamps: true })
 export class Itinerary {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
   userId: Types.ObjectId;
 
   @Prop({ type: String, required: true, trim: true, maxlength: 100 })
@@ -27,10 +27,10 @@ export class Itinerary {
   visibility: ItineraryVisibility;
 
   // Optional source link; clone must not depend on the original remaining available.
-  @Prop({ type: Types.ObjectId, ref: 'Itinerary' })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Itinerary' })
   clonedFromId?: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User' })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User' })
   originalAuthorId?: Types.ObjectId;
 
   // Snapshot keeps attribution available if the source itinerary/user changes.
