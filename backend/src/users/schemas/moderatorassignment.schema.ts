@@ -1,6 +1,6 @@
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 import { User } from './user.schema';
 
 export type ModeratorAssignmentDocument =
@@ -14,7 +14,7 @@ export enum ProviderType {
 @Schema({ timestamps: true })
 export class ModeratorAssignment {
   @Prop({
-    type: Types.ObjectId,
+    type: MongooseSchema.Types.ObjectId,
     ref: User.name,
     required: true,
     unique: true,
@@ -22,7 +22,7 @@ export class ModeratorAssignment {
   moderatorId: Types.ObjectId;
 
   @Prop({
-    type: Types.ObjectId,
+    type: MongooseSchema.Types.ObjectId,
     required: true,
   })
   providerId: Types.ObjectId;
