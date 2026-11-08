@@ -1,3 +1,4 @@
+import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { Passenger, PassengerSchema } from './passenger.schema';
@@ -40,7 +41,14 @@ export class FlightBooking extends Document {
   @Prop({ required: true, min: 0 })
   totalPrice: number;
 
-  @Prop({ required: true, default: 'USD' })
+  @Prop({
+    type: String,
+    required: true,
+    uppercase: true,
+    default: PLATFORM_CURRENCY,
+    enum: [PLATFORM_CURRENCY],
+    immutable: true,
+  })
   currency: string;
 
   @Prop({ default: 0, min: 0 })
