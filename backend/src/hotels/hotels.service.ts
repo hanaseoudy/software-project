@@ -15,6 +15,10 @@ import {
 } from '../users/schemas/moderatorassignment.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
+import {
+  CancellationTiersResponseDto,
+  UpdateCancellationTiersDto,
+} from './dto/update-cancellation-tiers.dto';
 import { UpdateCheckTimesDto } from './dto/update-check-times.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { Hotel, HotelDocument } from './schemas/hotel.schema';
@@ -88,6 +92,81 @@ export class HotelsService {
     await hotel.save();
 
     return this.toResponse(hotel);
+  }
+
+  /** HTL-10: the assigned moderator replaces the hotel's cancellation tiers. */
+  async setCancellationTiers(
+    id: string,
+    dto: UpdateCancellationTiersDto,
+    user: RequestUser,
+  ): Promise<CancellationTiersResponseDto> {
+    const hotel = await this.findHotelOrFail(id);
+    await this.assertModeratorOwnsHotel(user, hotel);
+
+    const problems = this.findTierProblems(dto.tiers);
+    if (problems.length > 0) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: { tiers: problems },
+      });
+    }
+
+    hotel.policies = {
+      cancellationTiers: dto.tiers.map((tier) => ({
+        daysBeforeCheckIn: tier.daysBeforeCheckIn,
+        refundPercentage: tier.refundPercentage,
+      })),
+    };
+    await hotel.save();
+
+    return {
+      id: hotel._id.toString(),
+      cancellationTiers: hotel.policies.cancellationTiers.map((tier) => ({
+        daysBeforeCheckIn: tier.daysBeforeCheckIn,
+        refundPercentage: tier.refundPercentage,
+      })),
+    };
+  }
+
+  /** Returns one readable message per problem; an empty list means the tiers are valid. */
+  private findTierProblems(tiers: unknown[]): string[] {
+    const problems: string[] = [];
+    const seenDays = new Set<number>();
+
+    tiers.forEach((tier, index) => {
+      const label = `Tier ${index + 1}`;
+      const { daysBeforeCheckIn, refundPercentage } = (tier ?? {}) as Record<
+        string,
+        unknown
+      >;
+
+      if (
+        typeof daysBeforeCheckIn !== 'number' ||
+        !Number.isInteger(daysBeforeCheckIn) ||
+        daysBeforeCheckIn < 0
+      ) {
+        problems.push(
+          `${label}: days before check-in must be a whole number, 0 or more`,
+        );
+      } else if (seenDays.has(daysBeforeCheckIn)) {
+        problems.push(
+          `${label}: days before check-in ${daysBeforeCheckIn} is already used by another tier`,
+        );
+      } else {
+        seenDays.add(daysBeforeCheckIn);
+      }
+
+      if (
+        typeof refundPercentage !== 'number' ||
+        !Number.isFinite(refundPercentage) ||
+        refundPercentage < 0 ||
+        refundPercentage > 100
+      ) {
+        problems.push(`${label}: refund percentage must be between 0 and 100`);
+      }
+    });
+
+    return problems;
   }
 
   private async findHotelOrFail(id: string): Promise<HotelDocument> {

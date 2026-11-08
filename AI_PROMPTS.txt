@@ -212,3 +212,28 @@ the DTO, service and controller.
 Verification performed:
 Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
 the student after pulling the branch (results are added to the pull request).
+
+================================================
+================================================
+================================================
+
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-10 (TASK-52)
+Prompt (summary of the conversation):
+I asked AI to implement HTL-10 (hotel moderator defines cancellation tiers) on its own branch,
+built on top of the HTL-09 branch so the two do not conflict. After AI read the Jira ticket and
+listed the files it would change, I approved the plan. The endpoint reuses the "assigned
+moderator only" check from HTL-01. The rule for choosing which tier applies (FLT-09) is not in
+the code yet, so this ticket only stores and validates the tiers.
+
+How the output was used:
+AI added PUT /api/hotels/:id/cancellation-tiers with a DTO, a service method that validates
+every tier (unique whole-number days >= 0, refund 0-100, one clear message per problem), the
+controller route with Swagger documentation, and unit tests for the DTO, service and controller.
+The new list replaces the old one; an empty list removes all tiers.
+
+Verification performed:
+Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
+the student after pulling the branch (results are added to the pull request).

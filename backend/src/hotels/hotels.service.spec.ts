@@ -258,4 +258,127 @@ describe('HotelsService', () => {
       expect(result.checkOutTime).toBe('11:00');
     });
   });
+
+  describe('setCancellationTiers', () => {
+    const idOf = () => new Types.ObjectId().toString();
+    const tiers = [
+      { daysBeforeCheckIn: 14, refundPercentage: 100 },
+      { daysBeforeCheckIn: 7, refundPercentage: 50 },
+      { daysBeforeCheckIn: 0, refundPercentage: 0 },
+    ];
+
+    it('returns 404 when the hotel does not exist', async () => {
+      hotelModel.findById.mockReturnValue(execResult(null));
+      await expect(
+        service.setCancellationTiers(idOf(), { tiers }, moderator),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('returns 403 when the moderator is not assigned to the hotel', async () => {
+      const doc = makeHotelDoc();
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      assignmentModel.exists.mockReturnValue(execResult(null));
+
+      await expect(
+        service.setCancellationTiers(idOf(), { tiers }, moderator),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(doc.save).not.toHaveBeenCalled();
+    });
+
+    it('saves valid tiers and returns them', async () => {
+      const doc = makeHotelDoc();
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+
+      const result = await service.setCancellationTiers(
+        idOf(),
+        { tiers },
+        moderator,
+      );
+
+      expect(doc.save).toHaveBeenCalled();
+      expect(result.id).toBe(String(doc._id));
+      expect(result.cancellationTiers).toEqual(tiers);
+    });
+
+    it('accepts an empty list to remove all tiers', async () => {
+      const doc = makeHotelDoc();
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+
+      const result = await service.setCancellationTiers(
+        idOf(),
+        { tiers: [] },
+        moderator,
+      );
+
+      expect(result.cancellationTiers).toEqual([]);
+    });
+
+    const expectRejected = async (badTiers: unknown[], message: string) => {
+      const doc = makeHotelDoc();
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+
+      const error = await service
+        .setCancellationTiers(idOf(), { tiers: badTiers as never }, moderator)
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const body = (error as BadRequestException).getResponse() as {
+        errors: { tiers: string[] };
+      };
+      expect(body.errors.tiers.join(' | ')).toContain(message);
+      expect(doc.save).not.toHaveBeenCalled();
+    };
+
+    it('rejects a duplicate days-before-check-in value', async () => {
+      await expectRejected(
+        [
+          { daysBeforeCheckIn: 7, refundPercentage: 50 },
+          { daysBeforeCheckIn: 7, refundPercentage: 20 },
+        ],
+        'Tier 2: days before check-in 7 is already used',
+      );
+    });
+
+    it.each([-1, 1.5, '7', null])(
+      'rejects %p as days before check-in',
+      async (days) => {
+        await expectRejected(
+          [{ daysBeforeCheckIn: days, refundPercentage: 50 }],
+          'days before check-in must be a whole number, 0 or more',
+        );
+      },
+    );
+
+    it.each([-1, 101, '50', null])(
+      'rejects %p as a refund percentage',
+      async (percent) => {
+        await expectRejected(
+          [{ daysBeforeCheckIn: 3, refundPercentage: percent }],
+          'refund percentage must be between 0 and 100',
+        );
+      },
+    );
+
+    it('accepts the boundary values 0 and 100', async () => {
+      const doc = makeHotelDoc();
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+
+      await expect(
+        service.setCancellationTiers(
+          idOf(),
+          {
+            tiers: [
+              { daysBeforeCheckIn: 0, refundPercentage: 0 },
+              { daysBeforeCheckIn: 30, refundPercentage: 100 },
+            ],
+          },
+          moderator,
+        ),
+      ).resolves.toBeDefined();
+    });
+  });
 });

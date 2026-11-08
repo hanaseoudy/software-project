@@ -26,6 +26,10 @@ import {
 import { UserRole } from '../users/schemas/user.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
+import {
+  CancellationTiersResponseDto,
+  UpdateCancellationTiersDto,
+} from './dto/update-cancellation-tiers.dto';
 import { UpdateCheckTimesDto } from './dto/update-check-times.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { HotelsService } from './hotels.service';
@@ -111,5 +115,42 @@ export class HotelsController {
   ): Promise<HotelResponseDto> {
     // RolesGuard guarantees req.user is set on this route.
     return this.hotelsService.updateCheckTimes(id, dto, req.user!);
+  }
+
+  @Put(':id/cancellation-tiers')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Set the cancellation tiers (HTL-10)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Replaces the whole list. Each tier has a unique days-before-check-in value (whole number, 0 or more) and a refund percentage from 0 to 100.',
+  })
+  @ApiOkResponse({
+    description: 'Tiers saved; returns the new list',
+    type: CancellationTiersResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: {
+        tiers: [
+          'Tier 2: days before check-in 7 is already used by another tier',
+          'Tier 3: refund percentage must be between 0 and 100',
+        ],
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel not found' })
+  setCancellationTiers(
+    @Param('id') id: string,
+    @Body() dto: UpdateCancellationTiersDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<CancellationTiersResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.setCancellationTiers(id, dto, req.user!);
   }
 }
