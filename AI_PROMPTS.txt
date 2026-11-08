@@ -216,3 +216,27 @@ could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
 ================================================
+================================================
+Date: 2026-11-08
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: GEN-13 (TASK-108)
+
+Prompt (summary of the conversation):
+Help me complete GEN-13: validation, business rules and authorisation must be
+enforced by the backend, and passwords stored only as salted hashes. Check
+what is already covered and add what is missing as reusable building blocks
+for the team.
+
+How the output was used:
+Confirmed validation (global ValidationPipe with whitelist) and salted bcrypt
+hashing were already in place from ACC-01/ACC-18. Added the missing role-based
+authorisation: a @Roles() decorator, a RolesGuard that returns 403 when the
+logged-in user's role is not allowed (401 if no user), and a @CurrentUser()
+parameter decorator, to be used together with JwtAuthGuard.
+
+Verification:
+Added unit tests for RolesGuard covering no required roles, allowed and
+rejected roles, missing user, controller-level roles and method-level
+overrides. Lint, build, all unit tests (26) and E2E tests passed locally.
+================================================
