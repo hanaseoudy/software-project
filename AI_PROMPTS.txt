@@ -113,6 +113,28 @@ examples. Added a 72-byte maximum on passwords so bcrypt never silently
 truncates them. Verified in Swagger and Postman; lint, build, unit and
 E2E tests passed locally.
 ================================================
+================================================
+
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: ChatGPT and Codex
+Related Requirement: FLT-02 (TASK-26)
+Prompt (summary of the conversation):
+I asked AI to help me implement FLT-02, which requires a predefined, read-only airport
+list using the official reference data from GEN-12. I wanted to reuse the existing airport 
+schema and make sure only airports from the official dataset were returned. I also asked AI
+to explain the controller and service, help me test the endpoint using Swagger, and guide me through
+ recovering my work after accidentally merging and reverting Pull Requests on GitHub.
+ How the output was used:
+With Codex's help, I created the airport controller, service, module, and response DTO. The service 
+retrieves airports from MongoDB, sorts them by IATA code, and provides a method to validate airport 
+selections for flight creation and search. I also used ChatGPT to understand the implementation, fix 
+incorrect import paths, and recover my changes on a new feature branch without overwriting my teammates' work.
+Verification performed:
+I successfully ran the unit tests and E2E tests after resolving a Jest ES module compatibility issue
+I also tested GET /api/airports through Swagger and received a 200 OK response containing the predefined 
+airport records. The recovered implementation is working and ready for final review, commit, and Pull Request.
+================================================
 
 ================================================
 Date: 2026-11-07

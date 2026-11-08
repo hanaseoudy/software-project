@@ -1,9 +1,10 @@
-import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { ACCESS_COOKIE } from './auth/auth.cookies';
+import { validationExceptionFactory } from './common/validation/validation-exception.factory';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -13,11 +14,7 @@ async function bootstrap() {
     new ValidationPipe({
       whitelist: true,
       transform: true,
-      exceptionFactory: (errors) =>
-        new BadRequestException({
-          message: 'Validation failed',
-          errors: Object.fromEntries(errors.map((e) => [e.property, Object.values(e.constraints ?? {})])),
-        }),
+      exceptionFactory: validationExceptionFactory,
     }),
   );
 
