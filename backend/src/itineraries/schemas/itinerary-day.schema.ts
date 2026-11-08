@@ -1,11 +1,11 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 
 export type ItineraryDayDocument = HydratedDocument<ItineraryDay>;
 
 @Schema({ timestamps: true })
 export class ItineraryDay {
-  @Prop({ type: Types.ObjectId, ref: 'Itinerary', required: true, index: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Itinerary', required: true, index: true })
   itineraryId: Types.ObjectId;
 
   // Date = itinerary.startDate + (dayNumber - 1) days; do not store it.
