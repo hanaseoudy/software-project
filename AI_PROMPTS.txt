@@ -212,3 +212,27 @@ the DTO, service and controller.
 Verification performed:
 Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
 the student after pulling the branch (results are added to the pull request).
+================================================
+Date: 2026-11-08
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-19 (TASK-109), ACC-04
+
+Prompt (summary of the conversation):
+Help me implement ACC-19: issue access and refresh tokens as httpOnly,
+Secure, SameSite cookies on login (no localStorage), add a GET /auth/me
+endpoint for the frontend, and a reusable guard that reads the cookie.
+
+How the output was used:
+Used the generated cookie helpers, JwtAuthGuard, the updated login flow and
+the /auth/me endpoint after reviewing them against ACC-19. Login now signs
+an access token and a refresh token with separate secrets (from .env) and
+sets them as httpOnly, Secure, SameSite=Strict cookies; the refresh cookie is
+limited to /api/auth. /auth/me re-checks the account is still active. Added
+@nestjs/jwt and cookie-parser, and documented the cookie auth in Swagger.
+
+Verification:
+Tested in Postman: /me without cookies (401), login sets both cookies with
+HttpOnly and Secure (200), /me after login (200), /me with a fake token (401).
+Lint, build, unit tests and E2E tests passed locally.
+================================================

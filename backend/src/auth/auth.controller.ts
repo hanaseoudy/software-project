@@ -1,7 +1,8 @@
-import { Body, Controller, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
+  ApiCookieAuth,
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiOkResponse,
@@ -9,6 +10,10 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
+import { ACCESS_COOKIE } from './auth.cookies';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterResponseDto } from './dto/register-response.dto';
@@ -50,7 +55,10 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Log in with email and password (ACC-04)' })
+  @ApiOperation({
+    summary: 'Log in with email and password (ACC-04)',
+    description: 'Sets the access_token and refresh_token as httpOnly, Secure, SameSite=Strict cookies (ACC-19).',
+  })
   @ApiOkResponse({ description: 'Logged in; role and providerType tell the frontend which home page to open', type: LoginResponseDto })
   @ApiBadRequestResponse({
     description: 'Validation failed; errors are grouped by field',
@@ -65,7 +73,22 @@ export class AuthController {
     description: 'Account is suspended',
     example: { message: 'Account suspended', error: 'Forbidden', statusCode: 403 },
   })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    const { user, accessToken, refreshToken } = await this.authService.login(dto);
+    this.authService.setAuthCookies(res, accessToken, refreshToken);
+    return user;
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth(ACCESS_COOKIE)
+  @ApiOperation({ summary: 'Get the currently logged-in user from the access_token cookie (ACC-19)' })
+  @ApiOkResponse({ description: 'The current user', type: LoginResponseDto })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid or expired cookie, or the account is no longer active',
+    example: { message: 'Not authenticated', error: 'Unauthorized', statusCode: 401 },
+  })
+  me(@Req() req: AuthenticatedRequest) {
+    return this.authService.me(req.user!.sub);
   }
 }
