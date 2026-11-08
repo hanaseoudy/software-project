@@ -9,7 +9,6 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import { ImageCategory, MAX_IMAGE_SIZE_BYTES, MAX_IMAGES } from './uploads.constants';
 
-// the parts of a multer (memory storage) file that we use
 export interface UploadedImage {
   originalname: string;
   mimetype: string;
@@ -17,15 +16,14 @@ export interface UploadedImage {
   buffer: Buffer;
 }
 
-const FILENAME_PATTERN = /^[a-f0-9-]{36}\.(jpg|png)$/;
-const URL_PATTERN = /^\/uploads\/(post|activity|hotel|airline)\/([a-f0-9-]{36}\.(jpg|png))$/;
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const FILENAME_PATTERN = new RegExp(`^${UUID}\\.(jpg|png)$`);
+const URL_PATTERN = new RegExp(`^/api/uploads/(post|activity|hotel|airline)/(${UUID}\\.(jpg|png))$`);
 
 @Injectable()
 export class UploadsService {
-  // files live in backend/uploads/<category>/ (git-ignored)
-  private readonly root = path.join(process.cwd(), 'uploads');
+  private readonly root = process.env.UPLOADS_DIR ?? path.join(process.cwd(), 'uploads');
 
-  /** Look at the first bytes of the file: the client-sent mimetype can be faked. */
   private detectType(buffer: Buffer): 'png' | 'jpg' | null {
     const isPng =
       buffer.length >= 8 &&
@@ -36,10 +34,6 @@ export class UploadsService {
     return null;
   }
 
-  /**
-   * Validates ALL files first, then stores them (all or nothing).
-   * Returns the URLs the files are served from.
-   */
   async saveImages(files: UploadedImage[] | undefined, category: ImageCategory): Promise<string[]> {
     if (!files || files.length === 0) throw new BadRequestException('No image was provided');
 
@@ -63,19 +57,23 @@ export class UploadsService {
     await fs.mkdir(dir, { recursive: true });
 
     const urls: string[] = [];
-    for (let i = 0; i < files.length; i++) {
-      // never trust the original name: generate our own
-      const filename = `${randomUUID()}.${types[i]}`;
-      await fs.writeFile(path.join(dir, filename), files[i].buffer);
-      urls.push(`/uploads/${category}/${filename}`);
+    const written: string[] = [];
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const filename = `${randomUUID()}.${types[i]}`;
+        const full = path.join(dir, filename);
+        await fs.writeFile(full, files[i].buffer);
+        written.push(full);
+        urls.push(`/api/uploads/${category}/${filename}`);
+      }
+    } catch (err) {
+      // if one write fails, remove the files already written
+      await Promise.all(written.map((p) => fs.unlink(p).catch(() => undefined)));
+      throw err;
     }
     return urls;
   }
 
-  /**
-   * For other modules (posts, activities, hotels, airlines): call this before attaching
-   * new images, so the TOTAL stays within the limit (e.g. 5 per post).
-   */
   assertWithinLimit(category: ImageCategory, existingCount: number, newCount: number) {
     const max = MAX_IMAGES[category];
     if (existingCount + newCount > max) {
@@ -85,18 +83,22 @@ export class UploadsService {
     }
   }
 
-  /** For other modules: remove a stored image when it is deleted from its owner. */
+  /** Other modules call this to make sure a URL was really created by this service. */
+  isStoredUrl(category: ImageCategory, url: string): boolean {
+    const m = URL_PATTERN.exec(url);
+    return !!m && m[1] === category;
+  }
+
   async deleteByUrl(url: string): Promise<void> {
     const match = URL_PATTERN.exec(url);
-    if (!match) return; // not one of our files
+    if (!match) return;
     try {
       await fs.unlink(path.join(this.root, match[1], match[2]));
     } catch (err: any) {
-      if (err.code !== 'ENOENT') throw err; // already gone is fine
+      if (err.code !== 'ENOENT') throw err;
     }
   }
 
-  /** Absolute path of a stored file, or 404. The strict filename pattern blocks path tricks. */
   async getFilePath(category: ImageCategory, filename: string): Promise<string> {
     if (!FILENAME_PATTERN.test(filename)) throw new NotFoundException('Image not found');
     const filePath = path.join(this.root, category, filename);
