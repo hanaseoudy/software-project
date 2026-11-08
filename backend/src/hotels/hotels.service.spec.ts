@@ -141,6 +141,34 @@ describe('HotelsService', () => {
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
+    it('looks the assignment up by ObjectId, not by plain text', async () => {
+      const doc = makeHotelDoc();
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+
+      await service.update(
+        new Types.ObjectId().toString(),
+        { name: 'New name' },
+        moderator,
+      );
+
+      const filter = assignmentModel.exists.mock.calls[0][0];
+      expect(filter.moderatorId).toBeInstanceOf(Types.ObjectId);
+      expect(filter.moderatorId.toString()).toBe(moderator.id);
+    });
+
+    it('returns 403 when the user id is not a valid ObjectId', async () => {
+      hotelModel.findById.mockReturnValue(execResult(makeHotelDoc()));
+
+      await expect(
+        service.update(
+          new Types.ObjectId().toString(),
+          { name: 'New name' },
+          { id: 'not-an-id', role: UserRole.MODERATOR },
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
     it('rejects an empty update', async () => {
       hotelModel.findById.mockReturnValue(execResult(makeHotelDoc()));
       assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));

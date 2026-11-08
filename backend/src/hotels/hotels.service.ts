@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { isValidObjectId, Model } from 'mongoose';
+import { isValidObjectId, Model, Types } from 'mongoose';
 import type { RequestUser } from '../common/guards/roles.guard';
 import { City } from '../reference-data/schemas/city.schema';
 import { Country } from '../reference-data/schemas/country.schema';
@@ -88,13 +88,15 @@ export class HotelsService {
     user: RequestUser,
     hotel: HotelDocument,
   ): Promise<void> {
-    const assignment = await this.assignmentModel
-      .exists({
-        moderatorId: user.id,
-        providerType: ProviderType.HOTEL,
-        providerId: hotel._id,
-      })
-      .exec();
+    const assignment = isValidObjectId(user.id)
+      ? await this.assignmentModel
+          .exists({
+            moderatorId: new Types.ObjectId(user.id),
+            providerType: ProviderType.HOTEL,
+            providerId: hotel._id,
+          })
+          .exec()
+      : null;
     if (!assignment) {
       throw new ForbiddenException('You can only manage your assigned hotel');
     }
