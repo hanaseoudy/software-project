@@ -12,14 +12,20 @@ import {
 import { PostStatus } from '../schemas/post.schema';
 
 export class CreatePostDto {
-  @ApiProperty({ example: 'My trip to Rome' })
+  @ApiProperty({
+    description: 'Post title (required, max 200 characters)',
+    example: 'My trip to Rome',
+  })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)
   title: string;
 
-  @ApiProperty({ example: 'We started the day at the Colosseum...' })
+  @ApiProperty({
+    description: 'Post body (required)',
+    example: 'We started the day at the Colosseum...',
+  })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
@@ -27,6 +33,8 @@ export class CreatePostDto {
 
   // BLG-08: up to 5 tags, max 30 characters each (trimmed, lowercase, no duplicates)
   @ApiPropertyOptional({
+    description:
+      'Up to 5 tags, max 30 characters each. Trimmed, lowercased, duplicates removed.',
     type: [String],
     maxItems: 5,
     example: ['rome', 'food'],
@@ -49,7 +57,11 @@ export class CreatePostDto {
   @MaxLength(30, { each: true })
   tags?: string[];
 
-  @ApiPropertyOptional({ enum: PostStatus, default: PostStatus.DRAFT })
+  @ApiPropertyOptional({
+    description: 'draft (default) or published',
+    enum: PostStatus,
+    default: PostStatus.DRAFT,
+  })
   @IsOptional()
   @IsEnum(PostStatus)
   status?: PostStatus;

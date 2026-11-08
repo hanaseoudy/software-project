@@ -1,0 +1,97 @@
+{
+  "info": {
+    "name": "Blog API (BLG-01 to BLG-08)",
+    "description": "Blog and community endpoints. Set baseUrl, then postId, commentId and tag. Protected requests need the login cookie from the Accounts login request (httpOnly cookie, Postman keeps it automatically).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "postId", "value": "" },
+    { "key": "commentId", "value": "" },
+    { "key": "tag", "value": "rome" }
+  ],
+  "item": [
+    {
+      "name": "Create post (BLG-01)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/posts",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"My trip to Rome\",\n  \"content\": \"We started at the Colosseum...\",\n  \"tags\": [\"rome\", \"food\"],\n  \"status\": \"published\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Browse published posts (BLG-02)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/posts?page=1" }
+    },
+    {
+      "name": "Browse posts by tag (BLG-02)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/posts?tag={{tag}}&page=1" }
+    },
+    {
+      "name": "Get one post with comments (BLG-02)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/posts/{{postId}}" }
+    },
+    {
+      "name": "My posts incl. drafts (BLG-03)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/posts/mine?page=1" }
+    },
+    {
+      "name": "Edit my post (BLG-04)",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/posts/{{postId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Rome, updated\",\n  \"tags\": [\"rome\", \"history\"]\n}"
+        }
+      }
+    },
+    {
+      "name": "Delete my post (BLG-04)",
+      "request": { "method": "DELETE", "url": "{{baseUrl}}/api/posts/{{postId}}" }
+    },
+    {
+      "name": "Add comment (BLG-05)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/posts/{{postId}}/comments",
+        "body": { "mode": "raw", "raw": "{\n  \"text\": \"Great post!\"\n}" }
+      }
+    },
+    {
+      "name": "Like post (BLG-06)",
+      "request": { "method": "POST", "url": "{{baseUrl}}/api/posts/{{postId}}/like" }
+    },
+    {
+      "name": "Unlike post (BLG-06)",
+      "request": { "method": "DELETE", "url": "{{baseUrl}}/api/posts/{{postId}}/like" }
+    },
+    {
+      "name": "Edit my comment (BLG-07)",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/comments/{{commentId}}",
+        "body": { "mode": "raw", "raw": "{\n  \"text\": \"Edited comment\"\n}" }
+      }
+    },
+    {
+      "name": "Delete my comment (BLG-07)",
+      "request": { "method": "DELETE", "url": "{{baseUrl}}/api/comments/{{commentId}}" }
+    },
+    {
+      "name": "Search tags (BLG-08)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/tags?search=ro&page=1" }
+    },
+    {
+      "name": "Posts for a clicked tag (BLG-08)",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/tags/{{tag}}/posts?page=1" }
+    }
+  ]
+}
