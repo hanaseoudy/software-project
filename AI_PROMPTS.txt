@@ -188,8 +188,11 @@ overlap check (holdExpiresAt <= now). The per-room adults rule was changed to
 documents the 201, 400, 404 and 409 responses.
 
 Verification:
-TypeScript type-check (tsc --noEmit) passed. The endpoint has NOT been tested
-against the database yet; Swagger and Postman tests (201, 409 on overlap, 400
-on invalid dates) will be added to the PR. The expiry cron job and the auth
-guard are not included yet (waiting for FLT-22 and the JWT guard to be merged).
+TypeScript type-check (tsc --noEmit) passed. Tested POST /api/hotel-bookings
+locally against MongoDB Atlas with a test hotel and 2 rooms: in Swagger 201
+(PENDING_PAYMENT, totalPrice 600), 409 on the same dates again, and 400 when
+check-out is before check-in; in Postman 201 and 409. A temporary fixed user id
+was used for local testing only and was not committed. The expiry cron job and
+the auth guard are not included yet (waiting for FLT-22 and the JWT guard to be
+merged).
 ================================================
