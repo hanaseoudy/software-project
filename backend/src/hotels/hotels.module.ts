@@ -15,6 +15,10 @@ import {
   ModeratorAssignment,
   ModeratorAssignmentSchema,
 } from '../users/schemas/moderatorassignment.schema';
+import {
+  HotelBooking,
+  HotelBookingSchema,
+} from '../hotel-bookings/schemas/hotel-booking.schema';
 import { HotelsController } from './hotels.controller';
 import { HotelsService } from './hotels.service';
 
@@ -27,6 +31,7 @@ import { HotelsService } from './hotels.service';
       { name: City.name, schema: CitySchema },
       { name: Country.name, schema: CountrySchema },
       { name: ModeratorAssignment.name, schema: ModeratorAssignmentSchema },
+      { name: HotelBooking.name, schema: HotelBookingSchema },
     ]),
   ],
   controllers: [HotelsController],

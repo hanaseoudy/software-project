@@ -13,6 +13,8 @@ describe('HotelsController', () => {
     setCancellationTiers: jest.fn(),
     createRoom: jest.fn(),
     addRoomBookableRange: jest.fn(),
+    updateRoom: jest.fn(),
+    removeRoomBookableRange: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -101,6 +103,32 @@ describe('HotelsController', () => {
       'h1',
       'r1',
       body,
+      user,
+    );
+  });
+
+  it('updateRoom passes the ids, body and the authenticated user', async () => {
+    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const body = { pricePerNight: 1750 };
+    service.updateRoom.mockResolvedValue({ id: 'r1' });
+
+    await controller.updateRoom('h1', 'r1', body, { user } as never);
+
+    expect(service.updateRoom).toHaveBeenCalledWith('h1', 'r1', body, user);
+  });
+
+  it('removeRoomBookableRange passes the ids and the authenticated user', async () => {
+    const user = { id: 'u1', role: UserRole.MODERATOR };
+    service.removeRoomBookableRange.mockResolvedValue({ id: 'a1' });
+
+    await controller.removeRoomBookableRange('h1', 'r1', 'a1', {
+      user,
+    } as never);
+
+    expect(service.removeRoomBookableRange).toHaveBeenCalledWith(
+      'h1',
+      'r1',
+      'a1',
       user,
     );
   });

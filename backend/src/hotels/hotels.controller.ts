@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Param,
   Patch,
   Post,
@@ -37,6 +38,7 @@ import {
 } from './dto/update-cancellation-tiers.dto';
 import { UpdateCheckTimesDto } from './dto/update-check-times.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
+import { UpdateRoomDto } from './dto/update-room.dto';
 import { HotelsService } from './hotels.service';
 
 @ApiTags('Hotels')
@@ -228,5 +230,69 @@ export class HotelsController {
   ): Promise<RoomAvailabilityResponseDto> {
     // RolesGuard guarantees req.user is set on this route.
     return this.hotelsService.addRoomBookableRange(id, roomId, dto, req.user!);
+  }
+
+  @Patch(':id/rooms/:roomId')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Edit a room: beds, occupancy or price (HTL-05)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Send at least one field. A new price applies to future bookings only; existing reservations keep the price they were made with.',
+  })
+  @ApiOkResponse({ description: 'Room updated', type: RoomResponseDto })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: { pricePerNight: ['Price per night must be more than 0'] },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel or room not found' })
+  updateRoom(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Body() dto: UpdateRoomDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.updateRoom(id, roomId, dto, req.user!);
+  }
+
+  @Delete(':id/rooms/:roomId/availability/:rangeId')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Remove a bookable date range from a room (HTL-05)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Not allowed while the room has a confirmed reservation inside the range.',
+  })
+  @ApiOkResponse({
+    description: 'The range that was removed',
+    type: RoomAvailabilityResponseDto,
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel, room or range not found' })
+  @ApiConflictResponse({
+    description: 'A confirmed reservation exists in the range',
+  })
+  removeRoomBookableRange(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Param('rangeId') rangeId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomAvailabilityResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.removeRoomBookableRange(
+      id,
+      roomId,
+      rangeId,
+      req.user!,
+    );
   }
 }

@@ -341,3 +341,24 @@ could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
 ================================================
+
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-05 (TASK-48)
+Prompt (summary of the conversation):
+I asked AI to continue with the next Hotels ticket, HTL-05: a hotel moderator edits a room's
+beds, occupancy and price; price changes must not affect existing reservations; availability
+cannot be removed for dates with confirmed reservations. The branch is stacked on HTL-04
+because the ticket depends on HTL-03 (rooms) and HTL-04 (bookable ranges).
+
+How the output was used:
+AI added PATCH /api/hotels/:id/rooms/:roomId (beds, maxOccupancy, pricePerNight, at least one)
+and DELETE /api/hotels/:id/rooms/:roomId/availability/:rangeId, both for the assigned
+moderator only. A booking already stores its own price per night, so a new room price only
+affects future bookings. Removing a range returns 409 when a CONFIRMED hotel booking for that
+room overlaps it. I reviewed the code and tests and tested it in Postman.
+Verification performed:
+Lint, build and all unit tests passed under Node 24 (140 tests). Postman checks done locally
+with the temporary fake-login test kit (not committed).
+================================================

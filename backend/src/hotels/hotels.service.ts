@@ -14,6 +14,10 @@ import {
   ModeratorAssignment,
   ProviderType,
 } from '../users/schemas/moderatorassignment.schema';
+import {
+  HotelBooking,
+  HotelBookingStatus,
+} from '../hotel-bookings/schemas/hotel-booking.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { CreateRoomAvailabilityDto } from './dto/create-room-availability.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
@@ -26,6 +30,7 @@ import {
 } from './dto/update-cancellation-tiers.dto';
 import { UpdateCheckTimesDto } from './dto/update-check-times.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
+import { UpdateRoomDto } from './dto/update-room.dto';
 import { Hotel, HotelDocument } from './schemas/hotel.schema';
 import { Room, RoomDocument } from './schemas/room.schema';
 import {
@@ -45,6 +50,8 @@ export class HotelsService {
     @InjectModel(Country.name) private readonly countryModel: Model<Country>,
     @InjectModel(ModeratorAssignment.name)
     private readonly assignmentModel: Model<ModeratorAssignment>,
+    @InjectModel(HotelBooking.name)
+    private readonly bookingModel: Model<HotelBooking>,
   ) {}
 
   /** HTL-01: an admin creates a hotel profile. */
@@ -272,6 +279,85 @@ export class HotelsService {
       startDate: start,
       endDate: end,
     });
+    return this.toAvailabilityResponse(range);
+  }
+
+  /** HTL-05: change a room's beds, occupancy or price. Existing bookings keep the price they were made with. */
+  async updateRoom(
+    hotelId: string,
+    roomId: string,
+    dto: UpdateRoomDto,
+    user: RequestUser,
+  ): Promise<RoomResponseDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+    const room = await this.findRoomOrFail(hotel, roomId);
+
+    if (
+      dto.beds === undefined &&
+      dto.maxOccupancy === undefined &&
+      dto.pricePerNight === undefined
+    ) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: {
+          body: ['Send at least one of beds, maxOccupancy or pricePerNight'],
+        },
+      });
+    }
+
+    if (dto.beds !== undefined) room.beds = dto.beds;
+    if (dto.maxOccupancy !== undefined) room.maxOccupancy = dto.maxOccupancy;
+    if (dto.pricePerNight !== undefined) room.pricePerNight = dto.pricePerNight;
+    await room.save();
+    return this.toRoomResponse(room);
+  }
+
+  /**
+   * HTL-05: remove a bookable range. Not allowed while a confirmed booking
+   * for this room falls inside the range.
+   */
+  async removeRoomBookableRange(
+    hotelId: string,
+    roomId: string,
+    rangeId: string,
+    user: RequestUser,
+  ): Promise<RoomAvailabilityResponseDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+    const room = await this.findRoomOrFail(hotel, roomId);
+
+    if (!isValidObjectId(rangeId)) {
+      throw new NotFoundException('Bookable range not found');
+    }
+    const range = await this.availabilityModel
+      .findOne({
+        _id: rangeId,
+        room: room._id,
+        type: AvailabilityType.AVAILABLE,
+      })
+      .exec();
+    if (!range) {
+      throw new NotFoundException('Bookable range not found');
+    }
+
+    // The range includes its last day; a booking stays until its check-out day (not included).
+    const lastNight = new Date(range.endDate.getTime() + 24 * 60 * 60 * 1000);
+    const confirmed = await this.bookingModel
+      .exists({
+        status: HotelBookingStatus.CONFIRMED,
+        'rooms.room': room._id,
+        checkIn: { $lt: lastNight },
+        checkOut: { $gt: range.startDate },
+      })
+      .exec();
+    if (confirmed) {
+      throw new ConflictException(
+        'This range cannot be removed because the room has a confirmed reservation in these dates',
+      );
+    }
+
+    await range.deleteOne();
     return this.toAvailabilityResponse(range);
   }
 
