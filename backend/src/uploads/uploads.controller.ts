@@ -1,5 +1,6 @@
 import { Controller, Get, Param, ParseEnumPipe, Res } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { ImageCategory } from './uploads.constants';
 import { UploadsService } from './uploads.service';
 
@@ -14,7 +15,7 @@ export class UploadsController {
   async serve(
     @Param('category', new ParseEnumPipe(ImageCategory)) category: ImageCategory,
     @Param('filename') filename: string,
-    @Res() res: any,
+    @Res() res: Response,
   ) {
     const filePath = await this.uploadsService.getFilePath(category, filename);
     res.setHeader('X-Content-Type-Options', 'nosniff');

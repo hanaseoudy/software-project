@@ -10,7 +10,7 @@ import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
-import { UploadsModule } from './uploads/uploads.module'; 
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -49,7 +49,6 @@ HotelsModule,
 UsersModule,
 AuthModule,
 UploadsModule,
-
 ],
 
 

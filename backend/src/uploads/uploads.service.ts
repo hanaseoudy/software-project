@@ -21,6 +21,11 @@ const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const FILENAME_PATTERN = new RegExp(`^${UUID}\\.(jpg|png)$`);
 const URL_PATTERN = new RegExp(`^/api/uploads/(post|activity|hotel|airline)/(${UUID}\\.(jpg|png))$`);
 
+// Largest image (in pixels) we are willing to decode. A small, highly compressed PNG can
+// declare huge dimensions; decoding it fully would allocate gigabytes of memory.
+// 25 million pixels is about 5000 x 5000, larger than any normal photo.
+export const MAX_IMAGE_PIXELS = 25_000_000;
+
 @Injectable()
 export class UploadsService {
   private readonly root = process.env.UPLOADS_DIR ?? path.join(process.cwd(), 'uploads');
@@ -40,15 +45,27 @@ export class UploadsService {
   private async validateImage(file: UploadedImage): Promise<'png' | 'jpg'> {
     const sig = this.detectType(file.buffer);
     if (!sig) throw new BadRequestException(`"${file.originalname}" must be a JPG or PNG image`);
+    const corrupted = new BadRequestException(`"${file.originalname}" is corrupted or not a valid JPG/PNG image`);
+
+    // 1. Read only the header (cheap) and check format and dimensions before decoding anything.
+    let meta: sharp.Metadata;
     try {
-      const image = sharp(file.buffer, { failOn: 'warning' });
-      const meta = await image.metadata();
-      if (meta.format !== (sig === 'png' ? 'png' : 'jpeg') || !meta.width || !meta.height) {
-        throw new Error('format mismatch');
-      }
-      await image.clone().raw().toBuffer();
+      meta = await sharp(file.buffer).metadata();
     } catch {
-      throw new BadRequestException(`"${file.originalname}" is corrupted or not a valid JPG/PNG image`);
+      throw corrupted;
+    }
+    if (meta.format !== (sig === 'png' ? 'png' : 'jpeg') || !meta.width || !meta.height) throw corrupted;
+    if (meta.width * meta.height > MAX_IMAGE_PIXELS) {
+      throw new BadRequestException(
+        `"${file.originalname}" is ${meta.width}x${meta.height} pixels; images can be at most 25 megapixels`,
+      );
+    }
+
+    // 2. Decode the whole image to catch truncated or damaged data. limitInputPixels is a second guard.
+    try {
+      await sharp(file.buffer, { failOn: 'warning', limitInputPixels: MAX_IMAGE_PIXELS }).raw().toBuffer();
+    } catch {
+      throw corrupted;
     }
     return sig;
   }
@@ -89,7 +106,28 @@ export class UploadsService {
     return urls;
   }
 
-  /** Feature modules call this, passing the owner's current image URLs, to enforce the limit across uploads. */
+  /**
+   * Feature modules call this, passing the owner's current image URLs, to enforce the limit across uploads.
+   *
+   * existingUrls: the record's current image URLs as plain strings. Hotels and activities store
+   * string[] already; airlines pass [logoUrl] (or []); posts store { _id, url } objects, so pass
+   * post.images.map((image) => image.url).
+   *
+   * This check alone is NOT safe against two uploads to the same record at the same time.
+   * The caller must save the returned URLs with an atomic update that re-checks the count,
+   * and delete the files if that update matches nothing, for example:
+   *
+   *   const urls = await uploads.saveForOwner(files, ImageCategory.HOTEL, hotel.images);
+   *   const max = MAX_IMAGES[ImageCategory.HOTEL];
+   *   const res = await hotelModel.updateOne(
+   *     { _id: hotel._id, [`images.${max - urls.length}`]: { $exists: false } },
+   *     { $push: { images: { $each: urls } } },
+   *   );
+   *   if (res.modifiedCount === 0) {
+   *     await Promise.all(urls.map((url) => uploads.deleteByUrl(url)));
+   *     throw new BadRequestException(`A hotel can have at most ${max} images`);
+   *   }
+   */
   async saveForOwner(
     files: UploadedImage[] | undefined,
     category: ImageCategory,
