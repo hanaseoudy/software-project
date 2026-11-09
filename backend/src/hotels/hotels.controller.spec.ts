@@ -55,7 +55,7 @@ describe('HotelsController', () => {
   });
 
   it('updateCheckTimes passes the id, body and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     const body = { checkInTime: '15:00', checkOutTime: '11:00' };
     service.updateCheckTimes.mockResolvedValue({ id: 'h1' });
 

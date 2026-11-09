@@ -83,7 +83,7 @@ export class HotelsService {
   async updateCheckTimes(
     id: string,
     dto: UpdateCheckTimesDto,
-    user: RequestUser,
+    user: AuthPayload,
   ): Promise<HotelResponseDto> {
     const hotel = await this.findHotelOrFail(id);
     await this.assertModeratorOwnsHotel(user, hotel);
