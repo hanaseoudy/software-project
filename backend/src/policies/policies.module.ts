@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule } from '@nestjs/config';
 import { Flight, FlightSchema } from '../flights/schemas/flight.schema';
 import { Airline, AirlineSchema } from '../flights/schemas/airline.schema';
 import {
@@ -24,6 +26,8 @@ import { PoliciesService } from './policies.service';
       { name: Airline.name, schema: AirlineSchema },
       { name: Hotel.name, schema: HotelSchema },
     ]),
+    JwtModule.register({}),
+    ConfigModule,
   ],
   controllers: [PoliciesController],
   providers: [PoliciesService],
