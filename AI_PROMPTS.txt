@@ -290,6 +290,23 @@ Lint, build and all unit tests passed under Node 24. Postman and Swagger checks 
 the student after pulling the branch (results are added to the pull request).
 ================================================
 Date: 2026-11-08
+Student: Kenzy ellkany
+Tool: Claude
+Related Requirement: GEN-08
+
+Prompt:
+Review my GEN-08 upload code and help me address the reviewer's comments: make the upload
+service reusable without authentication, validate the real image structure, and enforce the
+5-images-per-record and 1-logo-per-airline limits across multiple uploads.
+
+How the output was used:
+Removed the standalone upload routes and the auth dependency, keeping only the public serve
+route. Fixed the served URL to include the /api prefix. Added sharp decoding in UploadsService
+so corrupted or truncated images are rejected, and added file cleanup if a write fails. Added
+saveForOwner() and isStoredUrl() on top of assertWithinLimit() and deleteByUrl(), plus shared
+Multer options (image-upload.options.ts), so the post, activity, hotel and airline owners can
+enforce the per-record limits.
+
 Student: Nour Hossam
 Tool: Claude
 Related Requirement: ACC-19 (TASK-109), ACC-04
@@ -311,8 +328,6 @@ Verification:
 Tested in Postman: /me without cookies (401), login sets both cookies with
 HttpOnly and Secure (200), /me after login (200), /me with a fake token (401).
 Lint, build, unit tests and E2E tests passed locally.
-================================================
-================================================
 Date: 2026-11-08
 Student: Hana Seoudy
 Tool: Codex
@@ -383,3 +398,20 @@ Invalid or half-given dates return 400 with field errors. I reviewed the code an
 tested it in Postman.
 Verification performed:
 Lint, build and all unit tests passed under Node 24 (165 tests). Postman checks done locally.
+Date: 2026-11-09
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-01 (TASK-44) review fixes
+Prompt (summary of the conversation):
+The team leader reviewed the HTL-01 pull request and found three critical problems: the hotel
+routes did not use JwtAuthGuard and read user.id instead of user.sub; sending null for a
+required field caused a 500; and hotel photos accepted outside links instead of GEN-08 uploads.
+I asked AI to look at the review comment and fix all three.
+
+How the output was used:
+AI added JwtAuthGuard (via AuthModule) in front of RolesGuard, switched the ownership check to
+user.sub, rewrote UpdateHotelDto so a sent null fails validation with a 400, and made create and
+update accept only photos stored by UploadsService (isStoredUrl for the hotel category). I
+reviewed the changes and the new tests.
+Verification performed:
+Lint, build and all unit tests passed under Node 24 (53 tests in the HTL-01 branch).

@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
 import { HotelsController } from './hotels.controller';
@@ -13,7 +14,6 @@ describe('HotelsController', () => {
     setCancellationTiers: jest.fn(),
     createRoom: jest.fn(),
     addRoomBookableRange: jest.fn(),
-    getDetails: jest.fn(),
     updateRoom: jest.fn(),
     removeRoomBookableRange: jest.fn(),
   };
@@ -24,6 +24,8 @@ describe('HotelsController', () => {
       controllers: [HotelsController],
       providers: [{ provide: HotelsService, useValue: service }],
     })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
       .compile();
@@ -45,7 +47,7 @@ describe('HotelsController', () => {
   });
 
   it('update passes the id, body and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     service.update.mockResolvedValue({ id: 'h1' });
 
     await controller.update('h1', { name: 'New name' }, { user } as never);
@@ -58,7 +60,7 @@ describe('HotelsController', () => {
   });
 
   it('updateCheckTimes passes the id, body and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     const body = { checkInTime: '15:00', checkOutTime: '11:00' };
     service.updateCheckTimes.mockResolvedValue({ id: 'h1' });
 
@@ -68,7 +70,7 @@ describe('HotelsController', () => {
   });
 
   it('setCancellationTiers passes the id, body and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     const body = { tiers: [{ daysBeforeCheckIn: 7, refundPercentage: 50 }] };
     service.setCancellationTiers.mockResolvedValue({ id: 'h1' });
 
@@ -78,7 +80,7 @@ describe('HotelsController', () => {
   });
 
   it('createRoom passes the hotel id, body and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     const body = {
       roomNumber: 'A101',
       type: 'Double',
@@ -94,7 +96,7 @@ describe('HotelsController', () => {
   });
 
   it('addRoomBookableRange passes the ids, body and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     const body = { startDate: '2026-12-01', endDate: '2026-12-31' };
     service.addRoomBookableRange.mockResolvedValue({ id: 'a1' });
 
@@ -109,7 +111,7 @@ describe('HotelsController', () => {
   });
 
   it('updateRoom passes the ids, body and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     const body = { pricePerNight: 1750 };
     service.updateRoom.mockResolvedValue({ id: 'r1' });
 
@@ -119,7 +121,7 @@ describe('HotelsController', () => {
   });
 
   it('removeRoomBookableRange passes the ids and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     service.removeRoomBookableRange.mockResolvedValue({ id: 'a1' });
 
     await controller.removeRoomBookableRange('h1', 'r1', 'a1', {
@@ -132,14 +134,5 @@ describe('HotelsController', () => {
       'a1',
       user,
     );
-  });
-
-  it('getDetails passes the id and the stay dates', async () => {
-    const query = { checkIn: '2026-12-10', checkOut: '2026-12-13' };
-    service.getDetails.mockResolvedValue({ id: 'h1' });
-
-    await controller.getDetails('h1', query);
-
-    expect(service.getDetails).toHaveBeenCalledWith('h1', query);
   });
 });

@@ -21,6 +21,9 @@ import {
 } from '../hotel-bookings/schemas/hotel-booking.schema';
 import { Review, ReviewSchema } from '../hotel-bookings/schemas/review.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { AuthModule } from '../auth/auth.module';
+import { UploadsModule } from '../uploads/uploads.module';
+import { HotelDetailsController } from './hotel-details.controller';
 import { HotelsController } from './hotels.controller';
 import { HotelsService } from './hotels.service';
 
@@ -37,8 +40,10 @@ import { HotelsService } from './hotels.service';
       { name: Review.name, schema: ReviewSchema },
       { name: User.name, schema: UserSchema },
     ]),
+    AuthModule, // JwtAuthGuard
+    UploadsModule, // UploadsService.isStoredUrl for hotel photos (GEN-08)
   ],
-  controllers: [HotelsController],
+  controllers: [HotelsController, HotelDetailsController],
   providers: [HotelsService],
   exports: [MongooseModule, HotelsService],
 })
