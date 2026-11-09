@@ -10,10 +10,10 @@ export enum PostStatus {
 
 @Schema({ timestamps: true })
 export class Post {
-  @Prop({ required: true, trim: true, maxlength: 200 })
+  @Prop({ required: true, trim: true, minlength: 1, maxlength: 200 })
   title: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, trim: true, minlength: 1 })
   content: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
@@ -22,7 +22,23 @@ export class Post {
   @Prop({ enum: PostStatus, default: PostStatus.DRAFT, index: true })
   status: PostStatus;
 
-  @Prop({ type: [String], default: [], index: true })
+  // BLG-08: database-level limits (max 5 tags, 1-30 characters each)
+  @Prop({
+    type: [String],
+    default: [],
+    index: true,
+    validate: [
+      {
+        validator: (v: string[]) => v.length <= 5,
+        message: 'A post can have at most 5 tags',
+      },
+      {
+        validator: (v: string[]) =>
+          v.every((t) => typeof t === 'string' && t.length >= 1 && t.length <= 30),
+        message: 'Each tag must be 1 to 30 characters',
+      },
+    ],
+  })
   tags: string[];
 
   @Prop({ type: [{ url: { type: String, required: true } }], default: [] })
