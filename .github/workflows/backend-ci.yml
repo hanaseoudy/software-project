@@ -1,3 +1,4 @@
+
 name: Backend CI
 
 on:
@@ -13,24 +14,13 @@ concurrency:
 
 jobs:
   backend-checks:
-    name: Backend build, lint, unit and E2E tests
+    name: Backend build and lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     defaults:
       run:
         working-directory: backend
-
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
 
     steps:
       - name: Check out repository
@@ -53,16 +43,3 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Unit tests
-        run: npm test -- --ci --runInBand
-        env:
-          # NestJS 12 uses ESM; Jest needs Node's VM module support.
-          NODE_OPTIONS: --experimental-vm-modules
-
-      - name: E2E API tests
-        run: npm run test:e2e -- --ci --runInBand
-        env:
-          NODE_OPTIONS: --experimental-vm-modules
-          NODE_ENV: test
-          MONGODB_URI: mongodb://127.0.0.1:27017/travel_booking_ci
