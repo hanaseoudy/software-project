@@ -12,6 +12,7 @@ import {
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
+  ApiCookieAuth,
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
@@ -20,6 +21,7 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { ACCESS_COOKIE } from '../auth/auth.cookies';
 import { Roles } from '../common/decorators/roles.decorator';
 import {
   type AuthenticatedRequest,
@@ -43,6 +45,7 @@ import { UpdateRoomDto } from './dto/update-room.dto';
 import { HotelsService } from './hotels.service';
 
 @ApiTags('Hotels')
+@ApiCookieAuth(ACCESS_COOKIE) // shows the padlock in Swagger like the other protected routes
 @Controller('hotels')
 // JwtAuthGuard reads the login cookie and sets request.user ({ sub, role }); RolesGuard then checks the role.
 @UseGuards(JwtAuthGuard, RolesGuard)
