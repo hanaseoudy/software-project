@@ -8,7 +8,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUrl,
   Max,
   MaxLength,
   Min,
@@ -74,12 +73,13 @@ export class CreateHotelDto {
   @ApiPropertyOptional({
     type: [String],
     maxItems: 5,
-    description: 'Photo URLs (maximum 5). File upload is handled by GEN-08.',
-    example: ['https://example.com/hotel-1.jpg'],
+    description:
+      'Photo URLs (maximum 5). Only photos uploaded through the platform (GEN-08, /api/uploads/hotel/...) are accepted; outside links are rejected.',
+    example: ['/api/uploads/hotel/0b8e6f1c-3b52-4c8e-9a41-5f6a9c1d2e33.jpg'],
   })
   @IsOptional()
   @IsArray({ message: 'Images must be a list' })
   @ArrayMaxSize(5, { message: 'A hotel can have at most 5 images' })
-  @IsUrl({}, { each: true, message: 'Each image must be a valid URL' })
+  @IsString({ each: true, message: 'Each image must be text' })
   images?: string[];
 }
