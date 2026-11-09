@@ -231,7 +231,7 @@ export class HotelsService {
     hotelId: string,
     roomId: string,
     dto: CreateRoomAvailabilityDto,
-    user: RequestUser,
+    user: AuthPayload,
   ): Promise<RoomAvailabilityResponseDto> {
     const hotel = await this.findHotelOrFail(hotelId);
     await this.assertModeratorOwnsHotel(user, hotel);

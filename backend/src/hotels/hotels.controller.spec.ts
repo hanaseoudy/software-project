@@ -94,7 +94,7 @@ describe('HotelsController', () => {
   });
 
   it('addRoomBookableRange passes the ids, body and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     const body = { startDate: '2026-12-01', endDate: '2026-12-31' };
     service.addRoomBookableRange.mockResolvedValue({ id: 'a1' });
 
