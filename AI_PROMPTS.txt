@@ -165,6 +165,23 @@ build, unit tests and E2E tests passed locally.
 
 ================================================
 Date: 2026-11-08
+Student: Kenzy ellkany
+Tool: Claude
+Related Requirement: GEN-08
+
+Prompt:
+Review my GEN-08 upload code and help me address the reviewer's comments: make the upload
+service reusable without authentication, validate the real image structure, and enforce the
+5-images-per-record and 1-logo-per-airline limits across multiple uploads.
+
+How the output was used:
+Removed the standalone upload routes and the auth dependency, keeping only the public serve
+route. Fixed the served URL to include the /api prefix. Added sharp decoding in UploadsService
+so corrupted or truncated images are rejected, and added file cleanup if a write fails. Added
+saveForOwner() and isStoredUrl() on top of assertWithinLimit() and deleteByUrl(), plus shared
+Multer options (image-upload.options.ts), so the post, activity, hotel and airline owners can
+enforce the per-record limits.
+
 Student: Nour Hossam
 Tool: Claude
 Related Requirement: ACC-19 (TASK-109), ACC-04
@@ -186,8 +203,6 @@ Verification:
 Tested in Postman: /me without cookies (401), login sets both cookies with
 HttpOnly and Secure (200), /me after login (200), /me with a fake token (401).
 Lint, build, unit tests and E2E tests passed locally.
-================================================
-================================================
 Date: 2026-11-08
 Student: Hana Seoudy
 Tool: Codex
@@ -215,4 +230,3 @@ from the existing develop lockfile are not installed locally. E2E tests
 could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
-================================================
