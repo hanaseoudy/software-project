@@ -1,0 +1,52 @@
+import { Test } from '@nestjs/testing';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { UserRole } from '../users/schemas/user.schema';
+import { HotelsController } from './hotels.controller';
+import { HotelsService } from './hotels.service';
+
+describe('HotelsController', () => {
+  let controller: HotelsController;
+  const service = { create: jest.fn(), update: jest.fn() };
+
+  beforeEach(async () => {
+    jest.resetAllMocks();
+    const moduleRef = await Test.createTestingModule({
+      controllers: [HotelsController],
+      providers: [{ provide: HotelsService, useValue: service }],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+    controller = moduleRef.get(HotelsController);
+  });
+
+  it('create delegates to the service', async () => {
+    const dto = {
+      name: 'Nile Palace',
+      address: '1 Corniche',
+      city: 'c',
+      country: 'k',
+      starRating: 5,
+    };
+    service.create.mockResolvedValue({ id: 'h1' });
+
+    await expect(controller.create(dto)).resolves.toEqual({ id: 'h1' });
+    expect(service.create).toHaveBeenCalledWith(dto);
+  });
+
+  it('update passes the id, body and the authenticated user', async () => {
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
+    service.update.mockResolvedValue({ id: 'h1' });
+
+    await controller.update('h1', { name: 'New name' }, { user } as never);
+
+    expect(service.update).toHaveBeenCalledWith(
+      'h1',
+      { name: 'New name' },
+      user,
+    );
+  });
+});
