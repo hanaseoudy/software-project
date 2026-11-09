@@ -11,6 +11,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { ItinerariesModule } from './itineraries/itineraries.module';
 
 @Module({
   imports: [
@@ -45,10 +46,11 @@ AirportsModule,
 PaymentsModule,
 BlogModule,
 HotelBookingsModule,
-HotelsModule,
+HotelsModule,//
 UsersModule,
 AuthModule,
 UploadsModule,
+ItinerariesModule,
 ],
 
 
