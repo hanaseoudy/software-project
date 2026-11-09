@@ -77,7 +77,7 @@ describe('HotelsController', () => {
   });
 
   it('createRoom passes the hotel id, body and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     const body = {
       roomNumber: 'A101',
       type: 'Double',
