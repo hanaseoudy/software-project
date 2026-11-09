@@ -66,7 +66,7 @@ describe('HotelsController', () => {
   });
 
   it('setCancellationTiers passes the id, body and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     const body = { tiers: [{ daysBeforeCheckIn: 7, refundPercentage: 50 }] };
     service.setCancellationTiers.mockResolvedValue({ id: 'h1' });
 

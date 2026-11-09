@@ -103,7 +103,7 @@ export class HotelsService {
   async setCancellationTiers(
     id: string,
     dto: UpdateCancellationTiersDto,
-    user: RequestUser,
+    user: AuthPayload,
   ): Promise<CancellationTiersResponseDto> {
     const hotel = await this.findHotelOrFail(id);
     await this.assertModeratorOwnsHotel(user, hotel);
