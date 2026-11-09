@@ -1,5 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
+import {
+  HydratedDocument,
+  Types,
+  Schema as MongooseSchema,
+} from 'mongoose';
+
 
 export type PostDocument = HydratedDocument<Post>;
 
@@ -16,12 +21,7 @@ export class Post {
   @Prop({ required: true, trim: true, minlength: 1 })
   content: string;
 
-  @Prop({
-    type: MongooseSchema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-    index: true,
-  })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   author: Types.ObjectId;
 
   @Prop({ enum: PostStatus, default: PostStatus.DRAFT, index: true })
@@ -39,23 +39,14 @@ export class Post {
       },
       {
         validator: (v: string[]) =>
-          v.every(
-            (t) => typeof t === 'string' && t.length >= 1 && t.length <= 30,
-          ),
+          v.every((t) => typeof t === 'string' && t.length >= 1 && t.length <= 30),
         message: 'Each tag must be 1 to 30 characters',
       },
     ],
   })
   tags: string[];
 
-  @Prop({
-    type: [{ url: { type: String, required: true } }],
-    default: [],
-    validate: {
-      validator: (images: { url: string }[]) => images.length <= 5,
-      message: 'A post can have at most 5 images',
-    },
-  })
+  @Prop({ type: [{ url: { type: String, required: true } }], default: [] })
   images: { _id?: Types.ObjectId; url: string }[];
 
   @Prop({ default: false })
@@ -67,11 +58,7 @@ export class Post {
   @Prop({ default: 0 })
   commentsCount: number;
 
-  @Prop({
-    type: MongooseSchema.Types.ObjectId,
-    ref: 'Itinerary',
-    default: null,
-  })
+  @Prop({ type: Types.ObjectId, ref: 'Itinerary', default: null })
   itinerary?: Types.ObjectId | null;
 }
 

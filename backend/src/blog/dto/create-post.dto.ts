@@ -32,16 +32,8 @@ export class CreatePostDto {
     example: ['rome', 'food'],
   })
   @IsOptional()
-  @Transform(({ value }) => {
-    // Multipart clients send tags as a JSON array in a text field.
-    if (typeof value === 'string') {
-      try {
-        value = JSON.parse(value);
-      } catch {
-        return value; // IsArray reports malformed input.
-      }
-    }
-    return Array.isArray(value)
+  @Transform(({ value }) =>
+    Array.isArray(value)
       ? [
           ...new Set(
             value
@@ -49,8 +41,8 @@ export class CreatePostDto {
               .filter((t) => t !== ''),
           ),
         ]
-      : value;
-  })
+      : value,
+  )
   @IsArray()
   @ArrayMaxSize(5)
   @IsString({ each: true })
