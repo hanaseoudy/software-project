@@ -15,6 +15,8 @@ import {
   ModeratorAssignment,
   ModeratorAssignmentSchema,
 } from '../users/schemas/moderatorassignment.schema';
+import { AuthModule } from '../auth/auth.module';
+import { UploadsModule } from '../uploads/uploads.module';
 import { HotelsController } from './hotels.controller';
 import { HotelsService } from './hotels.service';
 
@@ -28,6 +30,8 @@ import { HotelsService } from './hotels.service';
       { name: Country.name, schema: CountrySchema },
       { name: ModeratorAssignment.name, schema: ModeratorAssignmentSchema },
     ]),
+    AuthModule, // JwtAuthGuard
+    UploadsModule, // UploadsService.isStoredUrl for hotel photos (GEN-08)
   ],
   controllers: [HotelsController],
   providers: [HotelsService],

@@ -11,6 +11,7 @@ import { City } from '../reference-data/schemas/city.schema';
 import { Country } from '../reference-data/schemas/country.schema';
 import { ModeratorAssignment } from '../users/schemas/moderatorassignment.schema';
 import { UserRole } from '../users/schemas/user.schema';
+import { UploadsService } from '../uploads/uploads.service';
 import { HotelsService } from './hotels.service';
 import { Hotel } from './schemas/hotel.schema';
 import { Room } from './schemas/room.schema';
@@ -48,9 +49,11 @@ describe('HotelsService', () => {
   const cityModel = { exists: jest.fn() };
   const countryModel = { exists: jest.fn() };
   const assignmentModel = { exists: jest.fn() };
+  // GEN-08: only /api/uploads/hotel/<uuid>.jpg|png links count as uploaded photos
+  const uploads = { isStoredUrl: jest.fn() };
 
   const moderator = {
-    id: new Types.ObjectId().toString(),
+    sub: new Types.ObjectId().toString(),
     role: UserRole.MODERATOR,
   };
   const createDto = {
@@ -63,6 +66,9 @@ describe('HotelsService', () => {
 
   beforeEach(async () => {
     jest.resetAllMocks();
+    uploads.isStoredUrl.mockImplementation((_category: string, url: string) =>
+      url.startsWith('/api/uploads/hotel/'),
+    );
     const moduleRef = await Test.createTestingModule({
       providers: [
         HotelsService,
@@ -74,6 +80,7 @@ describe('HotelsService', () => {
           provide: getModelToken(ModeratorAssignment.name),
           useValue: assignmentModel,
         },
+        { provide: UploadsService, useValue: uploads },
       ],
     }).compile();
     service = moduleRef.get(HotelsService);
@@ -102,6 +109,34 @@ describe('HotelsService', () => {
         response: { errors: { city: ['City does not exist'] } },
       });
       expect(hotelModel.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects photos that are outside links', async () => {
+      cityModel.exists.mockResolvedValue({ _id: 'c' });
+      countryModel.exists.mockResolvedValue({ _id: 'k' });
+
+      const error = await service
+        .create({ ...createDto, images: ['https://example.com/a.jpg'] })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(
+        (error as BadRequestException).getResponse() as object,
+      ).toMatchObject({ errors: { images: expect.any(Array) } });
+      expect(hotelModel.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts photos uploaded through the platform', async () => {
+      cityModel.exists.mockResolvedValue({ _id: 'c' });
+      countryModel.exists.mockResolvedValue({ _id: 'k' });
+      hotelModel.create.mockResolvedValue(makeHotelDoc());
+
+      await service.create({
+        ...createDto,
+        images: ['/api/uploads/hotel/0b8e6f1c-3b52-4c8e-9a41-5f6a9c1d2e33.jpg'],
+      });
+
+      expect(hotelModel.create).toHaveBeenCalled();
     });
 
     it('rejects an unknown country', async () => {
@@ -158,7 +193,7 @@ describe('HotelsService', () => {
 
       const filter = assignmentModel.exists.mock.calls[0][0];
       expect(filter.moderatorId).toBeInstanceOf(Types.ObjectId);
-      expect(filter.moderatorId.toString()).toBe(moderator.id);
+      expect(filter.moderatorId.toString()).toBe(moderator.sub);
     });
 
     it('returns 403 when the user id is not a valid ObjectId', async () => {
@@ -168,9 +203,22 @@ describe('HotelsService', () => {
         service.update(
           new Types.ObjectId().toString(),
           { name: 'New name' },
-          { id: 'not-an-id', role: UserRole.MODERATOR },
+          { sub: 'not-an-id', role: UserRole.MODERATOR },
         ),
       ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('rejects photos that are outside links when updating', async () => {
+      hotelModel.findById.mockReturnValue(execResult(makeHotelDoc()));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+
+      await expect(
+        service.update(
+          new Types.ObjectId().toString(),
+          { images: ['https://example.com/a.jpg'] },
+          moderator,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('rejects an empty update', async () => {
