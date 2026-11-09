@@ -216,3 +216,47 @@ could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
 ================================================
+
+Date: 2026-11-09
+Student: Hana Seoudy
+Tool: Codex
+Related Requirements: BLG-01, BLG-10, GEN-08, GEN-13
+
+Prompt:
+Fix the BLG-01 problems in my current branch. When asked whether to
+include optional post images, I approved: "Also implement image support".
+
+How the output was used:
+Fixed the blog JWT guard import and imported AuthModule to resolve its
+dependencies. Restored MongooseSchema.Types.ObjectId for post author and
+itinerary references. Preserved JSON creation and added multipart image
+uploads at creation, author-only attachment/removal, and image URL serving.
+Applied the GEN-08 post limits: JPG/PNG content signatures, 5 MB per image,
+and 5 images per post, including concurrent appends. Added safe generated
+filenames, cleanup on failed writes, and author-only draft/hidden image reads.
+Updated Swagger documentation, regression tests, and the upload ignore rule.
+Image support here is for blog posts; other GEN-08 resource types are outside
+this change. The existing response still exposes an array of image URLs.
+
+Storage and API:
+POST /api/posts accepts JSON or multipart (images files, tags as JSON text).
+POST /api/posts/:id/images attaches files; DELETE /api/posts/:id/images/:filename
+removes a file using the filename from its returned URL.
+Files use BLOG_UPLOAD_DIR or uploads/posts relative to the backend process.
+Deployments must persist this directory and share it if running multiple instances.
+
+Verification:
+Installed existing locked dependencies without changing package versions.
+Build, lint, and TypeScript checks passed. All 37 unit tests and 18 E2E tests
+passed, including exact 5 MB/five-file boundaries, ownership, draft privacy,
+real JWT verification, ObjectId queries, and concurrent image uploads.
+E2E ran against a disposable local MongoDB container, never shared Atlas.
+To reproduce, set NODE_OPTIONS=--experimental-vm-modules and
+BLOG_TEST_MONGODB_URI to a disposable local MongoDB base URI (no database
+path), e.g. mongodb://127.0.0.1:27028. For the existing app smoke test, also
+set MONGODB_URI to a test database on that server. Run npm test -- --runInBand
+and npm run test:e2e -- --runInBand from backend. The blog suite generates
+and drops its own test database and removes its temporary upload directory.
+npm ci reported 26 existing dependency vulnerabilities (2 high); dependency
+upgrades were outside this fix. No commit, push, or merge was performed.
+================================================
