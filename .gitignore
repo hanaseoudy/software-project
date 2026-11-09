@@ -70,7 +70,6 @@ desktop.ini
 # ============================
 # Runtime data
 # ============================
-/backend/uploads/
 pids/
 *.pid
 *.seed

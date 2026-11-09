@@ -5,13 +5,9 @@ import { BlogService } from './blog.service';
 import { Post, PostSchema } from './schemas/post.schema';
 import { Comment, CommentSchema } from './schemas/comment.schema';
 import { Like, LikeSchema } from './schemas/like.schema';
-import { AuthModule } from '../auth/auth.module';
-import { PostImagesService } from './post-images.service';
-import { OptionalBlogAuthGuard } from './optional-blog-auth.guard';
 
 @Module({
   imports: [
-    AuthModule,
     MongooseModule.forFeature([
       { name: Post.name, schema: PostSchema },
       { name: Comment.name, schema: CommentSchema },
@@ -19,6 +15,6 @@ import { OptionalBlogAuthGuard } from './optional-blog-auth.guard';
     ]),
   ],
   controllers: [BlogController],
-  providers: [BlogService, PostImagesService, OptionalBlogAuthGuard],
+  providers: [BlogService],
 })
 export class BlogModule {}
