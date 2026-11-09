@@ -23,8 +23,9 @@ import {
 import { Roles } from '../common/decorators/roles.decorator';
 import {
   type AuthenticatedRequest,
-  RolesGuard,
-} from '../common/guards/roles.guard';
+  JwtAuthGuard,
+} from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { CreateRoomAvailabilityDto } from './dto/create-room-availability.dto';
@@ -43,7 +44,8 @@ import { HotelsService } from './hotels.service';
 
 @ApiTags('Hotels')
 @Controller('hotels')
-@UseGuards(RolesGuard)
+// JwtAuthGuard reads the login cookie and sets request.user ({ sub, role }); RolesGuard then checks the role.
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class HotelsController {
   constructor(private readonly hotelsService: HotelsService) {}
 

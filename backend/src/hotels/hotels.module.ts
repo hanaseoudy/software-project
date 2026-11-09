@@ -19,6 +19,8 @@ import {
   HotelBooking,
   HotelBookingSchema,
 } from '../hotel-bookings/schemas/hotel-booking.schema';
+import { AuthModule } from '../auth/auth.module';
+import { UploadsModule } from '../uploads/uploads.module';
 import { HotelsController } from './hotels.controller';
 import { HotelsService } from './hotels.service';
 
@@ -33,6 +35,8 @@ import { HotelsService } from './hotels.service';
       { name: ModeratorAssignment.name, schema: ModeratorAssignmentSchema },
       { name: HotelBooking.name, schema: HotelBookingSchema },
     ]),
+    AuthModule, // JwtAuthGuard
+    UploadsModule, // UploadsService.isStoredUrl for hotel photos (GEN-08)
   ],
   controllers: [HotelsController],
   providers: [HotelsService],
