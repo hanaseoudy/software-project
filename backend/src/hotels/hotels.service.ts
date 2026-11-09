@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model, Types } from 'mongoose';
-import type { RequestUser } from '../common/guards/roles.guard';
+import type { AuthPayload } from '../common/guards/jwt-auth.guard';
 import { City } from '../reference-data/schemas/city.schema';
 import { Country } from '../reference-data/schemas/country.schema';
 import {
@@ -26,6 +26,8 @@ import {
 } from './dto/update-cancellation-tiers.dto';
 import { UpdateCheckTimesDto } from './dto/update-check-times.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
+import { UploadsService } from '../uploads/uploads.service';
+import { ImageCategory } from '../uploads/uploads.constants';
 import { Hotel, HotelDocument } from './schemas/hotel.schema';
 import { Room, RoomDocument } from './schemas/room.schema';
 import {
@@ -45,11 +47,13 @@ export class HotelsService {
     @InjectModel(Country.name) private readonly countryModel: Model<Country>,
     @InjectModel(ModeratorAssignment.name)
     private readonly assignmentModel: Model<ModeratorAssignment>,
+    private readonly uploads: UploadsService,
   ) {}
 
   /** HTL-01: an admin creates a hotel profile. */
   async create(dto: CreateHotelDto): Promise<HotelResponseDto> {
     await this.assertCityAndCountryExist(dto.city, dto.country);
+    this.assertImagesAreUploads(dto.images);
 
     const hotel = await this.hotelModel.create({
       name: dto.name,
@@ -69,7 +73,7 @@ export class HotelsService {
   async update(
     id: string,
     dto: UpdateHotelDto,
-    user: RequestUser,
+    user: AuthPayload,
   ): Promise<HotelResponseDto> {
     const hotel = await this.findHotelOrFail(id);
     await this.assertModeratorOwnsHotel(user, hotel);
@@ -85,6 +89,7 @@ export class HotelsService {
     }
 
     await this.assertCityAndCountryExist(dto.city, dto.country);
+    this.assertImagesAreUploads(dto.images);
 
     hotel.set(changes);
     await hotel.save();
@@ -96,7 +101,7 @@ export class HotelsService {
   async updateCheckTimes(
     id: string,
     dto: UpdateCheckTimesDto,
-    user: RequestUser,
+    user: AuthPayload,
   ): Promise<HotelResponseDto> {
     const hotel = await this.findHotelOrFail(id);
     await this.assertModeratorOwnsHotel(user, hotel);
@@ -112,7 +117,7 @@ export class HotelsService {
   async setCancellationTiers(
     id: string,
     dto: UpdateCancellationTiersDto,
-    user: RequestUser,
+    user: AuthPayload,
   ): Promise<CancellationTiersResponseDto> {
     const hotel = await this.findHotelOrFail(id);
     await this.assertModeratorOwnsHotel(user, hotel);
@@ -187,7 +192,7 @@ export class HotelsService {
   async createRoom(
     hotelId: string,
     dto: CreateRoomDto,
-    user: RequestUser,
+    user: AuthPayload,
   ): Promise<RoomResponseDto> {
     const hotel = await this.findHotelOrFail(hotelId);
     await this.assertModeratorOwnsHotel(user, hotel);
@@ -344,13 +349,13 @@ export class HotelsService {
   }
 
   private async assertModeratorOwnsHotel(
-    user: RequestUser,
+    user: AuthPayload,
     hotel: HotelDocument,
   ): Promise<void> {
-    const assignment = isValidObjectId(user.id)
+    const assignment = isValidObjectId(user.sub)
       ? await this.assignmentModel
           .exists({
-            moderatorId: new Types.ObjectId(user.id),
+            moderatorId: new Types.ObjectId(user.sub),
             providerType: ProviderType.HOTEL,
             providerId: hotel._id,
           })
@@ -358,6 +363,23 @@ export class HotelsService {
       : null;
     if (!assignment) {
       throw new ForbiddenException('You can only manage your assigned hotel');
+    }
+  }
+
+  /** GEN-08: hotel photos must be files uploaded through the platform, not outside links. */
+  private assertImagesAreUploads(images?: string[]): void {
+    const outside = (images ?? []).filter(
+      (url) => !this.uploads.isStoredUrl(ImageCategory.HOTEL, url),
+    );
+    if (outside.length > 0) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: {
+          images: [
+            'Each image must be a photo uploaded to the platform (a /api/uploads/hotel/... link)',
+          ],
+        },
+      });
     }
   }
 
