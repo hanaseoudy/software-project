@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
 import { HotelsController } from './hotels.controller';
@@ -14,6 +15,8 @@ describe('HotelsController', () => {
       controllers: [HotelsController],
       providers: [{ provide: HotelsService, useValue: service }],
     })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
       .compile();
@@ -35,7 +38,7 @@ describe('HotelsController', () => {
   });
 
   it('update passes the id, body and the authenticated user', async () => {
-    const user = { id: 'u1', role: UserRole.MODERATOR };
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
     service.update.mockResolvedValue({ id: 'h1' });
 
     await controller.update('h1', { name: 'New name' }, { user } as never);

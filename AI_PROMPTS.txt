@@ -256,3 +256,21 @@ from the existing develop lockfile are not installed locally. E2E tests
 could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
+
+Date: 2026-11-09
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-01 (TASK-44) review fixes
+Prompt (summary of the conversation):
+The team leader reviewed the HTL-01 pull request and found three critical problems: the hotel
+routes did not use JwtAuthGuard and read user.id instead of user.sub; sending null for a
+required field caused a 500; and hotel photos accepted outside links instead of GEN-08 uploads.
+I asked AI to look at the review comment and fix all three.
+
+How the output was used:
+AI added JwtAuthGuard (via AuthModule) in front of RolesGuard, switched the ownership check to
+user.sub, rewrote UpdateHotelDto so a sent null fails validation with a 400, and made create and
+update accept only photos stored by UploadsService (isStoredUrl for the hotel category). I
+reviewed the changes and the new tests.
+Verification performed:
+Lint, build and all unit tests passed under Node 24 (53 tests in the HTL-01 branch).
