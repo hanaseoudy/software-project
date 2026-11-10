@@ -274,3 +274,32 @@ update accept only photos stored by UploadsService (isStoredUrl for the hotel ca
 reviewed the changes and the new tests.
 Verification performed:
 Lint, build and all unit tests passed under Node 24 (53 tests in the HTL-01 branch).
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-09 (post search ranked by interactions and recency; depends on BLG-01)
+
+Prompt:
+Implement BLG-09 end to end on a new branch from develop: a public
+GET /api/posts/search?q=&page= that searches published, visible posts by
+title, tags or author name, ranked by likes + comments then newest first,
+10 per page with a "No results" message, plus Swagger, a Postman collection,
+unit tests and a pull request. Do not modify other team members' code.
+
+How the output was used:
+Added PostSearchController, PostSearchService, post-search.helpers.ts
+(aggregation pipeline with a read-only $lookup on users, regex escaping,
+excerpt builder, pagination), SearchPostsQueryDto and PostSearchResponseDto
+in the blog module. Registered them in BlogModule (search controller first so
+/posts/search is matched before /posts/:id) and added a
+{ status, isHidden, createdAt } index to the post schema. Added
+post-search.helpers.spec.ts and postman/BLG-09.postman_collection.json.
+No frontend changes: the repository has no frontend yet.
+
+Verification:
+The new helper unit tests pass. Existing specs that import @nestjs/testing
+still fail to start (ESM import error in the existing Jest setup; config not
+changed). npm run build passes after npm ci. The endpoint was not run against
+a database.
+================================================

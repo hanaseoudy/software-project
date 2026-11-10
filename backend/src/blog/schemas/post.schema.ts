@@ -43,3 +43,5 @@ export class Post {
 
 export const PostSchema = SchemaFactory.createForClass(Post);
 PostSchema.index({ title: 'text', content: 'text', tags: 'text' });
+// BLG-09: search only scans published, visible posts; newest-first tie-breaker
+PostSchema.index({ status: 1, isHidden: 1, createdAt: -1 });

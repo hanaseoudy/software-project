@@ -1,0 +1,612 @@
+{
+  "info": {
+    "_postman_id": "8219b01f-8818-5c04-b4e4-3df34012155a",
+    "name": "BLG-09 Post search",
+    "description": "BLG-09: public search of published posts by title, tags or author name, ranked by interaction score (likes + comments) then newest first, 10 per page. No login needed. Set titleKeyword, tagKeyword and authorKeyword to values that exist in your database.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Search - success",
+      "item": [
+        {
+          "name": "Search by title - 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?q={{titleKeyword}}&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "{{titleKeyword}}"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Matches the keyword anywhere in the title (case-insensitive)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Paginated shape, page size 10', () => {",
+                  "  pm.expect(b).to.include.keys('items', 'total', 'page', 'pageSize', 'totalPages');",
+                  "  pm.expect(b.pageSize).to.eql(10);",
+                  "  pm.expect(b.items.length).to.be.at.most(10);",
+                  "});",
+                  "pm.test('Items have only the search fields', () => {",
+                  "  b.items.forEach((i) => pm.expect(Object.keys(i).sort()).to.eql(",
+                  "    ['author', 'commentsCount', 'createdAt', 'excerpt', 'id', 'interactionScore', 'likesCount', 'tags', 'title']));",
+                  "});",
+                  "pm.test('Sorted by interaction score desc, then newest first', () => {",
+                  "  for (let k = 1; k < b.items.length; k++) {",
+                  "    const a = b.items[k - 1], c = b.items[k];",
+                  "    pm.expect(a.interactionScore >= c.interactionScore).to.be.true;",
+                  "    if (a.interactionScore === c.interactionScore) {",
+                  "      pm.expect(new Date(a.createdAt) >= new Date(c.createdAt)).to.be.true;",
+                  "    }",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search by tag - 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?q={{tagKeyword}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "{{tagKeyword}}"
+                }
+              ]
+            },
+            "description": "Matches posts whose tags contain the keyword."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Paginated shape, page size 10', () => {",
+                  "  pm.expect(b).to.include.keys('items', 'total', 'page', 'pageSize', 'totalPages');",
+                  "  pm.expect(b.pageSize).to.eql(10);",
+                  "  pm.expect(b.items.length).to.be.at.most(10);",
+                  "});",
+                  "pm.test('Items have only the search fields', () => {",
+                  "  b.items.forEach((i) => pm.expect(Object.keys(i).sort()).to.eql(",
+                  "    ['author', 'commentsCount', 'createdAt', 'excerpt', 'id', 'interactionScore', 'likesCount', 'tags', 'title']));",
+                  "});",
+                  "pm.test('Sorted by interaction score desc, then newest first', () => {",
+                  "  for (let k = 1; k < b.items.length; k++) {",
+                  "    const a = b.items[k - 1], c = b.items[k];",
+                  "    pm.expect(a.interactionScore >= c.interactionScore).to.be.true;",
+                  "    if (a.interactionScore === c.interactionScore) {",
+                  "      pm.expect(new Date(a.createdAt) >= new Date(c.createdAt)).to.be.true;",
+                  "    }",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search by author name - 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?q={{authorKeyword}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "{{authorKeyword}}"
+                }
+              ]
+            },
+            "description": "Matches the author's first name, last name or full name, e.g. 'Maya' or 'Maya Haitham'."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Paginated shape, page size 10', () => {",
+                  "  pm.expect(b).to.include.keys('items', 'total', 'page', 'pageSize', 'totalPages');",
+                  "  pm.expect(b.pageSize).to.eql(10);",
+                  "  pm.expect(b.items.length).to.be.at.most(10);",
+                  "});",
+                  "pm.test('Items have only the search fields', () => {",
+                  "  b.items.forEach((i) => pm.expect(Object.keys(i).sort()).to.eql(",
+                  "    ['author', 'commentsCount', 'createdAt', 'excerpt', 'id', 'interactionScore', 'likesCount', 'tags', 'title']));",
+                  "});",
+                  "pm.test('Sorted by interaction score desc, then newest first', () => {",
+                  "  for (let k = 1; k < b.items.length; k++) {",
+                  "    const a = b.items[k - 1], c = b.items[k];",
+                  "    pm.expect(a.interactionScore >= c.interactionScore).to.be.true;",
+                  "    if (a.interactionScore === c.interactionScore) {",
+                  "      pm.expect(new Date(a.createdAt) >= new Date(c.createdAt)).to.be.true;",
+                  "    }",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search case-insensitive - 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?q=LUXOR",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "LUXOR"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Paginated shape, page size 10', () => {",
+                  "  pm.expect(b).to.include.keys('items', 'total', 'page', 'pageSize', 'totalPages');",
+                  "  pm.expect(b.pageSize).to.eql(10);",
+                  "  pm.expect(b.items.length).to.be.at.most(10);",
+                  "});",
+                  "pm.test('Items have only the search fields', () => {",
+                  "  b.items.forEach((i) => pm.expect(Object.keys(i).sort()).to.eql(",
+                  "    ['author', 'commentsCount', 'createdAt', 'excerpt', 'id', 'interactionScore', 'likesCount', 'tags', 'title']));",
+                  "});",
+                  "pm.test('Sorted by interaction score desc, then newest first', () => {",
+                  "  for (let k = 1; k < b.items.length; k++) {",
+                  "    const a = b.items[k - 1], c = b.items[k];",
+                  "    pm.expect(a.interactionScore >= c.interactionScore).to.be.true;",
+                  "    if (a.interactionScore === c.interactionScore) {",
+                  "      pm.expect(new Date(a.createdAt) >= new Date(c.createdAt)).to.be.true;",
+                  "    }",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search with regex characters - 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?q=c%2B%2B%20(rome).*",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "c%2B%2B%20(rome).*"
+                }
+              ]
+            },
+            "description": "Special characters are escaped and matched literally, so this does not error."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Paginated shape, page size 10', () => {",
+                  "  pm.expect(b).to.include.keys('items', 'total', 'page', 'pageSize', 'totalPages');",
+                  "  pm.expect(b.pageSize).to.eql(10);",
+                  "  pm.expect(b.items.length).to.be.at.most(10);",
+                  "});",
+                  "pm.test('Items have only the search fields', () => {",
+                  "  b.items.forEach((i) => pm.expect(Object.keys(i).sort()).to.eql(",
+                  "    ['author', 'commentsCount', 'createdAt', 'excerpt', 'id', 'interactionScore', 'likesCount', 'tags', 'title']));",
+                  "});",
+                  "pm.test('Sorted by interaction score desc, then newest first', () => {",
+                  "  for (let k = 1; k < b.items.length; k++) {",
+                  "    const a = b.items[k - 1], c = b.items[k];",
+                  "    pm.expect(a.interactionScore >= c.interactionScore).to.be.true;",
+                  "    if (a.interactionScore === c.interactionScore) {",
+                  "      pm.expect(new Date(a.createdAt) >= new Date(c.createdAt)).to.be.true;",
+                  "    }",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search page 2 - 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?q={{tagKeyword}}&page=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "{{tagKeyword}}"
+                },
+                {
+                  "key": "page",
+                  "value": "2"
+                }
+              ]
+            },
+            "description": "Needs more than 10 matching posts to return items."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Paginated shape, page size 10', () => {",
+                  "  pm.expect(b).to.include.keys('items', 'total', 'page', 'pageSize', 'totalPages');",
+                  "  pm.expect(b.pageSize).to.eql(10);",
+                  "  pm.expect(b.items.length).to.be.at.most(10);",
+                  "});",
+                  "pm.test('Items have only the search fields', () => {",
+                  "  b.items.forEach((i) => pm.expect(Object.keys(i).sort()).to.eql(",
+                  "    ['author', 'commentsCount', 'createdAt', 'excerpt', 'id', 'interactionScore', 'likesCount', 'tags', 'title']));",
+                  "});",
+                  "pm.test('Sorted by interaction score desc, then newest first', () => {",
+                  "  for (let k = 1; k < b.items.length; k++) {",
+                  "    const a = b.items[k - 1], c = b.items[k];",
+                  "    pm.expect(a.interactionScore >= c.interactionScore).to.be.true;",
+                  "    if (a.interactionScore === c.interactionScore) {",
+                  "      pm.expect(new Date(a.createdAt) >= new Date(c.createdAt)).to.be.true;",
+                  "    }",
+                  "  }",
+                  "});",
+                  "pm.test('Page is 2', () => pm.expect(b.page).to.eql(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search with no results - 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?q=zzqx-no-post-matches-this",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "zzqx-no-post-matches-this"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('Paginated shape, page size 10', () => {",
+                  "  pm.expect(b).to.include.keys('items', 'total', 'page', 'pageSize', 'totalPages');",
+                  "  pm.expect(b.pageSize).to.eql(10);",
+                  "  pm.expect(b.items.length).to.be.at.most(10);",
+                  "});",
+                  "pm.test('Items have only the search fields', () => {",
+                  "  b.items.forEach((i) => pm.expect(Object.keys(i).sort()).to.eql(",
+                  "    ['author', 'commentsCount', 'createdAt', 'excerpt', 'id', 'interactionScore', 'likesCount', 'tags', 'title']));",
+                  "});",
+                  "pm.test('Sorted by interaction score desc, then newest first', () => {",
+                  "  for (let k = 1; k < b.items.length; k++) {",
+                  "    const a = b.items[k - 1], c = b.items[k];",
+                  "    pm.expect(a.interactionScore >= c.interactionScore).to.be.true;",
+                  "    if (a.interactionScore === c.interactionScore) {",
+                  "      pm.expect(new Date(a.createdAt) >= new Date(c.createdAt)).to.be.true;",
+                  "    }",
+                  "  }",
+                  "});",
+                  "pm.test('No results message', () => {",
+                  "  pm.expect(b.items).to.eql([]);",
+                  "  pm.expect(b.total).to.eql(0);",
+                  "  pm.expect(b.message).to.eql('No results');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Search - validation errors (400)",
+      "item": [
+        {
+          "name": "Missing q - 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error on q', () => pm.expect(pm.response.json().errors).to.have.property('q'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Blank q - 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?q=%20%20%20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "%20%20%20"
+                }
+              ]
+            },
+            "description": "q is trimmed, so only spaces counts as empty."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error on q', () => pm.expect(pm.response.json().errors).to.have.property('q'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "q longer than 100 characters - 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error on q', () => pm.expect(pm.response.json().errors).to.have.property('q'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "page 0 - 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?q=luxor&page=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "luxor"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error on page', () => pm.expect(pm.response.json().errors).to.have.property('page'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "page not a number - 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/search?q=luxor&page=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "luxor"
+                },
+                {
+                  "key": "page",
+                  "value": "abc"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error on page', () => pm.expect(pm.response.json().errors).to.have.property('page'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api"
+    },
+    {
+      "key": "titleKeyword",
+      "value": "luxor"
+    },
+    {
+      "key": "tagKeyword",
+      "value": "egypt"
+    },
+    {
+      "key": "authorKeyword",
+      "value": "maya"
+    }
+  ]
+}
