@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Min } from 'class-validator';
 
@@ -30,4 +30,22 @@ export function paginate<T>(items: T[], total: number, page: number) {
     pageSize: PAGE_SIZE,
     totalPages: Math.ceil(total / PAGE_SIZE),
   };
+}
+
+// GEN-05: shape of every paginated response (documented in Swagger)
+export class PaginatedResponseDto {
+  @ApiProperty({ type: 'array', items: { type: 'object' }, description: 'Up to 10 items of the current page' })
+  items: unknown[];
+
+  @ApiProperty({ example: 42, description: 'Total number of items' })
+  total: number;
+
+  @ApiProperty({ example: 1 })
+  page: number;
+
+  @ApiProperty({ example: PAGE_SIZE, description: 'Always 10' })
+  pageSize: number;
+
+  @ApiProperty({ example: 5 })
+  totalPages: number;
 }

@@ -18,6 +18,7 @@ import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { ListTagsQueryDto } from './dto/list-tags-query.dto';
 import {
   PAGE_SIZE,
+  PaginationQueryDto,
   paginate,
   skipFor,
 } from '../common/pagination/pagination';
@@ -86,18 +87,26 @@ export class BlogService {
     return paginate(items, total, page);
   }
 
-  // BLG-02 + BLG-05: one published post with its comments, oldest first
-  async getPublishedById(id: string) {
+  // BLG-02 + BLG-05 + GEN-05: one published post with its comments,
+  // oldest first, paginated with page size 10
+  async getPublishedById(id: string, query: PaginationQueryDto = {}) {
+    const page = query.page ?? 1;
     if (!isValidObjectId(id)) throw new NotFoundException('Post not found');
     const post = await this.postModel
       .findOne({ _id: id, status: PostStatus.PUBLISHED, isHidden: false })
       .lean();
     if (!post) throw new NotFoundException('Post not found');
-    const comments = await this.commentModel
-      .find({ post: post._id, isHidden: false })
-      .sort({ createdAt: 1 })
-      .lean();
-    return { ...post, comments };
+    const filter = { post: post._id, isHidden: false };
+    const [items, total] = await Promise.all([
+      this.commentModel
+        .find(filter)
+        .sort({ createdAt: 1 })
+        .skip(skipFor(page))
+        .limit(PAGE_SIZE)
+        .lean(),
+      this.commentModel.countDocuments(filter),
+    ]);
+    return { ...post, comments: paginate(items, total, page) };
   }
 
   // BLG-03 + GEN-05: my own posts, including drafts, page size 10
