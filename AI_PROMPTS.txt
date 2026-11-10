@@ -305,3 +305,38 @@ npm run build and npm run lint pass. The 5 new helper unit tests pass;
 existing specs that import @nestjs/* still fail to start (ESM import error
 in the existing Jest setup; config not changed). Not run against a database.
 ================================================
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-10 (admin report resolution and content moderation; depends on GEN-09)
+
+Prompt:
+Implement GEN-10 on a new branch from the GEN-09 branch: admin-only routes
+(existing JwtAuthGuard + RolesGuard with @Roles(ADMIN)) to list open reports
+with a report count and content preview, resolve a report by dismissing it,
+hiding or deleting the content (closing all open reports on the same item),
+and hide / unhide / delete posts, comments, reviews and itineraries directly,
+with Swagger, Postman, unit tests and a pull request. Do not edit other team
+members' modules.
+
+How the output was used:
+Added AdminReportsController (GET /api/admin/reports, PATCH
+/api/admin/reports/:id/resolve, PATCH /api/admin/content/:type/:id/hide and
+/unhide, DELETE /api/admin/content/:type/:id), AdminReportsService,
+ContentModerationService, moderation.helpers.ts and admin DTOs to the
+reports module. Posts and comments are moderated (isHidden; a deleted post
+also loses its comments, likes and image files). Reviews and itineraries
+return 400 "Moderation for <type> is not available yet" because their
+modules are not ready (Review uses "hidden", no query filters it, and hotels
+store reviewCount / averageRating; no Itinerary model is registered).
+Added moderation.helpers.spec.ts and postman/GEN-10.postman_collection.json.
+Also fixed the GEN-09 and BLG-10 Postman collections to disable Postman's
+cookie jar so only the explicit Cookie header is sent.
+No frontend changes: the repository has no frontend yet.
+
+Verification:
+npm run build and npm run lint pass. The 14 reports helper unit tests pass;
+existing specs that import @nestjs/* still fail to start (ESM import error
+in the existing Jest setup; config not changed). Not run against a database.
+================================================
