@@ -40,3 +40,179 @@ The CI setup was designed to support automated pull request
 validation while preserving existing application logic and tests.
 
 ================================================
+
+================================================
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: GEN-12 (TASK-107), Project PDF Section 5.1
+
+Prompt (summary of the conversation):
+Help me Implement reference-data seeding using the official Google Sheets dataset.
+Preserve the supplied records and identifiers and reuse the existing airport
+schema without modifying teammates' feature code. Include countries, cities,
+airports, supported currencies and the PDF-required attractions. Add the
+package.json seed command, but leave out the proposed new test file.
+
+How the output was used:
+Codex created an offline snapshot of the four official dataset tabs, derived
+the seven supported currency codes, and added Country, City, Currency and
+Attraction schemas. It implemented a standalone seed runner with validation,
+a dry-run option, unique indexes and upserts, plus setup documentation.
+The implementation preserves official identifiers and existing MongoDB IDs
+when rerun. Existing unrelated records and fields are not deleted.
+
+Verification performed by Codex:
+Build, lint, five existing unit tests and the existing E2E test passed.
+A temporary local MongoDB instance was used to check all 39 reference records,
+repeat-run safety, stable IDs, preservation of unrelated data, invalid-input
+rejection and handling of existing duplicate identifiers. No new test file
+was added, and the shared Atlas database was not modified.
+
+The changes are prepared for Hana's review, commit and push.
+================================================
+
+================================================
+Date: 2026-11-07
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-01 (TASK-10), GEN-13
+
+Prompt (summary of the conversation):
+Help me implement guest registration (ACC-01) using the existing User schema:
+name, unique email, password rules (8+ characters, a letter and a digit) and a
+mandatory terms-and-privacy consent, with field-level error messages.
+
+How the output was used:
+Used the generated AuthModule, AuthService, AuthController and RegisterDto
+after reviewing them against ACC-01. Passwords are hashed with bcrypt (GEN-13)
+and consent is stored as termsAcceptedAt. Added a global ValidationPipe and
+the /api prefix in main.ts after team leader approval.
+
+Verification:
+Tested POST /api/auth/register in Postman (success, duplicate email, invalid
+email, short password, missing digit, missing consent). Lint, build, unit
+tests and E2E tests passed locally.
+================================================
+
+================================================
+Date: 2026-11-07
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-01 (TASK-10), GEN-13
+
+Prompt (summary of the conversation):
+Address team leader review on the registration PR: document RegisterDto and
+the 201, 400 and 409 responses (with field-level errors) in Swagger, and
+handle passwords longer than bcrypt's 72-byte limit.
+
+How the output was used:
+Added Swagger setup at /api/docs, ApiProperty documentation on RegisterDto,
+response DTOs for 201 and field-level errors, and documented 400/409
+examples. Added a 72-byte maximum on passwords so bcrypt never silently
+truncates them. Verified in Swagger and Postman; lint, build, unit and
+E2E tests passed locally.
+================================================
+================================================
+
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: ChatGPT and Codex
+Related Requirement: FLT-02 (TASK-26)
+Prompt (summary of the conversation):
+I asked AI to help me implement FLT-02, which requires a predefined, read-only airport
+list using the official reference data from GEN-12. I wanted to reuse the existing airport 
+schema and make sure only airports from the official dataset were returned. I also asked AI
+to explain the controller and service, help me test the endpoint using Swagger, and guide me through
+ recovering my work after accidentally merging and reverting Pull Requests on GitHub.
+ How the output was used:
+With Codex's help, I created the airport controller, service, module, and response DTO. The service 
+retrieves airports from MongoDB, sorts them by IATA code, and provides a method to validate airport 
+selections for flight creation and search. I also used ChatGPT to understand the implementation, fix 
+incorrect import paths, and recover my changes on a new feature branch without overwriting my teammates' work.
+Verification performed:
+I successfully ran the unit tests and E2E tests after resolving a Jest ES module compatibility issue
+I also tested GET /api/airports through Swagger and received a 200 OK response containing the predefined 
+airport records. The recovered implementation is working and ready for final review, commit, and Pull Request.
+================================================
+
+================================================
+Date: 2026-11-07
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-04 (TASK-11)
+
+Prompt (summary of the conversation):
+Help me implement role-based login (ACC-04): log in with email and password,
+return a generic "invalid email or password" message on failure, show
+"account suspended" for suspended accounts, and return what the frontend
+needs to open each role's home page.
+
+How the output was used:
+Used the generated LoginDto, login response DTO and the login method in
+AuthService/AuthController after reviewing them against ACC-04. The password
+is checked before the account status so suspension is not revealed without
+the correct password; deactivated accounts get the generic message (ACC-12).
+The response includes role, providerType (from ModeratorAssignment, to tell
+hotel and airline moderators apart) and mustChangePassword. Swagger documents
+the 200, 400, 401 and 403 responses.
+
+Verification:
+Tested POST /api/auth/login in Postman (success, wrong password, unknown
+email, invalid email, suspended with correct and wrong password). Lint,
+build, unit tests and E2E tests passed locally.
+================================================
+
+================================================
+Date: 2026-11-08
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-19 (TASK-109), ACC-04
+
+Prompt (summary of the conversation):
+Help me implement ACC-19: issue access and refresh tokens as httpOnly,
+Secure, SameSite cookies on login (no localStorage), add a GET /auth/me
+endpoint for the frontend, and a reusable guard that reads the cookie.
+
+How the output was used:
+Used the generated cookie helpers, JwtAuthGuard, the updated login flow and
+the /auth/me endpoint after reviewing them against ACC-19. Login now signs
+an access token and a refresh token with separate secrets (from .env) and
+sets them as httpOnly, Secure, SameSite=Strict cookies; the refresh cookie is
+limited to /api/auth. /auth/me re-checks the account is still active. Added
+@nestjs/jwt and cookie-parser, and documented the cookie auth in Swagger.
+
+Verification:
+Tested in Postman: /me without cookies (401), login sets both cookies with
+HttpOnly and Secure (200), /me after login (200), /me with a fake token (401).
+Lint, build, unit tests and E2E tests passed locally.
+================================================
+================================================
+Date: 2026-11-08
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: GEN-13 (backend validation; shared ObjectId reference schemas)
+
+Prompt:
+Verify the report that type: Types.ObjectId in NestJS schema decorators
+produces Mixed fields and prevents automatic string-ID query casting.
+After the issue was confirmed, I approved the fix: "okay fix it".
+
+How the output was used:
+Changed 40 reference definitions in 19 schema files to use
+MongooseSchema.Types.ObjectId in @Prop options while retaining
+Types.ObjectId property annotations and existing field options.
+Added regression tests for query casting, existing ObjectId values,
+invalid IDs, and embedded booked-room references. Work is on
+fix/mongoose-objectid-schema, created from the latest origin/develop.
+
+Verification:
+Lint passed. All 20 unit tests passed, including 15 new regression tests.
+An additional check of emitted schema modules verified all 40 corrected
+fields are ObjectId paths, cast valid string IDs, and reject invalid IDs.
+The full application build failed because @nestjs/jwt and cookie-parser
+from the existing develop lockfile are not installed locally. E2E tests
+could not start because @nestjs/jwt is missing. Dependency installation
+was declined. No database was connected to or changed; existing stored
+reference values have not been audited or migrated.
+================================================

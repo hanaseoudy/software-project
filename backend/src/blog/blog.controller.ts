@@ -1,20 +1,26 @@
+
 import {
   Body,
   Controller,
-  Delete,
-  Get,
   Param,
   Patch,
   Post,
-  Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+
+import {
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { BlogService } from './blog.service';
+
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
-import { CreateCommentDto } from './dto/create-comment.dto';
-import { ListPostsQueryDto } from './dto/list-posts-query.dto';
+import { PostResponseDto } from './dto/post-response.dto';
 
 @ApiTags('Blog')
 @Controller('posts')
@@ -22,73 +28,76 @@ export class BlogController {
   constructor(private readonly blogService: BlogService) {}
 
   private userId(req: any): string {
-    return req.user?.userId ?? req.user?.id ?? req.user?.sub;
+    const u = req.user;
+    return String(
+      u?.userId ?? u?.id ?? u?._id ?? u?.sub ?? '',
+    );
   }
 
-  // TODO: add the auth guard from the accounts module here (ACC-04)
+  // BLG-01: Create a post.
+  @UseGuards(JwtAuthGuard)
   @Post()
-  @ApiOperation({ summary: 'Create a post as draft or published (BLG-01)' })
-  create(@Req() req: any, @Body() dto: CreatePostDto) {
-    return this.blogService.createPost(this.userId(req), dto);
+  @ApiOperation({
+    summary: 'Create a post as draft or published (BLG-01)',
+    description:
+      'Registered user only (JWT). Title and content are required. Up to 5 tags, max 30 characters each.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Post created',
+    type: PostResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Login required',
+  })
+  create(
+    @Req() req: any,
+    @Body() dto: CreatePostDto,
+  ): Promise<PostResponseDto> {
+    return this.blogService.createPost(
+      this.userId(req),
+      dto,
+    );
   }
 
-  // Public, no login needed
-  @Get()
-  @ApiOperation({ summary: 'Browse published posts, filter by tag (BLG-02)' })
-  list(@Query() query: ListPostsQueryDto) {
-    return this.blogService.listPublished(query);
-  }
-
-  // Must stay ABOVE @Get(':id'), otherwise "mine" is read as an id
-  // TODO: add the auth guard here (ACC-04)
-  @Get('mine')
-  @ApiOperation({ summary: 'List my own posts including drafts (BLG-03)' })
-  listMine(@Req() req: any, @Query() query: ListPostsQueryDto) {
-    return this.blogService.listMine(this.userId(req), query);
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get one published post with comments (BLG-02)' })
-  getOne(@Param('id') id: string) {
-    return this.blogService.getPublishedById(id);
-  }
-
-  // TODO: add the auth guard here (ACC-04)
+  // BLG-08: Update an authenticated user's own post.
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
-  @ApiOperation({ summary: 'Edit my own post (BLG-04)' })
-  update(@Req() req: any, @Param('id') id: string, @Body() dto: UpdatePostDto) {
-    return this.blogService.updatePost(this.userId(req), id, dto);
-  }
-
-  // TODO: add the auth guard here (ACC-04)
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete my own post (BLG-04)' })
-  remove(@Req() req: any, @Param('id') id: string) {
-    return this.blogService.deletePost(this.userId(req), id);
-  }
-
-  // TODO: add the auth guard here (ACC-04)
-  @Post(':id/comments')
-  @ApiOperation({ summary: 'Comment on a published post (BLG-05)' })
-  addComment(
+  @ApiOperation({
+    summary: 'Update an existing post (BLG-08)',
+    description:
+      'Requires JWT authentication. Users can only update their own posts.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Post updated successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Login required',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'You cannot update another user post',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Post not found',
+  })
+  updatePost(
     @Req() req: any,
     @Param('id') id: string,
-    @Body() dto: CreateCommentDto,
+    @Body() dto: UpdatePostDto,
   ) {
-    return this.blogService.addComment(this.userId(req), id, dto);
-  }
-
-  // TODO: add the auth guard here (ACC-04)
-  @Post(':id/like')
-  @ApiOperation({ summary: 'Like a post, once per user (BLG-06)' })
-  like(@Req() req: any, @Param('id') id: string) {
-    return this.blogService.likePost(this.userId(req), id);
-  }
-
-  // TODO: add the auth guard here (ACC-04)
-  @Delete(':id/like')
-  @ApiOperation({ summary: 'Remove my like from a post (BLG-06)' })
-  unlike(@Req() req: any, @Param('id') id: string) {
-    return this.blogService.unlikePost(this.userId(req), id);
+    return this.blogService.updatePost(
+      this.userId(req),
+      id,
+      dto,
+    );
   }
 }
