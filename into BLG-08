@@ -1,0 +1,11 @@
+AI_PROMPTS.txt:124: trailing whitespace.
+[32m+[m[32mlist using the official reference data from GEN-12. I wanted to reuse the existing airport[m[41m [m
+AI_PROMPTS.txt:129: trailing whitespace.
+[32m+[m[32mWith Codex's help, I created the airport controller, service, module, and response DTO. The service[m[41m [m
+AI_PROMPTS.txt:130: trailing whitespace.
+[32m+[m[32mretrieves airports from MongoDB, sorts them by IATA code, and provides a method to validate airport[m[41m [m
+AI_PROMPTS.txt:131: trailing whitespace.
+[32m+[m[32mselections for flight creation and search. I also used ChatGPT to understand the implementation, fix[m[41m [m
+AI_PROMPTS.txt:135: trailing whitespace.
+[32m+[m[32mI also tested GET /api/airports through Swagger and received a 200 OK response containing the predefined[m[41m [m
+backend/src/blog/blog.service.ts:538: new blank line at EOF.
