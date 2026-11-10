@@ -40,6 +40,9 @@
               }
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -101,6 +104,9 @@
               }
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -148,6 +154,9 @@
               }
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -193,6 +202,9 @@
                 }
               }
             }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
           },
           "event": [
             {
@@ -240,6 +252,9 @@
               }
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -286,6 +301,9 @@
               }
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -330,6 +348,9 @@
                 }
               }
             }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
           },
           "event": [
             {
@@ -376,6 +397,9 @@
               }
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -420,6 +444,9 @@
                 }
               }
             }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
           },
           "event": [
             {
@@ -466,6 +493,9 @@
               }
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -511,6 +541,9 @@
               }
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -555,6 +588,9 @@
                 }
               }
             }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
           },
           "event": [
             {
@@ -602,6 +638,9 @@
               }
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -647,6 +686,9 @@
               }
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -687,6 +729,9 @@
                 }
               }
             }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
           },
           "event": [
             {
@@ -732,6 +777,9 @@
               ]
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -770,6 +818,9 @@
                 }
               ]
             }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
           },
           "event": [
             {
@@ -810,6 +861,9 @@
               ]
             }
           },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
           "event": [
             {
               "listen": "test",
@@ -843,6 +897,9 @@
                 }
               ]
             }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
           },
           "event": [
             {
