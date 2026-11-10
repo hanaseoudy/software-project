@@ -1,3 +1,4 @@
+
 import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { BlogService } from './blog.service';
@@ -9,7 +10,6 @@ import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 export class BlogController {
   constructor(private readonly blogService: BlogService) {}
 
-  // TODO: add the auth guard from the accounts module here (ACC-04)
   @Post()
   @ApiOperation({ summary: 'Create a post as draft or published (BLG-01)' })
   create(@Req() req: any, @Body() dto: CreatePostDto) {
@@ -17,15 +17,13 @@ export class BlogController {
     return this.blogService.createPost(userId, dto);
   }
 
-  // Public, no login needed
   @Get()
   @ApiOperation({ summary: 'Browse published posts, filter by tag (BLG-02)' })
   list(@Query() query: ListPostsQueryDto) {
     return this.blogService.listPublished(query);
   }
 
-  // Must stay ABOVE @Get(':id'), otherwise "mine" is read as an id
-  // TODO: add the auth guard here (ACC-04)
+  // TODO: Integrate Nour's JWT authentication guard once available.
   @Get('mine')
   @ApiOperation({ summary: 'List my own posts including drafts (BLG-03)' })
   listMine(@Req() req: any, @Query() query: ListPostsQueryDto) {
