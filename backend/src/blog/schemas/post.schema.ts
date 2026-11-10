@@ -27,7 +27,7 @@ export class Post {
   @Prop({ enum: PostStatus, default: PostStatus.DRAFT, index: true })
   status: PostStatus;
 
-  // BLG-08: database-level limits (max 5 tags, 1-30 characters each)
+  // BLG-08: database-level limits (max 5 tags, 1-30 characters each, no duplicates)
   @Prop({
     type: [String],
     default: [],
@@ -41,6 +41,11 @@ export class Post {
         validator: (v: string[]) =>
           v.every((t) => typeof t === 'string' && t.length >= 1 && t.length <= 30),
         message: 'Each tag must be 1 to 30 characters',
+      },
+      {
+        validator: (v: string[]) =>
+          new Set(v.map((t) => String(t).trim().toLowerCase())).size === v.length,
+        message: 'Tags must be unique',
       },
     ],
   })

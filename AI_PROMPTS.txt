@@ -216,3 +216,27 @@ could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
 ================================================
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-08 (post tags), review of PR #33
+
+Prompt:
+Address the team leader's review comments on my BLG-08 PR, only changing
+code I wrote, and document my endpoints with Swagger and a Postman collection.
+
+How the output was used:
+Added a schema-level uniqueness validator for tags (max 5 and 1-30 characters
+were already enforced in post.schema.ts). Confirmed PATCH /posts/:id uses
+JwtAuthGuard and an ownership check. Added TagParamDto to validate the :tag
+parameter of GET /tags/:tag/posts. Registered TagsController and
+CommentsController in BlogModule (they were not mounted). Added Swagger
+decorators to the blog, tags and comments endpoints and created
+postman/BLG-08.postman_collection.json.
+
+Verification:
+npm run build passed. Jest blog specs fail to start with the same ESM
+import error with and without these changes (existing test config issue).
+No database was connected to.
+================================================
