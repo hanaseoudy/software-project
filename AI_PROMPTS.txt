@@ -274,3 +274,34 @@ update accept only photos stored by UploadsService (isStoredUrl for the hotel ca
 reviewed the changes and the new tests.
 Verification performed:
 Lint, build and all unit tests passed under Node 24 (53 tests in the HTL-01 branch).
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-09 (one report per user per content item; depends on ACC-04)
+
+Prompt:
+Implement GEN-09 on a new branch from develop: a new reports module where a
+logged-in user can report a post, comment, review or itinerary with a reason,
+at most once per item (unique index + service check, duplicate key mapped to
+409), plus GET /api/reports/mine, with Swagger, Postman, unit tests and a
+pull request. Other modules' models are read-only.
+
+How the output was used:
+Added backend/src/reports: Report schema (reporter, targetType, targetId,
+reason 5-500, status, action, resolvedBy, resolvedAt, timestamps) with a
+unique { reporter, targetType, targetId } index, CreateReportDto,
+ListReportsQueryDto, response DTOs, ReportsService, ReportsController
+(POST /api/reports, GET /api/reports/mine, JwtAuthGuard) and
+reports.helpers.ts. Post, Comment and Review models are read only to check
+the target exists; itinerary returns 400 "Reporting itinerary is not
+available yet" because no Itinerary model is registered on develop.
+Registered ReportsModule in app.module.ts (one import, one entry). Added
+reports.helpers.spec.ts and postman/GEN-09.postman_collection.json.
+No frontend changes: the repository has no frontend yet.
+
+Verification:
+npm run build and npm run lint pass. The 5 new helper unit tests pass;
+existing specs that import @nestjs/* still fail to start (ESM import error
+in the existing Jest setup; config not changed). Not run against a database.
+================================================
