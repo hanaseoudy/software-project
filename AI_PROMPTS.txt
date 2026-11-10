@@ -274,3 +274,31 @@ update accept only photos stored by UploadsService (isStoredUrl for the hotel ca
 reviewed the changes and the new tests.
 Verification performed:
 Lint, build and all unit tests passed under Node 24 (53 tests in the HTL-01 branch).
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-10 (post image attachment and removal; depends on BLG-01, GEN-08)
+
+Prompt:
+Implement BLG-10 on a new branch from develop: let a post's author attach
+images under the shared GEN-08 upload rules and remove them, reusing the
+GEN-08 upload code without modifying it, with Swagger, Postman, unit tests
+and a pull request. Do not modify other team members' code.
+
+How the output was used:
+Added PostImagesModule, PostImagesController, PostImagesService and
+post-images.helpers.ts in the blog folder: POST /api/posts/:id/images
+(multipart "images", GEN-08 imageUploadOptions + UploadsService.saveForOwner,
+atomic $push that re-checks the 5-image limit) and
+DELETE /api/posts/:id/images/:imageId (atomic $pull, then
+UploadsService.deleteByUrl). Both are author only (JwtAuthGuard + ownership).
+Registered the module in app.module.ts (one import, one entry). Added
+post-images.helpers.spec.ts and postman/BLG-10.postman_collection.json.
+No frontend changes: the repository has no frontend yet.
+
+Verification:
+npm run build and npm run lint pass. The 4 new helper unit tests pass;
+existing specs that import @nestjs/* still fail to start (ESM import error
+in the existing Jest setup; config not changed). Not run against a database.
+================================================

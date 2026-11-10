@@ -1,0 +1,856 @@
+{
+  "info": {
+    "_postman_id": "f71ca574-9326-5dab-b4ab-d11652538dfd",
+    "name": "BLG-10 Post images",
+    "description": "BLG-10: attach images to / remove images from my own post under the GEN-08 rules (JPG/PNG, max 5 MB, max 5 images per post). Run 'Auth > Login' first; it stores the access_token cookie in {{token}}. For each upload request, choose the file(s) in the Body > form-data 'images' rows.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (saves {{token}})",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Logs in and stores the access_token cookie in the {{token}} collection variable.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Saves the access_token cookie set by the login response into {{token}}",
+                  "let t = pm.cookies.get('access_token');",
+                  "if (!t) {",
+                  "  // fallback: the cookie is Secure, so read it straight from Set-Cookie on http://localhost",
+                  "  pm.response.headers.each((h) => {",
+                  "    const m = h.key.toLowerCase() === 'set-cookie' && /access_token=([^;]+)/.exec(h.value);",
+                  "    if (m) { t = m[1]; }",
+                  "  });",
+                  "}",
+                  "if (t) { pm.collectionVariables.set('token', t); }",
+                  "pm.test('Logged in', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Setup",
+      "item": [
+        {
+          "name": "Create a post to attach images to - 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Three days in Luxor\",\n  \"content\": \"We started at Karnak Temple...\",\n  \"tags\": [\n    \"egypt\"\n  ],\n  \"status\": \"published\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code < 300) { pm.collectionVariables.set('postId', pm.response.json().id); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Attach images",
+      "item": [
+        {
+          "name": "Attach one image - 200",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images"
+              ]
+            },
+            "description": "Pick a JPG or PNG under 5 MB. Saves the new image id in {{imageId}}.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) { const imgs = pm.response.json().images; pm.collectionVariables.set('imageId', imgs[imgs.length - 1].id); }",
+                  "pm.test('Images returned with id and url', () => pm.response.json().images.forEach((i) => pm.expect(i).to.have.keys('id', 'url')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attach two images - 200",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) { const imgs = pm.response.json().images; pm.collectionVariables.set('imageId', imgs[imgs.length - 1].id); }",
+                  "pm.test('Images returned with id and url', () => pm.response.json().images.forEach((i) => pm.expect(i).to.have.keys('id', 'url')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attach - 400 no image",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images"
+              ]
+            },
+            "description": "Sends no file."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attach - 400 wrong file type",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images"
+              ]
+            },
+            "description": "Pick a .txt, .gif or .pdf file: only JPG and PNG are allowed.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attach - 400 more than 5 images on the post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images"
+              ]
+            },
+            "description": "Run after the two requests above (3 images attached): 3 more would make 6.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attach - 400 more than 5 files in one request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attach - 413 file larger than 5 MB",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images"
+              ]
+            },
+            "description": "GEN-08 returns 413 Payload Too Large for a file over 5 MB.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 413', () => pm.response.to.have.status(413));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attach - 401 not logged in",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attach - 403 not my post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{otherPostId}}/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{otherPostId}}",
+                "images"
+              ]
+            },
+            "description": "Set {{otherPostId}} to a post owned by another user.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Attach - 404 post not found",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/000000000000000000000000/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "000000000000000000000000",
+                "images"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": [],
+                  "description": "Choose a file"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Remove images",
+      "item": [
+        {
+          "name": "Remove - 401 not logged in",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images/{{imageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images",
+                "{{imageId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove - 403 not my post",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{otherPostId}}/images/{{imageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{otherPostId}}",
+                "images",
+                "{{imageId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove - 404 post not found",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/000000000000000000000000/images/{{imageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "000000000000000000000000",
+                "images",
+                "{{imageId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove - 404 image not found",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images/000000000000000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images",
+                "000000000000000000000000"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove image - 200",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images/{{imageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images",
+                "{{imageId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove same image again - 404",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "access_token={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/posts/{{postId}}/images/{{imageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "posts",
+                "{{postId}}",
+                "images",
+                "{{imageId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "email",
+      "value": "user@example.com"
+    },
+    {
+      "key": "password",
+      "value": "Password123!"
+    },
+    {
+      "key": "postId",
+      "value": ""
+    },
+    {
+      "key": "otherPostId",
+      "value": ""
+    },
+    {
+      "key": "imageId",
+      "value": ""
+    }
+  ]
+}
