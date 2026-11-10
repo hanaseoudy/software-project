@@ -1,5 +1,16 @@
-import { Body, Controller, Delete, Param, Patch, Req } from '@nestjs/common';
+
+import {
+  Body,
+  Controller,
+  Delete,
+  Param,
+  Patch,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { BlogService } from './blog.service';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 
@@ -9,10 +20,14 @@ export class CommentsController {
   constructor(private readonly blogService: BlogService) {}
 
   private userId(req: any): string {
-    return req.user?.userId ?? req.user?.id ?? req.user?.sub;
+    const user = req.user;
+    return String(
+      user?.userId ?? user?.id ?? user?._id ?? user?.sub ?? '',
+    );
   }
 
-  // TODO: add the auth guard here (ACC-04)
+  // ACC-04: Authentication required to edit a comment.
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   @ApiOperation({ summary: 'Edit my own comment (BLG-07)' })
   update(
@@ -23,7 +38,8 @@ export class CommentsController {
     return this.blogService.updateComment(this.userId(req), id, dto);
   }
 
-  // TODO: add the auth guard here (ACC-04)
+  // ACC-04: Authentication required to delete a comment.
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   @ApiOperation({ summary: 'Delete my own comment (BLG-07)' })
   remove(@Req() req: any, @Param('id') id: string) {
