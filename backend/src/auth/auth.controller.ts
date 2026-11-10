@@ -13,6 +13,7 @@ import {
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
+import { Public } from '../common/decorators/public.decorator';
 import { ACCESS_COOKIE } from './auth.cookies';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -27,6 +28,7 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('register')
+  @Public()
   @ApiOperation({ summary: 'Register a new user account (ACC-01)' })
   @ApiCreatedResponse({ description: 'Account created', type: RegisterResponseDto })
   @ApiBadRequestResponse({
@@ -54,6 +56,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Public()
   @HttpCode(200)
   @ApiOperation({
     summary: 'Log in with email and password (ACC-04)',
