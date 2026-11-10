@@ -1,5 +1,11 @@
 import { Body, Controller, Delete, Param, Patch, Req } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiCookieAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { BlogService } from './blog.service';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 
@@ -14,6 +20,7 @@ export class CommentsController {
 
   // TODO: add the auth guard here (ACC-04)
   @Patch(':id')
+  @ApiCookieAuth('access_token')
   @ApiOperation({
     summary: 'Edit my own comment (BLG-07)',
     description:
@@ -35,6 +42,7 @@ export class CommentsController {
 
   // TODO: add the auth guard here (ACC-04)
   @Delete(':id')
+  @ApiCookieAuth('access_token')
   @ApiOperation({
     summary: 'Delete my own comment (BLG-07)',
     description:

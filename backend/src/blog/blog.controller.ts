@@ -9,7 +9,13 @@ import {
   Query,
   Req,
 } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiCookieAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { BlogService } from './blog.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
@@ -27,6 +33,7 @@ export class BlogController {
 
   // TODO: add the auth guard from the accounts module here (ACC-04)
   @Post()
+  @ApiCookieAuth('access_token')
   @ApiOperation({
     summary: 'Create a post as draft or published (BLG-01)',
     description:
@@ -49,6 +56,7 @@ export class BlogController {
     status: 200,
     description: 'Page of posts: { items, total, page, pageSize, totalPages }',
   })
+  @ApiResponse({ status: 400, description: 'Invalid page (must be an integer >= 1)' })
   list(@Query() query: ListPostsQueryDto) {
     return this.blogService.listPublished(query);
   }
@@ -56,12 +64,14 @@ export class BlogController {
   // Must stay ABOVE @Get(':id'), otherwise "mine" is read as an id
   // TODO: add the auth guard here (ACC-04)
   @Get('mine')
+  @ApiCookieAuth('access_token')
   @ApiOperation({
     summary: 'List my own posts including drafts (BLG-03)',
     description:
       'Registered user only. Returns the logged-in user\'s posts (drafts and published) with title, status, date, likesCount and commentsCount. Page size 10.',
   })
   @ApiResponse({ status: 200, description: 'Page of my posts' })
+  @ApiResponse({ status: 400, description: 'Invalid page (must be an integer >= 1)' })
   @ApiResponse({ status: 401, description: 'Login required' })
   listMine(@Req() req: any, @Query() query: ListPostsQueryDto) {
     return this.blogService.listMine(this.userId(req), query);
@@ -82,6 +92,7 @@ export class BlogController {
 
   // TODO: add the auth guard here (ACC-04)
   @Patch(':id')
+  @ApiCookieAuth('access_token')
   @ApiOperation({
     summary: 'Edit my own post (BLG-04)',
     description:
@@ -99,6 +110,7 @@ export class BlogController {
 
   // TODO: add the auth guard here (ACC-04)
   @Delete(':id')
+  @ApiCookieAuth('access_token')
   @ApiOperation({
     summary: 'Delete my own post (BLG-04)',
     description:
@@ -115,6 +127,7 @@ export class BlogController {
 
   // TODO: add the auth guard here (ACC-04)
   @Post(':id/comments')
+  @ApiCookieAuth('access_token')
   @ApiOperation({
     summary: 'Comment on a published post (BLG-05)',
     description:
@@ -135,6 +148,7 @@ export class BlogController {
 
   // TODO: add the auth guard here (ACC-04)
   @Post(':id/like')
+  @ApiCookieAuth('access_token')
   @ApiOperation({
     summary: 'Like a post, once per user (BLG-06)',
     description:
@@ -151,6 +165,7 @@ export class BlogController {
 
   // TODO: add the auth guard here (ACC-04)
   @Delete(':id/like')
+  @ApiCookieAuth('access_token')
   @ApiOperation({
     summary: 'Remove my like from a post (BLG-06)',
     description: 'Registered user only. Returns the new likesCount.',

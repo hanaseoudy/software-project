@@ -40,3 +40,23 @@ The CI setup was designed to support automated pull request
 validation while preserving existing application logic and tests.
 
 ================================================
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-01 to BLG-08 (blog API documentation), PR #40
+
+Prompt:
+Document my blog endpoints with Swagger and Postman (no review comments
+were left on this PR), only changing code I wrote.
+
+How the output was used:
+Added @ApiCookieAuth to the protected post and comment routes and 400
+responses for invalid page/search to the list endpoints. Extended
+docs/postman/blog.postman_collection.json with a login request that stores
+{{token}}, a Cookie header on protected requests, and error cases
+(400/401/403/404/409) for every endpoint.
+
+Verification:
+npm run build passed. No database was connected to.
+================================================

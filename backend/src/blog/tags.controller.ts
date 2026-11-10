@@ -16,6 +16,7 @@ export class TagsController {
       'Public. Lists tags used by published posts with how many posts use each. Optional ?search=ro and ?page=2. Page size 10.',
   })
   @ApiResponse({ status: 200, description: 'Page of { tag, postsCount }' })
+  @ApiResponse({ status: 400, description: 'Invalid page, or search longer than 30 characters' })
   list(@Query() query: ListTagsQueryDto) {
     return this.blogService.listTags(query);
   }
@@ -26,8 +27,9 @@ export class TagsController {
     description:
       'Public. Used when a tag is clicked. Same response as GET /api/posts?tag=. Page size 10.',
   })
-  @ApiParam({ name: 'tag', description: 'Tag name, e.g. rome' })
+  @ApiParam({ name: 'tag', description: 'Tag name, e.g. rome', example: 'rome' })
   @ApiResponse({ status: 200, description: 'Page of posts with that tag' })
+  @ApiResponse({ status: 400, description: 'Invalid page (must be an integer >= 1)' })
   postsByTag(@Param('tag') tag: string, @Query() query: ListPostsQueryDto) {
     return this.blogService.listByTag(tag, query);
   }
