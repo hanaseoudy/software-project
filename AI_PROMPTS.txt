@@ -412,3 +412,20 @@ tier rules and error format are the same as HTL-10. The two shorter routes are k
 routes for one part only. I reviewed the code and the new tests.
 Verification performed:
 Lint, build and all hotel unit tests passed under Node 24.
+
+Date: 2026-11-11
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-05 (TASK-48) - contract endpoint PATCH /api/hotels/:id/rooms/:roomId/availability
+Prompt (summary of the conversation):
+After the team leader said the API contract endpoints must exist, I asked AI to add the contract endpoint
+for room availability that was still missing in the HTL-05 branch, and to explain why we keep our extra
+DELETE route.
+
+How the output was used:
+AI added PATCH /api/hotels/:id/rooms/:roomId/availability (assigned moderator only). Body: rangeId plus
+startDate and/or endDate. The new dates must not overlap another bookable range (409) and days taken out
+of the range must not have a confirmed reservation (409). The DELETE route for removing a whole range is
+kept as a documented extra route. I reviewed the code and the new tests.
+Verification performed:
+Lint, build and all hotel unit tests passed under Node 24.

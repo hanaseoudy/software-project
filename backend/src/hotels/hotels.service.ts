@@ -34,6 +34,7 @@ import {
   UpdatePoliciesDto,
 } from './dto/update-policies.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
+import { UpdateRoomAvailabilityDto } from './dto/update-room-availability.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { UploadsService } from '../uploads/uploads.service';
 import { ImageCategory } from '../uploads/uploads.constants';
@@ -382,6 +383,118 @@ export class HotelsService {
     if (dto.pricePerNight !== undefined) room.pricePerNight = dto.pricePerNight;
     await room.save();
     return this.toRoomResponse(room);
+  }
+
+  /**
+   * HTL-05 (contract: PATCH /hotels/:id/rooms/:roomId/availability): change the dates
+   * of a bookable range. Days taken out of the range must not have a confirmed booking.
+   */
+  async updateRoomBookableRange(
+    hotelId: string,
+    roomId: string,
+    dto: UpdateRoomAvailabilityDto,
+    user: AuthPayload,
+  ): Promise<RoomAvailabilityResponseDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+    const room = await this.findRoomOrFail(hotel, roomId);
+
+    if (dto.startDate === undefined && dto.endDate === undefined) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: { dates: ['Send startDate, endDate or both'] },
+      });
+    }
+    const range = await this.availabilityModel
+      .findOne({
+        _id: dto.rangeId,
+        room: room._id,
+        type: AvailabilityType.AVAILABLE,
+      })
+      .exec();
+    if (!range) {
+      throw new NotFoundException('Bookable range not found');
+    }
+
+    const start =
+      dto.startDate === undefined
+        ? range.startDate
+        : this.parseDay(dto.startDate);
+    const end =
+      dto.endDate === undefined ? range.endDate : this.parseDay(dto.endDate);
+    const errors: Record<string, string[]> = {};
+    if (!start) {
+      errors.startDate = [
+        'Start date must be a real date in YYYY-MM-DD format',
+      ];
+    }
+    if (!end) {
+      errors.endDate = ['End date must be a real date in YYYY-MM-DD format'];
+    }
+    if (start && end && end < start) {
+      errors.endDate = ['End date must be on or after the start date'];
+    }
+    if (!start || !end || Object.keys(errors).length > 0) {
+      throw new BadRequestException({ message: 'Validation failed', errors });
+    }
+
+    const overlapping = await this.availabilityModel
+      .findOne({
+        _id: { $ne: range._id },
+        room: room._id,
+        type: AvailabilityType.AVAILABLE,
+        startDate: { $lte: end },
+        endDate: { $gte: start },
+      })
+      .exec();
+    if (overlapping) {
+      throw new ConflictException(
+        `These dates overlap an existing bookable range (${this.formatDay(overlapping.startDate)} to ${this.formatDay(overlapping.endDate)})`,
+      );
+    }
+
+    // The days that leave the range (before the new start, after the new end).
+    const day = 24 * 60 * 60 * 1000;
+    const removed: { from: Date; to: Date }[] = [];
+    if (start > range.startDate) {
+      removed.push({
+        from: range.startDate,
+        to: new Date(
+          Math.min(start.getTime(), range.endDate.getTime() + day) - day,
+        ),
+      });
+    }
+    if (end < range.endDate) {
+      removed.push({
+        from: new Date(
+          Math.max(end.getTime() + day, range.startDate.getTime()),
+        ),
+        to: range.endDate,
+      });
+    }
+    if (removed.length > 0) {
+      // A booking stays until its check-out day (not included).
+      const confirmed = await this.bookingModel
+        .exists({
+          status: HotelBookingStatus.CONFIRMED,
+          'rooms.room': room._id,
+          $or: removed.map((part) => ({
+            checkIn: { $lt: new Date(part.to.getTime() + day) },
+            checkOut: { $gt: part.from },
+          })),
+        })
+        .exec();
+      if (confirmed) {
+        throw new ConflictException(
+          'These dates cannot be removed because the room has a confirmed reservation in them',
+        );
+      }
+    }
+
+    range.startDate = start;
+    range.endDate = end;
+    await range.save();
+    return this.toAvailabilityResponse(range);
   }
 
   /**

@@ -45,6 +45,7 @@ import {
   PoliciesResponseDto,
   UpdatePoliciesDto,
 } from './dto/update-policies.dto';
+import { UpdateRoomAvailabilityDto } from './dto/update-room-availability.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { HotelsService } from './hotels.service';
 
@@ -276,7 +277,7 @@ export class HotelsController {
   @ApiOperation({
     summary: 'Remove a bookable date range from a room (HTL-05)',
     description:
-      'Hotel moderator only, and only for the hotel they are assigned to. Not allowed while the room has a confirmed reservation inside the range.',
+      'Extra route (not in the API contract): the contract only has PATCH for availability, which changes dates, and a PATCH cannot remove a whole range cleanly. DELETE removes one bookable range by its id. Hotel moderator only, and only for the hotel they are assigned to. Not allowed while the room has a confirmed reservation inside the range.',
   })
   @ApiOkResponse({
     description: 'The range that was removed',
@@ -340,5 +341,47 @@ export class HotelsController {
   ): Promise<PoliciesResponseDto> {
     // RolesGuard guarantees req.user is set on this route.
     return this.hotelsService.updatePolicies(id, dto, req.user!);
+  }
+
+  @Patch(':id/rooms/:roomId/availability')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Change the dates of a bookable range of a room (HTL-05)',
+    description:
+      'This is the endpoint named in the official API contract (PATCH /api/hotels/:id/rooms/:roomId/availability). Hotel moderator only, and only for the hotel they are assigned to. Send the rangeId and the new startDate and/or endDate (both days included). The new dates must not overlap another bookable range, and days taken out of the range must not have a confirmed reservation. The DELETE route below removes a whole range.',
+  })
+  @ApiOkResponse({
+    description: 'Range updated',
+    type: RoomAvailabilityResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: { endDate: ['End date must be on or after the start date'] },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel, room or range not found' })
+  @ApiConflictResponse({
+    description:
+      'The dates overlap another bookable range, or a confirmed reservation is in the removed days',
+  })
+  updateRoomBookableRange(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Body() dto: UpdateRoomAvailabilityDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomAvailabilityResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.updateRoomBookableRange(
+      id,
+      roomId,
+      dto,
+      req.user!,
+    );
   }
 }
