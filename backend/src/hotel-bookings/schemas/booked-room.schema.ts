@@ -1,9 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Types } from 'mongoose';
+import { Types, Schema as MongooseSchema } from 'mongoose';
 
 @Schema({ _id: false })
 export class BookedRoom {
-  @Prop({ type: Types.ObjectId, ref: 'Room', required: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Room', required: true })
   room!: Types.ObjectId;
 
   @Prop({ required: true, min: 0 })

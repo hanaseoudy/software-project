@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 import { integerValidator, timeRegex } from './validators';
 
 export type HotelDocument = HydratedDocument<Hotel>;
@@ -33,10 +33,10 @@ export class Hotel {
   @Prop({ required: true, trim: true })
   address: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'City', required: true, index: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'City', required: true, index: true })
   city: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Country', required: true, index: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Country', required: true, index: true })
   country: Types.ObjectId;
 
   @Prop({ required: true, min: 1, max: 5, validate: integerValidator })
@@ -64,7 +64,7 @@ export class Hotel {
   @Prop({ type: HotelPolicySchema, default: () => ({}) })
   policies: HotelPolicy;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', unique: true, sparse: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', unique: true, sparse: true })
   moderator?: Types.ObjectId;
 
   @Prop({ default: 0, min: 0, max: 5 })

@@ -113,6 +113,28 @@ examples. Added a 72-byte maximum on passwords so bcrypt never silently
 truncates them. Verified in Swagger and Postman; lint, build, unit and
 E2E tests passed locally.
 ================================================
+================================================
+
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: ChatGPT and Codex
+Related Requirement: FLT-02 (TASK-26)
+Prompt (summary of the conversation):
+I asked AI to help me implement FLT-02, which requires a predefined, read-only airport
+list using the official reference data from GEN-12. I wanted to reuse the existing airport 
+schema and make sure only airports from the official dataset were returned. I also asked AI
+to explain the controller and service, help me test the endpoint using Swagger, and guide me through
+ recovering my work after accidentally merging and reverting Pull Requests on GitHub.
+ How the output was used:
+With Codex's help, I created the airport controller, service, module, and response DTO. The service 
+retrieves airports from MongoDB, sorts them by IATA code, and provides a method to validate airport 
+selections for flight creation and search. I also used ChatGPT to understand the implementation, fix 
+incorrect import paths, and recover my changes on a new feature branch without overwriting my teammates' work.
+Verification performed:
+I successfully ran the unit tests and E2E tests after resolving a Jest ES module compatibility issue
+I also tested GET /api/airports through Swagger and received a 200 OK response containing the predefined 
+airport records. The recovered implementation is working and ready for final review, commit, and Pull Request.
+================================================
 
 ================================================
 Date: 2026-11-07
@@ -141,8 +163,52 @@ email, invalid email, suspended with correct and wrong password). Lint,
 build, unit tests and E2E tests passed locally.
 ================================================
 
+
+================================================
+================================================
+================================================
+
+Date: 2026-11-07
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-01 (TASK-44)
+Prompt (summary of the conversation):
+I asked AI to implement HTL-01 (hotel profile creation by an admin and editing by the
+assigned hotel moderator) on top of the existing Hotel schema in develop. After AI inspected
+the repo and listed the files it would change, I approved the plan. I asked it to reuse the
+existing ModeratorAssignment collection to decide which moderator owns a hotel, and to prepare
+role checks without login because login (ACC-04) is not in develop yet.
+
+How the output was used:
+AI created the hotels controller, service and DTOs (create, update, response), a reusable
+@Roles() decorator and RolesGuard, and unit tests for the service, controller and guard. I
+reviewed the code and updated hotels.module.ts to register the new files and the City, Country
+and ModeratorAssignment models. POST /api/hotels is admin only; PATCH /api/hotels/:id is for the
+assigned hotel moderator only. City and country are validated against the reference data.
+Verification performed:
+Lint and build passed and all unit tests passed under Node 24. E2E tests were not run locally
+(no MongoDB available); they run in CI. Swagger and Postman checks need the login (ACC-04)
+to be merged first.
 ================================================
 Date: 2026-11-08
+Student: Kenzy ellkany
+Tool: Claude
+Related Requirement: GEN-08
+
+Prompt:
+Review my GEN-08 upload code and help me address the reviewer's comments: make the upload
+service reusable without authentication, validate the real image structure, and enforce the
+5-images-per-record and 1-logo-per-airline limits across multiple uploads.
+
+How the output was used:
+Removed the standalone upload routes and the auth dependency, keeping only the public serve
+route. Fixed the served URL to include the /api prefix. Added sharp decoding in UploadsService
+so corrupted or truncated images are rejected, and added file cleanup if a write fails. Added
+saveForOwner() and isStoredUrl() on top of assertWithinLimit() and deleteByUrl(), plus shared
+Multer options (image-upload.options.ts), so the post, activity, hotel and airline owners can
+enforce the per-record limits.
+================================================
+================================================
 Student: Nour Hossam
 Tool: Claude
 Related Requirement: ACC-19 (TASK-109), ACC-04
@@ -164,8 +230,6 @@ Verification:
 Tested in Postman: /me without cookies (401), login sets both cookies with
 HttpOnly and Secure (200), /me after login (200), /me with a fake token (401).
 Lint, build, unit tests and E2E tests passed locally.
-================================================
-================================================
 Date: 2026-11-08
 Student: Nour Hossam
 Tool: Claude
@@ -196,3 +260,75 @@ old copied access token, and refresh after logout (401); idle timeout with a
 temporary 60-second limit (401). Lint, build, unit tests and E2E tests passed
 locally.
 ================================================
+================================================
+Date: 2026-11-08
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: GEN-13 (backend validation; shared ObjectId reference schemas)
+
+Prompt:
+Verify the report that type: Types.ObjectId in NestJS schema decorators
+produces Mixed fields and prevents automatic string-ID query casting.
+After the issue was confirmed, I approved the fix: "okay fix it".
+
+How the output was used:
+Changed 40 reference definitions in 19 schema files to use
+MongooseSchema.Types.ObjectId in @Prop options while retaining
+Types.ObjectId property annotations and existing field options.
+Added regression tests for query casting, existing ObjectId values,
+invalid IDs, and embedded booked-room references. Work is on
+fix/mongoose-objectid-schema, created from the latest origin/develop.
+
+Verification:
+Lint passed. All 20 unit tests passed, including 15 new regression tests.
+An additional check of emitted schema modules verified all 40 corrected
+fields are ObjectId paths, cast valid string IDs, and reject invalid IDs.
+The full application build failed because @nestjs/jwt and cookie-parser
+from the existing develop lockfile are not installed locally. E2E tests
+could not start because @nestjs/jwt is missing. Dependency installation
+was declined. No database was connected to or changed; existing stored
+reference values have not been audited or migrated.
+================================================
+================================================
+Date: 2026-11-08
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: GEN-13 (TASK-108)
+
+Prompt (summary of the conversation):
+Help me complete GEN-13: validation, business rules and authorisation must be
+enforced by the backend, and passwords stored only as salted hashes. Check
+what is already covered and add what is missing as reusable building blocks
+for the team.
+
+How the output was used:
+Confirmed validation (global ValidationPipe with whitelist) and salted bcrypt
+hashing were already in place from ACC-01/ACC-18. Added the missing role-based
+authorisation: a @Roles() decorator, a RolesGuard that returns 403 when the
+logged-in user's role is not allowed (401 if no user), and a @CurrentUser()
+parameter decorator, to be used together with JwtAuthGuard.
+
+Verification:
+Added unit tests for RolesGuard covering no required roles, allowed and
+rejected roles, missing user, controller-level roles and method-level
+overrides. Lint, build, all unit tests (26) and E2E tests passed locally.
+================================================
+================================================
+
+Date: 2026-11-09
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-01 (TASK-44) review fixes
+Prompt (summary of the conversation):
+The team leader reviewed the HTL-01 pull request and found three critical problems: the hotel
+routes did not use JwtAuthGuard and read user.id instead of user.sub; sending null for a
+required field caused a 500; and hotel photos accepted outside links instead of GEN-08 uploads.
+I asked AI to look at the review comment and fix all three.
+
+How the output was used:
+AI added JwtAuthGuard (via AuthModule) in front of RolesGuard, switched the ownership check to
+user.sub, rewrote UpdateHotelDto so a sent null fails validation with a 400, and made create and
+update accept only photos stored by UploadsService (isStoredUrl for the hotel category). I
+reviewed the changes and the new tests.
+Verification performed:
+Lint, build and all unit tests passed under Node 24 (53 tests in the HTL-01 branch).

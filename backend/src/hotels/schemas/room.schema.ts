@@ -1,12 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 import { integerValidator } from './validators';
 
 export type RoomDocument = HydratedDocument<Room>;
 
 @Schema({ timestamps: true })
 export class Room {
-  @Prop({ type: Types.ObjectId, ref: 'Hotel', required: true, index: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Hotel', required: true, index: true })
   hotel: Types.ObjectId;
 
   @Prop({ required: true, trim: true, uppercase: true })
