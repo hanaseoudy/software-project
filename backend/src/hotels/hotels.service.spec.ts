@@ -869,6 +869,119 @@ describe('HotelsService', () => {
     });
   });
 
+  describe('updateRoomBookableRange', () => {
+    const idOf = () => new Types.ObjectId().toString();
+    const range = () => ({
+      _id: new Types.ObjectId(),
+      room: new Types.ObjectId(),
+      hotel: new Types.ObjectId(),
+      type: 'available',
+      startDate: new Date('2026-12-01T00:00:00.000Z'),
+      endDate: new Date('2026-12-31T00:00:00.000Z'),
+      save: jest.fn().mockResolvedValue(undefined),
+    });
+    const setup = (found: ReturnType<typeof range> | null = range()) => {
+      hotelModel.findById.mockReturnValue(execResult(makeHotelDoc()));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+      roomModel.findOne.mockReturnValue(
+        execResult({ _id: new Types.ObjectId() }),
+      );
+      // first lookup: the range itself; second lookup: an overlapping range
+      availabilityModel.findOne
+        .mockReturnValueOnce(execResult(found))
+        .mockReturnValueOnce(execResult(null));
+      bookingModel.exists.mockReturnValue(execResult(null));
+      return found;
+    };
+    const call = (dto: object) =>
+      service.updateRoomBookableRange(
+        idOf(),
+        idOf(),
+        { rangeId: idOf(), ...dto },
+        moderator,
+      );
+
+    it('returns 404 when the hotel does not exist', async () => {
+      hotelModel.findById.mockReturnValue(execResult(null));
+      await expect(call({ endDate: '2026-12-20' })).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('returns 403 when the moderator is not assigned', async () => {
+      setup();
+      assignmentModel.exists.mockReturnValue(execResult(null));
+      await expect(call({ endDate: '2026-12-20' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it('returns 400 when no date is sent', async () => {
+      setup();
+      await expect(call({})).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('returns 404 when the range does not exist', async () => {
+      setup(null);
+      await expect(call({ endDate: '2026-12-20' })).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('returns 400 when the end is before the start', async () => {
+      const found = setup()!;
+      await expect(call({ endDate: '2026-11-20' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(found.save).not.toHaveBeenCalled();
+    });
+
+    it('returns 409 when the new dates overlap another range', async () => {
+      const found = setup()!;
+      availabilityModel.findOne.mockReset();
+      availabilityModel.findOne
+        .mockReturnValueOnce(execResult(found))
+        .mockReturnValueOnce(execResult(range()));
+      await expect(call({ endDate: '2027-01-20' })).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(found.save).not.toHaveBeenCalled();
+    });
+
+    it('returns 409 when a confirmed booking is in the removed days', async () => {
+      const found = setup()!;
+      bookingModel.exists.mockReturnValue(execResult({ _id: 'b' }));
+      await expect(call({ endDate: '2026-12-20' })).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(found.save).not.toHaveBeenCalled();
+    });
+
+    it('saves a shorter range and checks only the removed days', async () => {
+      const found = setup()!;
+      const result = await call({ endDate: '2026-12-20' });
+      expect(found.save).toHaveBeenCalled();
+      expect(result.endDate).toBe('2026-12-20');
+      expect(bookingModel.exists).toHaveBeenCalledWith(
+        expect.objectContaining({
+          $or: [
+            {
+              checkIn: { $lt: new Date('2027-01-01T00:00:00.000Z') },
+              checkOut: { $gt: new Date('2026-12-21T00:00:00.000Z') },
+            },
+          ],
+        }),
+      );
+    });
+
+    it('does not check bookings when the range only grows', async () => {
+      const found = setup()!;
+      await call({ startDate: '2026-11-25', endDate: '2027-01-10' });
+      expect(bookingModel.exists).not.toHaveBeenCalled();
+      expect(found.save).toHaveBeenCalled();
+    });
+  });
+
   describe('removeRoomBookableRange', () => {
     const idOf = () => new Types.ObjectId().toString();
     const range = () => ({

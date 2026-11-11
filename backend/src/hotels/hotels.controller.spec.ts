@@ -16,6 +16,7 @@ describe('HotelsController', () => {
     createRoom: jest.fn(),
     addRoomBookableRange: jest.fn(),
     updateRoom: jest.fn(),
+    updateRoomBookableRange: jest.fn(),
     removeRoomBookableRange: jest.fn(),
   };
 
@@ -56,6 +57,23 @@ describe('HotelsController', () => {
     expect(service.update).toHaveBeenCalledWith(
       'h1',
       { name: 'New name' },
+      user,
+    );
+  });
+
+  it('updateRoomBookableRange passes the ids, body and the authenticated user', async () => {
+    const user = { sub: 'm1', role: 'moderator' };
+    const body = { rangeId: 'r1', endDate: '2026-12-20' };
+    service.updateRoomBookableRange.mockResolvedValue({ id: 'r1' });
+
+    await controller.updateRoomBookableRange('h1', 'room1', body, {
+      user,
+    } as never);
+
+    expect(service.updateRoomBookableRange).toHaveBeenCalledWith(
+      'h1',
+      'room1',
+      body,
       user,
     );
   });
