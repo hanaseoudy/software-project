@@ -324,6 +324,93 @@ describe('HotelsService', () => {
     });
   });
 
+  describe('updatePolicies', () => {
+    const id = () => new Types.ObjectId().toString();
+    const assigned = () => {
+      const doc = makeHotelDoc();
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+      return doc;
+    };
+
+    it('returns 404 when the hotel does not exist', async () => {
+      hotelModel.findById.mockReturnValue(execResult(null));
+      await expect(
+        service.updatePolicies(id(), { checkInTime: '15:00' }, moderator),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('returns 403 when the moderator is not assigned', async () => {
+      const doc = makeHotelDoc();
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      assignmentModel.exists.mockReturnValue(execResult(null));
+      await expect(
+        service.updatePolicies(id(), { checkInTime: '15:00' }, moderator),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(doc.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty body', async () => {
+      const doc = assigned();
+      await expect(
+        service.updatePolicies(id(), {}, moderator),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(doc.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicate tier days and does not save', async () => {
+      const doc = assigned();
+      await expect(
+        service.updatePolicies(
+          id(),
+          {
+            cancellationTiers: [
+              { daysBeforeCheckIn: 7, refundPercentage: 50 },
+              { daysBeforeCheckIn: 7, refundPercentage: 10 },
+            ],
+          },
+          moderator,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(doc.save).not.toHaveBeenCalled();
+    });
+
+    it('saves times and tiers together', async () => {
+      const doc = assigned();
+      const result = await service.updatePolicies(
+        id(),
+        {
+          checkInTime: '15:00',
+          checkOutTime: '11:00',
+          cancellationTiers: [{ daysBeforeCheckIn: 3, refundPercentage: 25 }],
+        },
+        moderator,
+      );
+      expect(doc.save).toHaveBeenCalled();
+      expect(result.checkInTime).toBe('15:00');
+      expect(result.checkOutTime).toBe('11:00');
+      expect(result.cancellationTiers).toEqual([
+        { daysBeforeCheckIn: 3, refundPercentage: 25 },
+      ]);
+    });
+
+    it('keeps the tiers when only a time is sent', async () => {
+      const doc = assigned();
+      doc.policies = {
+        cancellationTiers: [{ daysBeforeCheckIn: 5, refundPercentage: 40 }],
+      };
+      const result = await service.updatePolicies(
+        id(),
+        { checkOutTime: '10:30' },
+        moderator,
+      );
+      expect(result.checkOutTime).toBe('10:30');
+      expect(result.cancellationTiers).toEqual([
+        { daysBeforeCheckIn: 5, refundPercentage: 40 },
+      ]);
+    });
+  });
+
   describe('setCancellationTiers', () => {
     const idOf = () => new Types.ObjectId().toString();
     const tiers = [
