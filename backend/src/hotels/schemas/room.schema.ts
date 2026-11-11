@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
 import { integerValidator } from './validators';
+import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants'; // <-- NEW
 
 export type RoomDocument = HydratedDocument<Room>;
 
@@ -22,7 +23,10 @@ export class Room {
   maxOccupancy: number;
 
   @Prop({ required: true, min: 0.01 })
-  pricePerNight: number;
+  pricePerNight: number; // USD (platform currency, PAY-04)
+
+  @Prop({ required: true, default: PLATFORM_CURRENCY, enum: [PLATFORM_CURRENCY] }) // <-- NEW
+  currency: string; // PAY-04: always USD                                           // <-- NEW
 
   @Prop({ default: true })
   isActive: boolean;
