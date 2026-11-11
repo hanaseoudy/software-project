@@ -140,6 +140,26 @@ airport records. The recovered implementation is working and ready for final rev
 Date: 2026-11-07
 Student: Nour Hossam
 Tool: Claude
+Related Requirement: ACC-18 (TASK-105)
+
+Prompt (summary of the conversation):
+Help me implement admin-account seeding (ACC-18): admin accounts are created
+by a setup command instead of self-registration, following the same pattern
+as the existing reference-data seed.
+
+How the output was used:
+Used the generated admin.seed.ts and the seed:admin npm script after
+reviewing them against ACC-18. Admin details come from ADMIN_* environment
+variables (placeholders documented in .env.example), the password follows
+the registration rules and is hashed with bcrypt (GEN-13). The command is
+safe to rerun and refuses to promote an existing non-admin account.
+Self-registration already forces the user role (ACC-01 whitelist).
+
+Verification:
+Ran npm run seed:admin twice (created, then "already exists"), checked the
+refusal for an existing non-admin email, and confirmed in Postman that
+registering with "role": "admin" still creates a normal user. Lint, build,
+unit tests and E2E tests passed locally.
 Related Requirement: ACC-04 (TASK-11)
 
 Prompt (summary of the conversation):
@@ -161,12 +181,8 @@ Verification:
 Tested POST /api/auth/login in Postman (success, wrong password, unknown
 email, invalid email, suspended with correct and wrong password). Lint,
 build, unit tests and E2E tests passed locally.
-================================================
 
 
-================================================
-================================================
-================================================
 
 Date: 2026-11-07
 Student: Mariam Haithem
@@ -189,7 +205,6 @@ Verification performed:
 Lint and build passed and all unit tests passed under Node 24. E2E tests were not run locally
 (no MongoDB available); they run in CI. Swagger and Postman checks need the login (ACC-04)
 to be merged first.
-================================================
 Date: 2026-11-08
 Student: Kenzy ellkany
 Tool: Claude
@@ -207,8 +222,6 @@ so corrupted or truncated images are rejected, and added file cleanup if a write
 saveForOwner() and isStoredUrl() on top of assertWithinLimit() and deleteByUrl(), plus shared
 Multer options (image-upload.options.ts), so the post, activity, hotel and airline owners can
 enforce the per-record limits.
-================================================
-================================================
 Student: Nour Hossam
 Tool: Claude
 Related Requirement: ACC-19 (TASK-109), ACC-04
@@ -259,8 +272,6 @@ Tested in Postman: login, /me, refresh (200); logout (200); /me, /me with the
 old copied access token, and refresh after logout (401); idle timeout with a
 temporary 60-second limit (401). Lint, build, unit tests and E2E tests passed
 locally.
-================================================
-================================================
 Date: 2026-11-08
 Student: Hana Seoudy
 Tool: Codex
@@ -288,8 +299,6 @@ from the existing develop lockfile are not installed locally. E2E tests
 could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
-================================================
-================================================
 Date: 2026-11-08
 Student: Nour Hossam
 Tool: Claude
@@ -312,8 +321,6 @@ Verification:
 Added unit tests for RolesGuard covering no required roles, allowed and
 rejected roles, missing user, controller-level roles and method-level
 overrides. Lint, build, all unit tests (26) and E2E tests passed locally.
-================================================
-================================================
 
 Date: 2026-11-09
 Student: Mariam Haithem
