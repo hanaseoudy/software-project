@@ -373,3 +373,20 @@ update accept only photos stored by UploadsService (isStoredUrl for the hotel ca
 reviewed the changes and the new tests.
 Verification performed:
 Lint, build and all unit tests passed under Node 24 (53 tests in the HTL-01 branch).
+
+Date: 2026-11-11
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-09 / HTL-10 (TASK-51, TASK-52) - contract endpoint PUT /api/hotels/:id/policies
+Prompt (summary of the conversation):
+The team leader said the official API contract endpoints must exist (extra endpoints are allowed only
+with a reason). The contract lists PUT /api/hotels/:id/policies for the hotel policies, but the code only
+had PUT /check-times and PUT /cancellation-tiers. I asked AI to add the missing endpoint.
+
+How the output was used:
+AI added PUT /api/hotels/:id/policies (moderator of that hotel only). It accepts checkInTime, checkOutTime
+and cancellationTiers in one body; fields that are not sent stay unchanged; an empty body is a 400; the
+tier rules and error format are the same as HTL-10. The two shorter routes are kept as convenience
+routes for one part only. I reviewed the code and the new tests.
+Verification performed:
+Lint, build and all hotel unit tests passed under Node 24.
