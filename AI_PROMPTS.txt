@@ -274,3 +274,29 @@ update accept only photos stored by UploadsService (isStoredUrl for the hotel ca
 reviewed the changes and the new tests.
 Verification performed:
 Lint, build and all unit tests passed under Node 24 (53 tests in the HTL-01 branch).
+================================================
+Date: 2026-11-11
+Student: Seif Allam
+Tool: ChatGPT (OpenAI)
+Related Requirement: ITN-01 (TASK-67), ACC-04, GEN-12
+
+Prompt (summary of the conversation):
+Help me implement itinerary CRUD in NestJS and Mongoose with JWT-protected
+create, update and delete endpoints, title/country/date validation, ownership
+checks and PRIVATE visibility by default. Help me test the API using Swagger
+and Postman. Address team leader feedback about null values in PATCH,
+invalid calendar dates, duplicate/lowercase/unknown country codes,
+consistent validation errors and deletion of dependent records.
+
+How the output was used:
+Used ChatGPT guidance to prepare itinerary controller, service, module and
+DTOs, and to troubleshoot authentication, reference-data seeding and API
+testing. ChatGPT provided revised DTOs, a strict calendar-date validator
+and service changes to reject null/invalid dates and country selections
+with clearer error messages. Related-record and image cleanup on deletion
+was identified as requiring further schema and upload-service review.
+
+Verification status:
+Build and endpoint tests for the latest validation changes have not yet
+been confirmed. Deletion cleanup remains pending; do not mark it complete.
+================================================
