@@ -20,6 +20,7 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Travel Booking API')
+    .setDescription('All monetary amounts for flights, hotels, payments and refunds are in USD, the single platform currency (PAY-04).')
     .setVersion('1.0')
     .addCookieAuth(ACCESS_COOKIE)
     .build();
