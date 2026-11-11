@@ -6,6 +6,19 @@ import {
   RoomAvailability,
   RoomAvailabilitySchema,
 } from './schemas/room-availability.schema';
+import { City, CitySchema } from '../reference-data/schemas/city.schema';
+import {
+  Country,
+  CountrySchema,
+} from '../reference-data/schemas/country.schema';
+import {
+  ModeratorAssignment,
+  ModeratorAssignmentSchema,
+} from '../users/schemas/moderatorassignment.schema';
+import { AuthModule } from '../auth/auth.module';
+import { UploadsModule } from '../uploads/uploads.module';
+import { HotelsController } from './hotels.controller';
+import { HotelsService } from './hotels.service';
 
 @Module({
   imports: [
@@ -13,8 +26,15 @@ import {
       { name: Hotel.name, schema: HotelSchema },
       { name: Room.name, schema: RoomSchema },
       { name: RoomAvailability.name, schema: RoomAvailabilitySchema },
+      { name: City.name, schema: CitySchema },
+      { name: Country.name, schema: CountrySchema },
+      { name: ModeratorAssignment.name, schema: ModeratorAssignmentSchema },
     ]),
+    AuthModule, // JwtAuthGuard
+    UploadsModule, // UploadsService.isStoredUrl for hotel photos (GEN-08)
   ],
-  exports: [MongooseModule],
+  controllers: [HotelsController],
+  providers: [HotelsService],
+  exports: [MongooseModule, HotelsService],
 })
 export class HotelsModule {}
