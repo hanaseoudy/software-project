@@ -7,7 +7,11 @@ import { HotelsService } from './hotels.service';
 
 describe('HotelsController', () => {
   let controller: HotelsController;
-  const service = { create: jest.fn(), update: jest.fn() };
+  const service = {
+    create: jest.fn(),
+    update: jest.fn(),
+    updateCheckTimes: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.resetAllMocks();
@@ -48,5 +52,15 @@ describe('HotelsController', () => {
       { name: 'New name' },
       user,
     );
+  });
+
+  it('updateCheckTimes passes the id, body and the authenticated user', async () => {
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
+    const body = { checkInTime: '15:00', checkOutTime: '11:00' };
+    service.updateCheckTimes.mockResolvedValue({ id: 'h1' });
+
+    await controller.updateCheckTimes('h1', body, { user } as never);
+
+    expect(service.updateCheckTimes).toHaveBeenCalledWith('h1', body, user);
   });
 });

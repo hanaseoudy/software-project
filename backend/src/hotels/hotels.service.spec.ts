@@ -258,4 +258,52 @@ describe('HotelsService', () => {
       expect(doc.save).not.toHaveBeenCalled();
     });
   });
+
+  describe('updateCheckTimes', () => {
+    const dto = { checkInTime: '15:00', checkOutTime: '11:00' };
+
+    it('returns 404 when the hotel does not exist', async () => {
+      hotelModel.findById.mockReturnValue(execResult(null));
+      await expect(
+        service.updateCheckTimes(
+          new Types.ObjectId().toString(),
+          dto,
+          moderator,
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('returns 403 when the moderator is not assigned to the hotel', async () => {
+      const doc = makeHotelDoc();
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      assignmentModel.exists.mockReturnValue(execResult(null));
+
+      await expect(
+        service.updateCheckTimes(
+          new Types.ObjectId().toString(),
+          dto,
+          moderator,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(doc.save).not.toHaveBeenCalled();
+    });
+
+    it('saves both times for the assigned moderator', async () => {
+      const doc = makeHotelDoc();
+      hotelModel.findById.mockReturnValue(execResult(doc));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+
+      const result = await service.updateCheckTimes(
+        new Types.ObjectId().toString(),
+        dto,
+        moderator,
+      );
+
+      expect(doc.checkInTime).toBe('15:00');
+      expect(doc.checkOutTime).toBe('11:00');
+      expect(doc.save).toHaveBeenCalled();
+      expect(result.checkInTime).toBe('15:00');
+      expect(result.checkOutTime).toBe('11:00');
+    });
+  });
 });
