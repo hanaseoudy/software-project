@@ -163,6 +163,32 @@ email, invalid email, suspended with correct and wrong password). Lint,
 build, unit tests and E2E tests passed locally.
 ================================================
 
+
+================================================
+================================================
+================================================
+
+Date: 2026-11-07
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-01 (TASK-44)
+Prompt (summary of the conversation):
+I asked AI to implement HTL-01 (hotel profile creation by an admin and editing by the
+assigned hotel moderator) on top of the existing Hotel schema in develop. After AI inspected
+the repo and listed the files it would change, I approved the plan. I asked it to reuse the
+existing ModeratorAssignment collection to decide which moderator owns a hotel, and to prepare
+role checks without login because login (ACC-04) is not in develop yet.
+
+How the output was used:
+AI created the hotels controller, service and DTOs (create, update, response), a reusable
+@Roles() decorator and RolesGuard, and unit tests for the service, controller and guard. I
+reviewed the code and updated hotels.module.ts to register the new files and the City, Country
+and ModeratorAssignment models. POST /api/hotels is admin only; PATCH /api/hotels/:id is for the
+assigned hotel moderator only. City and country are validated against the reference data.
+Verification performed:
+Lint and build passed and all unit tests passed under Node 24. E2E tests were not run locally
+(no MongoDB available); they run in CI. Swagger and Postman checks need the login (ACC-04)
+to be merged first.
 ================================================
 Date: 2026-11-08
 Student: Kenzy ellkany
@@ -244,3 +270,43 @@ reference values have not been audited or migrated.
    Used the explanations and corrections to write the DTOs, service and
    controller myself. Reviewed and adjusted every snippet before committing.
    ================================================
+Date: 2026-11-08
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: GEN-13 (TASK-108)
+
+Prompt (summary of the conversation):
+Help me complete GEN-13: validation, business rules and authorisation must be
+enforced by the backend, and passwords stored only as salted hashes. Check
+what is already covered and add what is missing as reusable building blocks
+for the team.
+
+How the output was used:
+Confirmed validation (global ValidationPipe with whitelist) and salted bcrypt
+hashing were already in place from ACC-01/ACC-18. Added the missing role-based
+authorisation: a @Roles() decorator, a RolesGuard that returns 403 when the
+logged-in user's role is not allowed (401 if no user), and a @CurrentUser()
+parameter decorator, to be used together with JwtAuthGuard.
+
+Verification:
+Added unit tests for RolesGuard covering no required roles, allowed and
+rejected roles, missing user, controller-level roles and method-level
+overrides. Lint, build, all unit tests (26) and E2E tests passed locally.
+
+Date: 2026-11-09
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-01 (TASK-44) review fixes
+Prompt (summary of the conversation):
+The team leader reviewed the HTL-01 pull request and found three critical problems: the hotel
+routes did not use JwtAuthGuard and read user.id instead of user.sub; sending null for a
+required field caused a 500; and hotel photos accepted outside links instead of GEN-08 uploads.
+I asked AI to look at the review comment and fix all three.
+
+How the output was used:
+AI added JwtAuthGuard (via AuthModule) in front of RolesGuard, switched the ownership check to
+user.sub, rewrote UpdateHotelDto so a sent null fails validation with a 400, and made create and
+update accept only photos stored by UploadsService (isStoredUrl for the hotel category). I
+reviewed the changes and the new tests.
+Verification performed:
+Lint, build and all unit tests passed under Node 24 (53 tests in the HTL-01 branch).
