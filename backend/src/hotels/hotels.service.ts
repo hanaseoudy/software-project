@@ -37,6 +37,10 @@ import {
   UpdateCancellationTiersDto,
 } from './dto/update-cancellation-tiers.dto';
 import { UpdateCheckTimesDto } from './dto/update-check-times.dto';
+import {
+  PoliciesResponseDto,
+  UpdatePoliciesDto,
+} from './dto/update-policies.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { UploadsService } from '../uploads/uploads.service';
@@ -161,6 +165,68 @@ export class HotelsService {
         daysBeforeCheckIn: tier.daysBeforeCheckIn,
         refundPercentage: tier.refundPercentage,
       })),
+    };
+  }
+
+  /**
+   * HTL-09 + HTL-10 (contract: PUT /hotels/:id/policies): check-in/out times and
+   * cancellation tiers in one request. Fields that are not sent are left unchanged.
+   */
+  async updatePolicies(
+    id: string,
+    dto: UpdatePoliciesDto,
+    user: AuthPayload,
+  ): Promise<PoliciesResponseDto> {
+    const hotel = await this.findHotelOrFail(id);
+    await this.assertModeratorOwnsHotel(user, hotel);
+
+    if (
+      dto.checkInTime === undefined &&
+      dto.checkOutTime === undefined &&
+      dto.cancellationTiers === undefined
+    ) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: {
+          policies: [
+            'Send at least one of checkInTime, checkOutTime or cancellationTiers',
+          ],
+        },
+      });
+    }
+
+    if (dto.cancellationTiers !== undefined) {
+      const problems = this.findTierProblems(dto.cancellationTiers);
+      if (problems.length > 0) {
+        throw new BadRequestException({
+          message: 'Validation failed',
+          errors: { cancellationTiers: problems },
+        });
+      }
+    }
+
+    if (dto.checkInTime !== undefined) hotel.checkInTime = dto.checkInTime;
+    if (dto.checkOutTime !== undefined) hotel.checkOutTime = dto.checkOutTime;
+    if (dto.cancellationTiers !== undefined) {
+      hotel.policies = {
+        cancellationTiers: dto.cancellationTiers.map((tier) => ({
+          daysBeforeCheckIn: tier.daysBeforeCheckIn,
+          refundPercentage: tier.refundPercentage,
+        })),
+      };
+    }
+    await hotel.save();
+
+    return {
+      id: hotel._id.toString(),
+      checkInTime: hotel.checkInTime,
+      checkOutTime: hotel.checkOutTime,
+      cancellationTiers: (hotel.policies?.cancellationTiers ?? []).map(
+        (tier) => ({
+          daysBeforeCheckIn: tier.daysBeforeCheckIn,
+          refundPercentage: tier.refundPercentage,
+        }),
+      ),
     };
   }
 
