@@ -1,20 +1,20 @@
 import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 import { BookingType, PaymentStatus } from '../enums/payment.enums';
 
 export type PaymentDocument = HydratedDocument<Payment>;
 
 @Schema({ timestamps: true })
 export class Payment {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
   userId: Types.ObjectId;
 
   @Prop({ type: String, enum: BookingType, required: true })
   bookingType: BookingType;
 
   @Prop({
-    type: Types.ObjectId,
+    type: MongooseSchema.Types.ObjectId,
     required: true,
     refPath: 'bookingModel',
     index: true,

@@ -1,6 +1,6 @@
 import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 import { BookedRoom, BookedRoomSchema } from './booked-room.schema';
 
 export enum HotelBookingStatus {
@@ -18,10 +18,10 @@ export class HotelBooking {
   @Prop({ unique: true, sparse: true })
   bookingReference?: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
   user!: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Hotel', required: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Hotel', required: true })
   hotel!: Types.ObjectId;
 
   @Prop({ type: [BookedRoomSchema], required: true })

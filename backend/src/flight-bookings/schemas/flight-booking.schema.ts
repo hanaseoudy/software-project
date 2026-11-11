@@ -1,6 +1,6 @@
 import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document, Types, Schema as MongooseSchema } from 'mongoose';
 import { Passenger, PassengerSchema } from './passenger.schema';
 
 export enum FlightBookingStatus {
@@ -20,13 +20,13 @@ export enum CabinClass {
 
 @Schema({ timestamps: true })
 export class FlightBooking extends Document {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
   user: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Flight', required: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Flight', required: true })
   outboundFlight: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Flight' })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Flight' })
   returnFlight?: Types.ObjectId;
 
   @Prop({ required: true, enum: ['ONE_WAY', 'ROUND_TRIP'] })
@@ -68,7 +68,7 @@ export class FlightBooking extends Document {
   @Prop()
   holdExpiresAt?: Date;
 
-  @Prop({ type: Types.ObjectId, ref: 'Payment' })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Payment' })
   payment?: Types.ObjectId;
 
   @Prop()
@@ -83,7 +83,7 @@ export class FlightBooking extends Document {
   @Prop()
   cancellationReason?: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Refund' })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Refund' })
   refund?: Types.ObjectId;
 }
 
