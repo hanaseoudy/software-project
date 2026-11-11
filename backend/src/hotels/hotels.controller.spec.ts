@@ -11,6 +11,7 @@ describe('HotelsController', () => {
     create: jest.fn(),
     update: jest.fn(),
     updateCheckTimes: jest.fn(),
+    updatePolicies: jest.fn(),
     setCancellationTiers: jest.fn(),
   };
 
@@ -53,6 +54,16 @@ describe('HotelsController', () => {
       { name: 'New name' },
       user,
     );
+  });
+
+  it('updatePolicies passes the id, body and the authenticated user', async () => {
+    const user = { sub: 'm1', role: 'moderator' };
+    const body = { checkInTime: '15:00' };
+    service.updatePolicies.mockResolvedValue({ id: 'h1' });
+
+    await controller.updatePolicies('h1', body, { user } as never);
+
+    expect(service.updatePolicies).toHaveBeenCalledWith('h1', body, user);
   });
 
   it('updateCheckTimes passes the id, body and the authenticated user', async () => {
