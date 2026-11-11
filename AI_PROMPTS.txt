@@ -207,7 +207,8 @@ so corrupted or truncated images are rejected, and added file cleanup if a write
 saveForOwner() and isStoredUrl() on top of assertWithinLimit() and deleteByUrl(), plus shared
 Multer options (image-upload.options.ts), so the post, activity, hotel and airline owners can
 enforce the per-record limits.
-
+================================================
+================================================
 Student: Nour Hossam
 Tool: Claude
 Related Requirement: ACC-19 (TASK-109), ACC-04
@@ -229,6 +230,37 @@ Verification:
 Tested in Postman: /me without cookies (401), login sets both cookies with
 HttpOnly and Secure (200), /me after login (200), /me with a fake token (401).
 Lint, build, unit tests and E2E tests passed locally.
+Date: 2026-11-08
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-06 (TASK-13), ACC-19
+
+Prompt (summary of the conversation):
+Help me implement ACC-06: logout that clears the auth cookies and revokes the
+refresh token on the server, and expire a session after 30 minutes with no
+authenticated request. Then help debug why /auth/me returned 401 right after
+login.
+
+How the output was used:
+Used the generated Session schema, refresh and logout endpoints, and the
+updated JwtAuthGuard after reviewing them against ACC-06. Each login creates
+a server-side session; tokens carry its id. The guard records lastActivityAt
+on every authenticated request and rejects sessions idle for 30 minutes.
+Refresh rotates both tokens and revokes the session if an old refresh token
+is reused. Logout revokes the session (killing both tokens immediately) and
+clears the cookies.
+Debugging found that @Prop({ type: Types.ObjectId }) creates a Mixed field in
+NestJS, so string ids are never cast and queries silently match nothing.
+Fixed in the Session schema with Schema.Types.ObjectId and reported to the
+team, since other schemas use the same pattern.
+
+Verification:
+Tested in Postman: login, /me, refresh (200); logout (200); /me, /me with the
+old copied access token, and refresh after logout (401); idle timeout with a
+temporary 60-second limit (401). Lint, build, unit tests and E2E tests passed
+locally.
+================================================
+================================================
 Date: 2026-11-08
 Student: Hana Seoudy
 Tool: Codex
@@ -256,6 +288,8 @@ from the existing develop lockfile are not installed locally. E2E tests
 could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
+================================================
+================================================
 Date: 2026-11-08
 Student: Nour Hossam
 Tool: Claude
@@ -278,6 +312,8 @@ Verification:
 Added unit tests for RolesGuard covering no required roles, allowed and
 rejected roles, missing user, controller-level roles and method-level
 overrides. Lint, build, all unit tests (26) and E2E tests passed locally.
+================================================
+================================================
 
 Date: 2026-11-09
 Student: Mariam Haithem

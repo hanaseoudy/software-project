@@ -4,18 +4,33 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import type { Response } from 'express';
 import { AccountStatus, User, UserDocument, UserRole } from '../users/schemas/user.schema';
 import { ModeratorAssignment, ModeratorAssignmentDocument } from '../users/schemas/moderatorassignment.schema';
+import { Session, SessionDocument } from './schemas/session.schema';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { ACCESS_COOKIE, REFRESH_COOKIE, REFRESH_COOKIE_PATH, authCookieOptions } from './auth.cookies';
+import {
+  ACCESS_COOKIE,
+  REFRESH_COOKIE,
+  REFRESH_COOKIE_PATH,
+  authCookieOptions,
+  clearCookieOptions,
+} from './auth.cookies';
+
+interface RefreshPayload {
+  sub: string;
+  sid: string;
+  jti: string;
+}
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(ModeratorAssignment.name) private assignmentModel: Model<ModeratorAssignmentDocument>,
+    @InjectModel(Session.name) private sessionModel: Model<SessionDocument>,
     private jwtService: JwtService,
     private config: ConfigService,
   ) {}
@@ -68,23 +83,68 @@ export class AuthService {
       throw this.invalidCredentials();
     }
 
-    const sub = user._id.toString();
-    const accessToken = await this.jwtService.signAsync(
-      { sub, role: user.role },
-      { secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'), expiresIn: this.accessTtl() },
-    );
-    const refreshToken = await this.jwtService.signAsync(
-      { sub },
-      { secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'), expiresIn: this.refreshTtl() },
-    );
+    const session = await this.sessionModel.create({
+      user: user._id,
+      refreshJti: randomUUID(),
+      lastActivityAt: new Date(),
+      expiresAt: this.refreshExpiry(),
+    });
+    const tokens = await this.signTokens(session, user);
 
-    return { user: await this.toAuthUser(user), accessToken, refreshToken };
+    return { user: await this.toAuthUser(user), ...tokens };
+  }
+
+  async refresh(refreshToken: string | undefined) {
+    if (!refreshToken) {
+      throw this.notAuthenticated();
+    }
+
+    let payload: RefreshPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<RefreshPayload>(refreshToken, {
+        secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw this.notAuthenticated();
+    }
+
+    const session = await this.sessionModel.findOne({ _id: payload.sid, user: payload.sub });
+    if (!session || session.revokedAt) {
+      throw this.notAuthenticated();
+    }
+
+    const idle = session.lastActivityAt.getTime() <= Date.now() - this.idleTtl() * 1000;
+    const reused = session.refreshJti !== payload.jti;
+    const user = await this.userModel.findById(payload.sub);
+
+    if (idle || reused || !user || user.status !== AccountStatus.ACTIVE) {
+      session.revokedAt = new Date();
+      await session.save();
+      throw this.notAuthenticated();
+    }
+
+    session.refreshJti = randomUUID();
+    session.expiresAt = this.refreshExpiry();
+    await session.save();
+    const tokens = await this.signTokens(session, user);
+
+    return { user: await this.toAuthUser(user), ...tokens };
+  }
+
+  async logout(accessToken: string | undefined, refreshToken: string | undefined) {
+    const sessionId =
+      (await this.readSessionId(accessToken, 'JWT_ACCESS_SECRET')) ??
+      (await this.readSessionId(refreshToken, 'JWT_REFRESH_SECRET'));
+
+    if (sessionId) {
+      await this.sessionModel.updateOne({ _id: sessionId, revokedAt: null }, { $set: { revokedAt: new Date() } });
+    }
   }
 
   async me(userId: string) {
     const user = await this.userModel.findById(userId);
     if (!user || user.status !== AccountStatus.ACTIVE) {
-      throw new UnauthorizedException('Not authenticated');
+      throw this.notAuthenticated();
     }
     return this.toAuthUser(user);
   }
@@ -92,6 +152,42 @@ export class AuthService {
   setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
     res.cookie(ACCESS_COOKIE, accessToken, authCookieOptions(this.accessTtl()));
     res.cookie(REFRESH_COOKIE, refreshToken, authCookieOptions(this.refreshTtl(), REFRESH_COOKIE_PATH));
+  }
+
+  clearAuthCookies(res: Response) {
+    res.clearCookie(ACCESS_COOKIE, clearCookieOptions());
+    res.clearCookie(REFRESH_COOKIE, clearCookieOptions(REFRESH_COOKIE_PATH));
+  }
+
+  private async signTokens(session: SessionDocument, user: UserDocument) {
+    const sub = user._id.toString();
+    const sid = session._id.toString();
+
+    const accessToken = await this.jwtService.signAsync(
+      { sub, role: user.role, sid },
+      { secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'), expiresIn: this.accessTtl() },
+    );
+    const refreshToken = await this.jwtService.signAsync(
+      { sub, sid, jti: session.refreshJti },
+      { secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'), expiresIn: this.refreshTtl() },
+    );
+
+    return { accessToken, refreshToken };
+  }
+
+  private async readSessionId(token: string | undefined, secretKey: string) {
+    if (!token) {
+      return null;
+    }
+    try {
+      const payload = await this.jwtService.verifyAsync<{ sid?: string }>(token, {
+        secret: this.config.getOrThrow<string>(secretKey),
+        ignoreExpiration: true,
+      });
+      return payload.sid ?? null;
+    } catch {
+      return null;
+    }
   }
 
   private async toAuthUser(user: UserDocument) {
@@ -112,12 +208,20 @@ export class AuthService {
     };
   }
 
+  private refreshExpiry() {
+    return new Date(Date.now() + this.refreshTtl() * 1000);
+  }
+
   private accessTtl() {
     return Number(this.config.get('JWT_ACCESS_TTL_SECONDS') ?? 900);
   }
 
   private refreshTtl() {
     return Number(this.config.get('JWT_REFRESH_TTL_SECONDS') ?? 1800);
+  }
+
+  private idleTtl() {
+    return Number(this.config.get('SESSION_IDLE_TIMEOUT_SECONDS') ?? 1800);
   }
 
   private emailTaken() {
@@ -129,5 +233,9 @@ export class AuthService {
 
   private invalidCredentials() {
     return new UnauthorizedException('Invalid email or password');
+  }
+
+  private notAuthenticated() {
+    return new UnauthorizedException('Not authenticated');
   }
 }
