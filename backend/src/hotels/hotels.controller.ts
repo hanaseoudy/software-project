@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiCookieAuth,
   ApiCreatedResponse,
   ApiForbiddenResponse,
@@ -28,7 +29,9 @@ import {
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
+import { CreateRoomDto } from './dto/create-room.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
+import { RoomResponseDto } from './dto/room-response.dto';
 import {
   CancellationTiersResponseDto,
   UpdateCancellationTiersDto,
@@ -161,6 +164,41 @@ export class HotelsController {
   ): Promise<CancellationTiersResponseDto> {
     // RolesGuard guarantees req.user is set on this route.
     return this.hotelsService.setCancellationTiers(id, dto, req.user!);
+  }
+
+  @Post(':id/rooms')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Add a room to the hotel (HTL-03)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. The room number must be unique within the hotel (saved in capital letters).',
+  })
+  @ApiCreatedResponse({ description: 'Room created', type: RoomResponseDto })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: {
+        beds: ['Beds must be at least 1'],
+        pricePerNight: ['Price per night must be more than 0'],
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel not found' })
+  @ApiConflictResponse({
+    description: 'A room with this number already exists in the hotel',
+  })
+  createRoom(
+    @Param('id') id: string,
+    @Body() dto: CreateRoomDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.createRoom(id, dto, req.user!);
   }
 
   @Put(':id/policies')

@@ -13,6 +13,7 @@ describe('HotelsController', () => {
     updateCheckTimes: jest.fn(),
     updatePolicies: jest.fn(),
     setCancellationTiers: jest.fn(),
+    createRoom: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -84,5 +85,21 @@ describe('HotelsController', () => {
     await controller.setCancellationTiers('h1', body, { user } as never);
 
     expect(service.setCancellationTiers).toHaveBeenCalledWith('h1', body, user);
+  });
+
+  it('createRoom passes the hotel id, body and the authenticated user', async () => {
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
+    const body = {
+      roomNumber: 'A101',
+      type: 'Double',
+      beds: 2,
+      maxOccupancy: 3,
+      pricePerNight: 1500,
+    };
+    service.createRoom.mockResolvedValue({ id: 'r1' });
+
+    await controller.createRoom('h1', body, { user } as never);
+
+    expect(service.createRoom).toHaveBeenCalledWith('h1', body, user);
   });
 });

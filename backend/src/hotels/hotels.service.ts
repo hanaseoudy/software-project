@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -14,7 +15,9 @@ import {
   ProviderType,
 } from '../users/schemas/moderatorassignment.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
+import { CreateRoomDto } from './dto/create-room.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
+import { RoomResponseDto } from './dto/room-response.dto';
 import {
   CancellationTiersResponseDto,
   UpdateCancellationTiersDto,
@@ -28,11 +31,13 @@ import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { UploadsService } from '../uploads/uploads.service';
 import { ImageCategory } from '../uploads/uploads.constants';
 import { Hotel, HotelDocument } from './schemas/hotel.schema';
+import { Room, RoomDocument } from './schemas/room.schema';
 
 @Injectable()
 export class HotelsService {
   constructor(
     @InjectModel(Hotel.name) private readonly hotelModel: Model<Hotel>,
+    @InjectModel(Room.name) private readonly roomModel: Model<Room>,
     @InjectModel(City.name) private readonly cityModel: Model<City>,
     @InjectModel(Country.name) private readonly countryModel: Model<Country>,
     @InjectModel(ModeratorAssignment.name)
@@ -245,6 +250,57 @@ await this.assertImagesAreUploads(dto.images);
     });
 
     return problems;
+  }
+
+  /** HTL-03: the assigned moderator adds an individually bookable room. */
+  async createRoom(
+    hotelId: string,
+    dto: CreateRoomDto,
+    user: AuthPayload,
+  ): Promise<RoomResponseDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+
+    // Room numbers are saved in capital letters, so compare them the same way.
+    const roomNumber = dto.roomNumber.trim().toUpperCase();
+    const duplicateMessage = `Room ${roomNumber} already exists in this hotel`;
+    const existing = await this.roomModel
+      .exists({ hotel: hotel._id, roomNumber })
+      .exec();
+    if (existing) {
+      throw new ConflictException(duplicateMessage);
+    }
+
+    try {
+      const room = await this.roomModel.create({
+        hotel: hotel._id,
+        roomNumber,
+        type: dto.type,
+        beds: dto.beds,
+        maxOccupancy: dto.maxOccupancy,
+        pricePerNight: dto.pricePerNight,
+      });
+      return this.toRoomResponse(room);
+    } catch (error) {
+      // Two requests can pass the check above together; the unique index catches the second.
+      if ((error as { code?: number }).code === 11000) {
+        throw new ConflictException(duplicateMessage);
+      }
+      throw error;
+    }
+  }
+
+  private toRoomResponse(room: RoomDocument): RoomResponseDto {
+    return {
+      id: room._id.toString(),
+      hotelId: room.hotel.toString(),
+      roomNumber: room.roomNumber,
+      type: room.type,
+      beds: room.beds,
+      maxOccupancy: room.maxOccupancy,
+      pricePerNight: room.pricePerNight,
+      isActive: room.isActive,
+    };
   }
 
   private async findHotelOrFail(id: string): Promise<HotelDocument> {
