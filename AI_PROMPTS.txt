@@ -465,3 +465,20 @@ tier rules and error format are the same as HTL-10. The two shorter routes are k
 routes for one part only. I reviewed the code and the new tests.
 Verification performed:
 Lint, build and all hotel unit tests passed under Node 24.
+
+================================================
+Date: 2026-11-12
+Student: Kenzy
+Tool: Claude
+Related Requirement: GEN-01
+Prompt:
+I need to verify the in-app notifications requirement (GEN-01). Please guide me
+step by step to test my NotificationsService with Postman, and help me fix the
+errors I get.
+How the output was used:
+Used the explanation to temporarily add a controller and test the service
+(list, unread count, mark one as read, mark all as read) in Postman. After the
+reviewer's feedback, the controller and the AuthModule import were removed, so
+the PR only contains the schema, enum and reusable NotificationsService.
+Postman screenshots are attached to the PR as verification only.
+================================================
