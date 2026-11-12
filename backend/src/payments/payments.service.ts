@@ -46,6 +46,8 @@ interface PayableBooking {
   user: Types.ObjectId;
   status: string;
   totalPrice: number;
+  /** Flight bookings only: baggage is kept apart from the seat fares (FLT-21 total = fares + baggage). */
+  baggageFees?: number;
   holdExpiresAt?: Date;
   policiesAcceptedAt?: Date;
 }
@@ -72,47 +74,35 @@ export class PaymentsService {
     this.confirmedHandlers.push(handler);
   }
 
-  /** PAY-01: create a Stripe PaymentIntent for the caller's Pending Payment booking. */
+  /**
+   * PAY-01: create a Stripe PaymentIntent for the caller's Pending Payment booking.
+   * A booking has exactly one payment record, whose ID is the booking ID, so two
+   * requests at the same time can never create two payments (no double charge).
+   */
   async create(userId: string, dto: CreatePaymentDto): Promise<PaymentSessionResponseDto> {
     const stripe = this.requireStripe();
     const booking = await this.findPayableBooking(dto.bookingType, dto.bookingId, userId);
+    const payment = await this.findOrCreatePayment(userId, dto.bookingType, booking);
 
-    const existing = await this.paymentModel.findOne({
-      bookingType: dto.bookingType,
-      bookingId: booking._id,
-      status: { $in: [PaymentStatus.PENDING, PaymentStatus.FAILED, PaymentStatus.SUCCEEDED] },
-    });
-    if (existing?.status === PaymentStatus.SUCCEEDED) {
+    if (payment.status === PaymentStatus.SUCCEEDED) {
       throw new ConflictException('This booking is already paid');
     }
-    if (existing?.status === PaymentStatus.FAILED) {
+    if (payment.status === PaymentStatus.FAILED) {
       throw new ConflictException('The last payment failed; use the retry endpoint');
     }
-    if (existing?.stripePaymentIntentId) {
-      // Same booking asked again while pending: hand back the same PaymentIntent.
-      const intent = await stripe.paymentIntents.retrieve(existing.stripePaymentIntentId);
-      if (intent.status !== 'canceled' && intent.client_secret) {
-        return this.toSession(existing, intent.client_secret);
-      }
+    if (payment.status !== PaymentStatus.PENDING) {
+      throw new ConflictException('The booking hold has expired');
     }
 
-    const payment =
-      existing ??
-      (await this.paymentModel.create({
-        userId: new Types.ObjectId(userId),
-        bookingType: dto.bookingType,
-        bookingId: booking._id,
-        bookingModel: this.bookingModelName(dto.bookingType),
-        amount: booking.totalPrice,
-        currency: PLATFORM_CURRENCY,
-        status: PaymentStatus.PENDING,
-        expiresAt: booking.holdExpiresAt,
-      }));
-
-    const intent = await this.createIntent(stripe, payment);
-    payment.stripePaymentIntentId = intent.id;
-    await payment.save();
-    return this.toSession(payment, intent.client_secret!);
+    if (payment.stripePaymentIntentId) {
+      // Same booking asked again while pending: hand back the same PaymentIntent.
+      const intent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
+      if (intent.status !== 'canceled' && intent.client_secret) {
+        return this.toSession(payment, intent.client_secret);
+      }
+    }
+    const clientSecret = await this.attachNewIntent(stripe, payment);
+    return this.toSession(payment, clientSecret);
   }
 
   /** PAY-01: retry a failed payment while the booking hold is still active. */
@@ -124,30 +114,50 @@ export class PaymentsService {
     }
     await this.findPayableBooking(payment.bookingType, payment.bookingId.toString(), userId);
 
-    // After a failure Stripe keeps the same PaymentIntent open for a new card.
-    let clientSecret: string | null = null;
-    if (payment.stripePaymentIntentId) {
-      const intent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
-      if (intent.status === 'requires_payment_method') {
-        clientSecret = intent.client_secret;
-      }
+    // Claim the retry atomically so two retries at once cannot both reopen it.
+    const claimed = await this.paymentModel.updateOne(
+      { _id: payment._id, status: PaymentStatus.FAILED },
+      { $set: { status: PaymentStatus.PENDING } },
+    );
+    if (claimed.modifiedCount !== 1) {
+      throw new ConflictException('This payment is already being retried');
     }
-    if (!clientSecret) {
-      const intent = await this.createIntent(stripe, payment);
-      payment.stripePaymentIntentId = intent.id;
-      clientSecret = intent.client_secret!;
-    }
-
     payment.status = PaymentStatus.PENDING;
-    payment.retryCount += 1;
-    payment.failureReason = undefined;
-    await payment.save();
-    return this.toSession(payment, clientSecret);
+
+    try {
+      // After a failure Stripe keeps the same PaymentIntent open for a new card.
+      if (payment.stripePaymentIntentId) {
+        const intent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
+        if (intent.status === 'requires_payment_method' && intent.client_secret) {
+          return this.toSession(payment, intent.client_secret);
+        }
+      }
+      return this.toSession(payment, await this.attachNewIntent(stripe, payment));
+    } catch (error) {
+      await this.paymentModel.updateOne(
+        { _id: payment._id, status: PaymentStatus.PENDING },
+        { $set: { status: PaymentStatus.FAILED } },
+      );
+      throw error;
+    }
   }
 
-  /** PAY-01: payment status for its owner. */
+  /**
+   * PAY-01: payment status for its owner. The payment ID equals the booking ID.
+   * For a failed payment, the error is read from Stripe (it is not stored).
+   */
   async findOne(userId: string, paymentId: string): Promise<PaymentResponseDto> {
-    return this.toResponse(await this.findOwnPayment(userId, paymentId));
+    const payment = await this.findOwnPayment(userId, paymentId);
+    const response = this.toResponse(payment);
+    if (payment.status === PaymentStatus.FAILED && payment.stripePaymentIntentId && this.stripe) {
+      try {
+        const intent = await this.stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
+        response.failureReason = intent.last_payment_error?.message ?? 'Payment failed';
+      } catch {
+        response.failureReason = 'Payment failed';
+      }
+    }
+    return response;
   }
 
   /** PAY-01: verify a Stripe webhook and apply the payment outcome. */
@@ -233,36 +243,32 @@ export class PaymentsService {
     const payment = await this.paymentModel.findOne({ stripePaymentIntentId: intent.id });
     if (!payment || payment.status === PaymentStatus.SUCCEEDED) return; // unknown or already handled
 
-    if (intent.amount_received !== this.toMinorUnits(payment.amount) || intent.currency.toUpperCase() !== payment.currency) {
-      this.logger.error(`PaymentIntent ${intent.id} amount/currency does not match payment ${payment.id}`);
-      payment.failureReason = 'Paid amount does not match the booking total; booking not confirmed';
-      await payment.save();
+    // The money has been taken, so the payment is recorded as succeeded either way.
+    payment.status = PaymentStatus.SUCCEEDED;
+    payment.paidAt = paidAt;
+    await payment.save();
+
+    const amountMatches =
+      intent.amount_received === this.toMinorUnits(payment.amount) &&
+      intent.currency.toUpperCase() === payment.currency;
+    // Confirm only a booking that is still Pending Payment and was paid within its hold.
+    const confirmed = amountMatches && (await this.confirmBooking(payment, paidAt));
+    if (!confirmed) {
+      this.logger.warn(
+        `Payment ${payment.id} succeeded but the booking was not confirmed (${amountMatches ? 'hold ended' : 'amount mismatch'})`,
+      );
       return;
     }
 
-    payment.status = PaymentStatus.SUCCEEDED;
-    payment.paidAt = paidAt;
-
-    // Confirm only a booking that is still Pending Payment and was paid within its hold.
-    const confirmed = await this.confirmBooking(payment, paidAt);
-    if (!confirmed) {
-      // Not defined by the sheet; left unconfirmed pending TA clarification.
-      payment.failureReason = 'Paid after the hold ended; booking not confirmed';
-      this.logger.warn(`Payment ${payment.id} succeeded after the hold ended; booking not confirmed`);
-    }
-    await payment.save();
-
-    if (confirmed) {
-      for (const handler of this.confirmedHandlers) {
-        try {
-          await handler({
-            bookingType: payment.bookingType,
-            bookingId: payment.bookingId.toString(),
-            paymentId: payment.id,
-          });
-        } catch (error) {
-          this.logger.error(`Booking-confirmed handler failed: ${(error as Error).message}`);
-        }
+    for (const handler of this.confirmedHandlers) {
+      try {
+        await handler({
+          bookingType: payment.bookingType,
+          bookingId: payment.bookingId.toString(),
+          paymentId: payment.id,
+        });
+      } catch (error) {
+        this.logger.error(`Booking-confirmed handler failed: ${(error as Error).message}`);
       }
     }
   }
@@ -270,13 +276,58 @@ export class PaymentsService {
   private async onFailed(intent: Stripe.PaymentIntent): Promise<void> {
     await this.paymentModel.updateOne(
       { stripePaymentIntentId: intent.id, status: PaymentStatus.PENDING },
-      {
-        $set: {
-          status: PaymentStatus.FAILED,
-          failureReason: intent.last_payment_error?.message ?? 'Payment failed',
-        },
-      },
+      { $set: { status: PaymentStatus.FAILED } },
     );
+  }
+
+  /** One payment per booking: its _id is the booking _id, so MongoDB rejects a duplicate. */
+  private async findOrCreatePayment(
+    userId: string,
+    bookingType: BookingType,
+    booking: PayableBooking,
+  ): Promise<PaymentDocument> {
+    const existing = await this.paymentModel.findById(booking._id);
+    if (existing) return existing;
+    try {
+      return await this.paymentModel.create({
+        _id: booking._id,
+        userId: new Types.ObjectId(userId),
+        bookingType,
+        bookingId: booking._id,
+        bookingModel: this.bookingModelName(bookingType),
+        // FLT-21: the total includes baggage; hotel bookings have no baggage.
+        amount: Math.round((booking.totalPrice + (booking.baggageFees ?? 0)) * 100) / 100,
+        currency: PLATFORM_CURRENCY,
+        status: PaymentStatus.PENDING,
+        expiresAt: booking.holdExpiresAt,
+      });
+    } catch (error) {
+      if ((error as { code?: number }).code === 11000) {
+        // Another request created it at the same moment; use that one.
+        const created = await this.paymentModel.findById(booking._id);
+        if (created) return created;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Create a PaymentIntent and attach it only if nobody else attached one first;
+   * otherwise cancel ours, so a booking never has two open PaymentIntents.
+   */
+  private async attachNewIntent(stripe: Stripe, payment: PaymentDocument): Promise<string> {
+    const previousId = payment.stripePaymentIntentId ?? null;
+    const intent = await this.createIntent(stripe, payment);
+    const attached = await this.paymentModel.updateOne(
+      { _id: payment._id, stripePaymentIntentId: previousId },
+      { $set: { stripePaymentIntentId: intent.id } },
+    );
+    if (attached.modifiedCount !== 1) {
+      await stripe.paymentIntents.cancel(intent.id).catch(() => undefined);
+      throw new ConflictException('A payment for this booking is already being started; try again');
+    }
+    payment.stripePaymentIntentId = intent.id;
+    return intent.client_secret!;
   }
 
   private async confirmBooking(payment: PaymentDocument, paidAt: Date): Promise<boolean> {
@@ -373,8 +424,6 @@ export class PaymentsService {
       currency: payment.currency,
       status: payment.status,
       stripePaymentIntentId: payment.stripePaymentIntentId,
-      failureReason: payment.failureReason,
-      retryCount: payment.retryCount,
       expiresAt: payment.expiresAt,
       paidAt: payment.paidAt,
     };
