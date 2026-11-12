@@ -14,6 +14,26 @@ import {
   ItinerarySchema,
 } from './schemas/itinerary.schema';
 
+import {
+  ItineraryDay,
+  ItineraryDaySchema,
+} from './schemas/itinerary-day.schema';
+
+import {
+  Activity,
+  ActivitySchema,
+} from './schemas/activity.schema';
+
+import {
+  BudgetEntry,
+  BudgetEntrySchema,
+} from './schemas/budget-entry.schema';
+
+import {
+  TransportCost,
+  TransportCostSchema,
+} from './schemas/transport-cost.schema';
+
 import { ItinerariesController } from './itineraries.controller';
 import { ItinerariesService } from './itineraries.service';
 
@@ -21,8 +41,30 @@ import { ItinerariesService } from './itineraries.service';
   imports: [
     AuthModule,
     MongooseModule.forFeature([
-      { name: Itinerary.name, schema: ItinerarySchema },
-      { name: Country.name, schema: CountrySchema },
+      {
+        name: Itinerary.name,
+        schema: ItinerarySchema,
+      },
+      {
+        name: Country.name,
+        schema: CountrySchema,
+      },
+      {
+        name: ItineraryDay.name,
+        schema: ItineraryDaySchema,
+      },
+      {
+        name: Activity.name,
+        schema: ActivitySchema,
+      },
+      {
+        name: BudgetEntry.name,
+        schema: BudgetEntrySchema,
+      },
+      {
+        name: TransportCost.name,
+        schema: TransportCostSchema,
+      },
     ]),
   ],
   controllers: [ItinerariesController],
