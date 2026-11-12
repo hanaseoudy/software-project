@@ -3,7 +3,7 @@ import { BookingType, PaymentStatus } from '../enums/payment.enums';
 
 /** PAY-01: payment as returned to its owner. */
 export class PaymentResponseDto {
-  @ApiProperty({ example: '665f1c2e8b3c4a0012345678' })
+  @ApiProperty({ example: '665f1c2e8b3c4a0012345678', description: 'Same as the booking ID (one payment per booking)' })
   id!: string;
 
   @ApiProperty({ enum: BookingType })
@@ -24,11 +24,11 @@ export class PaymentResponseDto {
   @ApiPropertyOptional({ example: 'pi_3Nxyz...' })
   stripePaymentIntentId?: string;
 
-  @ApiPropertyOptional({ example: 'Your card was declined.' })
+  @ApiPropertyOptional({
+    example: 'Your card was declined.',
+    description: 'Only for a failed payment; read from Stripe, not stored (PAY-01)',
+  })
   failureReason?: string;
-
-  @ApiProperty({ example: 0 })
-  retryCount!: number;
 
   @ApiPropertyOptional({ description: 'When the booking hold (and this payment) expires' })
   expiresAt?: Date;
