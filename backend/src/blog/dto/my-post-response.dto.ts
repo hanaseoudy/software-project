@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { PaginatedResponseDto } from '../../common/pagination/pagination';
 import { PostStatus } from '../schemas/post.schema';
 
 // BLG-03: one row of the author's own post list (title, status, date, like count, comment count)
@@ -22,20 +23,5 @@ export class MyPostSummaryDto {
   commentsCount!: number;
 }
 
-// GEN-05: paginated list with a fixed page size of 10
-export class MyPostsPageDto {
-  @ApiProperty({ type: [MyPostSummaryDto] })
-  items!: MyPostSummaryDto[];
-
-  @ApiProperty({ example: 12 })
-  total!: number;
-
-  @ApiProperty({ example: 1 })
-  page!: number;
-
-  @ApiProperty({ example: 10 })
-  pageSize!: number;
-
-  @ApiProperty({ example: 2 })
-  totalPages!: number;
-}
+// GEN-05: one page of MyPostSummaryDto in the shared paginated shape
+export type MyPostsPage = Omit<PaginatedResponseDto, 'items'> & { items: MyPostSummaryDto[] };

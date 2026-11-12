@@ -3,11 +3,13 @@ import {
   ApiBadRequestResponse,
   ApiCookieAuth,
   ApiCreatedResponse,
+  ApiExtraModels,
   ApiOkResponse,
   ApiOperation,
   ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
+  getSchemaPath,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
@@ -15,8 +17,9 @@ import { ValidationErrorResponseDto } from '../auth/dto/validation-error-respons
 import { BlogService } from './blog.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { PostResponseDto } from './dto/post-response.dto';
-import { MyPostsPageDto } from './dto/my-post-response.dto';
-import { MyPostsQueryDto } from './dto/my-posts-query.dto';
+import { MyPostSummaryDto } from './dto/my-post-response.dto';
+import type { MyPostsPage } from './dto/my-post-response.dto';
+import { PaginatedResponseDto, PaginationQueryDto } from '../common/pagination/pagination';
 
 @ApiTags('blog')
 @Controller('posts')
@@ -55,16 +58,25 @@ export class BlogController {
       'like count and comment count, newest first. Paginated with a fixed page size of 10 (GEN-05).',
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
-  @ApiOkResponse({ description: 'One page of the user\'s posts', type: MyPostsPageDto })
+  @ApiExtraModels(PaginatedResponseDto, MyPostSummaryDto)
+  @ApiOkResponse({
+    description: 'One page of the user\'s posts',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(PaginatedResponseDto) },
+        { properties: { items: { type: 'array', items: { $ref: getSchemaPath(MyPostSummaryDto) } } } },
+      ],
+    },
+  })
   @ApiBadRequestResponse({
     description: 'Invalid page number',
     type: ValidationErrorResponseDto,
     example: { message: 'Validation failed', errors: { page: ['Page must be at least 1'] } },
   })
   @ApiUnauthorizedResponse({ description: 'Not logged in' })
-  listMine(@Req() req: AuthenticatedRequest, @Query() query: MyPostsQueryDto): Promise<MyPostsPageDto> {
+  listMine(@Req() req: AuthenticatedRequest, @Query() query: PaginationQueryDto): Promise<MyPostsPage> {
     const userId = req.user?.sub;
     if (!userId) throw new UnauthorizedException('Not authenticated');
-    return this.blogService.listMine(userId, query.page);
+    return this.blogService.listMine(userId, query.page ?? 1);
   }
 }
