@@ -16,6 +16,8 @@ import { HotelsService } from './hotels.service';
 import { Hotel } from './schemas/hotel.schema';
 import { Room } from './schemas/room.schema';
 
+const referenceResult = (value: unknown) => ({ select: () => ({ lean: async () => value }) });
+
 const execResult = <T>(value: T) => ({ exec: () => Promise.resolve(value) });
 
 const makeHotelDoc = () => {
@@ -50,7 +52,7 @@ describe('HotelsService', () => {
   const countryModel = { exists: jest.fn() };
   const assignmentModel = { exists: jest.fn() };
   // GEN-08: only /api/uploads/hotel/<uuid>.jpg|png links count as uploaded photos
-  const uploads = { isStoredUrl: jest.fn() };
+  const uploads = { storedFileExists: jest.fn() };
 
   const moderator = {
     sub: new Types.ObjectId().toString(),
@@ -66,7 +68,9 @@ describe('HotelsService', () => {
 
   beforeEach(async () => {
     jest.resetAllMocks();
-    uploads.isStoredUrl.mockImplementation((_category: string, url: string) =>
+    cityModel.findById.mockReturnValue(referenceResult({ countryCode: 'EG' }));
+    countryModel.findById.mockReturnValue(referenceResult({ code: 'EG' }));
+    uploads.storedFileExists.mockImplementation((_category: string, url: string) =>
       url.startsWith('/api/uploads/hotel/'),
     );
     const moduleRef = await Test.createTestingModule({
@@ -88,8 +92,8 @@ describe('HotelsService', () => {
 
   describe('create', () => {
     it('creates a hotel when city and country exist', async () => {
-      cityModel.exists.mockResolvedValue({ _id: 'c' });
-      countryModel.exists.mockResolvedValue({ _id: 'k' });
+      cityModel.findById.mockReturnValue(referenceResult({ countryCode: 'EG' }));
+      countryModel.findById.mockReturnValue(referenceResult({ code: 'EG' }));
       hotelModel.create.mockResolvedValue(makeHotelDoc());
 
       const result = await service.create(createDto);
@@ -102,8 +106,8 @@ describe('HotelsService', () => {
     });
 
     it('rejects an unknown city with a field-level error', async () => {
-      cityModel.exists.mockResolvedValue(null);
-      countryModel.exists.mockResolvedValue({ _id: 'k' });
+      cityModel.findById.mockReturnValue(referenceResult(null));
+      countryModel.findById.mockReturnValue(referenceResult({ code: 'EG' }));
 
       await expect(service.create(createDto)).rejects.toMatchObject({
         response: { errors: { city: ['City does not exist'] } },
@@ -112,8 +116,8 @@ describe('HotelsService', () => {
     });
 
     it('rejects photos that are outside links', async () => {
-      cityModel.exists.mockResolvedValue({ _id: 'c' });
-      countryModel.exists.mockResolvedValue({ _id: 'k' });
+      cityModel.findById.mockReturnValue(referenceResult({ countryCode: 'EG' }));
+      countryModel.findById.mockReturnValue(referenceResult({ code: 'EG' }));
 
       const error = await service
         .create({ ...createDto, images: ['https://example.com/a.jpg'] })
@@ -127,8 +131,8 @@ describe('HotelsService', () => {
     });
 
     it('accepts photos uploaded through the platform', async () => {
-      cityModel.exists.mockResolvedValue({ _id: 'c' });
-      countryModel.exists.mockResolvedValue({ _id: 'k' });
+      cityModel.findById.mockReturnValue(referenceResult({ countryCode: 'EG' }));
+      countryModel.findById.mockReturnValue(referenceResult({ code: 'EG' }));
       hotelModel.create.mockResolvedValue(makeHotelDoc());
 
       await service.create({
@@ -140,8 +144,8 @@ describe('HotelsService', () => {
     });
 
     it('rejects an unknown country', async () => {
-      cityModel.exists.mockResolvedValue({ _id: 'c' });
-      countryModel.exists.mockResolvedValue(null);
+      cityModel.findById.mockReturnValue(referenceResult({ countryCode: 'EG' }));
+      countryModel.findById.mockReturnValue(referenceResult(null));
 
       await expect(service.create(createDto)).rejects.toBeInstanceOf(
         BadRequestException,
@@ -250,7 +254,7 @@ describe('HotelsService', () => {
       const doc = makeHotelDoc();
       hotelModel.findById.mockReturnValue(execResult(doc));
       assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
-      cityModel.exists.mockResolvedValue(null);
+      cityModel.findById.mockReturnValue(referenceResult(null));
 
       await expect(
         service.update(

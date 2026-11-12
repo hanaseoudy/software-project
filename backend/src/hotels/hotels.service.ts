@@ -47,8 +47,9 @@ export class HotelsService {
 
   /** HTL-01: an admin creates a hotel profile. */
   async create(dto: CreateHotelDto): Promise<HotelResponseDto> {
-    await this.assertCityAndCountryExist(dto.city, dto.country);
-    this.assertImagesAreUploads(dto.images);
+  
+    await this.assertCityMatchesCountry(dto.city, dto.country);
+    await this.assertImagesAreUploads(dto.images);
 
     const hotel = await this.hotelModel.create({
       name: dto.name,
@@ -83,8 +84,14 @@ export class HotelsService {
       });
     }
 
-    await this.assertCityAndCountryExist(dto.city, dto.country);
-    this.assertImagesAreUploads(dto.images);
+    if (dto.city !== undefined || dto.country !== undefined) {
+  await this.assertCityMatchesCountry(
+    dto.city ?? hotel.city.toString(),
+    dto.country ?? hotel.country.toString(),
+  );
+}
+
+await this.assertImagesAreUploads(dto.images);
 
     hotel.set(changes);
     await hotel.save();
@@ -326,45 +333,59 @@ export class HotelsService {
   }
 
   /** GEN-08: hotel photos must be files uploaded through the platform, not outside links. */
-  private assertImagesAreUploads(images?: string[]): void {
-    const outside = (images ?? []).filter(
-      (url) => !this.uploads.isStoredUrl(ImageCategory.HOTEL, url),
-    );
-    if (outside.length > 0) {
-      throw new BadRequestException({
-        message: 'Validation failed',
-        errors: {
-          images: [
-            'Each image must be a photo uploaded to the platform (a /api/uploads/hotel/... link)',
-          ],
-        },
-      });
-    }
+ 
+private async assertImagesAreUploads(images?: string[]): Promise<void> {
+  const checks = await Promise.all(
+    (images ?? []).map((url) =>
+      this.uploads.storedFileExists(ImageCategory.HOTEL, url),
+    ),
+  );
+
+  if (checks.some((exists) => !exists)) {
+    throw new BadRequestException({
+      message: 'Validation failed',
+      errors: {
+        images: [
+          'Each image must be a photo uploaded to the platform (a /api/uploads/hotel/... link that exists)',
+        ],
+      },
+    });
+  }
+}
+
+
+
+private async assertCityMatchesCountry(
+  cityId: string,
+  countryId: string,
+): Promise<void> {
+  const [city, country] = await Promise.all([
+    this.cityModel.findById(cityId).select('countryCode').lean(),
+    this.countryModel.findById(countryId).select('code').lean(),
+  ]);
+
+  const errors: Record<string, string[]> = {};
+
+  if (!city) {
+    errors.city = ['City does not exist'];
   }
 
-  private async assertCityAndCountryExist(
-    cityId?: string,
-    countryId?: string,
-  ): Promise<void> {
-    const errors: Record<string, string[]> = {};
-
-    if (
-      cityId !== undefined &&
-      !(await this.cityModel.exists({ _id: cityId }))
-    ) {
-      errors.city = ['City does not exist'];
-    }
-    if (
-      countryId !== undefined &&
-      !(await this.countryModel.exists({ _id: countryId }))
-    ) {
-      errors.country = ['Country does not exist'];
-    }
-
-    if (Object.keys(errors).length > 0) {
-      throw new BadRequestException({ message: 'Validation failed', errors });
-    }
+  if (!country) {
+    errors.country = ['Country does not exist'];
   }
+
+  if (city && country && city.countryCode !== country.code) {
+    errors.city = ['City is not in the selected country'];
+  }
+
+  if (Object.keys(errors).length > 0) {
+    throw new BadRequestException({
+      message: 'Validation failed',
+      errors,
+    });
+  }
+}
+
 
   private toResponse(hotel: HotelDocument): HotelResponseDto {
     return {
