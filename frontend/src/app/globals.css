@@ -1,0 +1,418 @@
+/* GEN-14: one spacing scale and layout width used by every page. */
+:root {
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --container: 72rem;
+  --radius: 0.5rem;
+
+  --color-bg: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-text: #1b1f24;
+  --color-muted: #5b6573;
+  --color-border: #dde1e7;
+  --color-primary: #1f5fbf;
+  --color-primary-hover: #194e9e;
+  --color-primary-soft: #e8f0fb;
+  --color-danger: #b42318;
+  --color-danger-hover: #912018;
+  --focus: 0 0 0 3px rgba(31, 95, 191, 0.35);
+
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0 0 var(--space-2);
+}
+h1 {
+  font-size: 1.75rem;
+}
+h2 {
+  font-size: 1.25rem;
+}
+h3 {
+  font-size: 1.05rem;
+}
+p {
+  margin: 0 0 var(--space-3);
+}
+a {
+  color: var(--color-primary);
+}
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: 0.25rem;
+}
+
+.muted {
+  color: var(--color-muted);
+}
+
+.container {
+  width: 100%;
+  max-width: var(--container);
+  margin-inline: auto;
+  padding-inline: var(--space-4);
+}
+
+.page {
+  flex: 1;
+  padding-block: var(--space-6) var(--space-7);
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--space-4);
+  top: -3rem;
+  background: var(--color-surface);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  z-index: 100;
+}
+.skip-link:focus {
+  top: var(--space-2);
+}
+
+/* Buttons */
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.5rem;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  background: none;
+  color: var(--color-text);
+}
+.button-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+.button-primary:hover {
+  background: var(--color-primary-hover);
+}
+.button-ghost {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+.button-ghost:hover {
+  background: var(--color-bg);
+}
+.button-danger {
+  background: var(--color-danger);
+  color: #fff;
+}
+.button-danger:hover {
+  background: var(--color-danger-hover);
+}
+
+/* Header and menus */
+.site-header {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  min-height: 4rem;
+}
+.brand {
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--color-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.main-nav {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.nav-groups,
+.nav-inline,
+.nav-account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.menu-link,
+.menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--color-text);
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.menu-link:hover,
+.menu-trigger:hover {
+  background: var(--color-bg);
+}
+.menu-link[aria-current='page'],
+.menu-trigger[data-active] {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  font-weight: 600;
+}
+.chevron {
+  font-size: 0.75rem;
+}
+.dropdown {
+  position: relative;
+}
+.dropdown-panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  min-width: 13rem;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+.nav-account .dropdown-panel {
+  left: auto;
+  right: 0;
+}
+.dropdown-panel[hidden] {
+  display: none;
+}
+.dropdown-panel .menu-link {
+  width: 100%;
+  text-align: left;
+}
+.menu-overview {
+  border-bottom: 1px solid var(--color-border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  margin-bottom: var(--space-1);
+}
+.menu-logout {
+  border-top: 1px solid var(--color-border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  margin-top: var(--space-1);
+  color: var(--color-danger);
+}
+.menu-toggle {
+  display: none;
+  margin-left: auto;
+  font: inherit;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+@media (max-width: 52rem) {
+  .header-row {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .menu-toggle {
+    display: inline-flex;
+  }
+  .main-nav {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    padding-bottom: var(--space-3);
+  }
+  .main-nav[data-open] {
+    display: flex;
+  }
+  .nav-groups,
+  .nav-inline,
+  .nav-account {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .dropdown-panel {
+    position: static;
+    box-shadow: none;
+    margin-left: var(--space-3);
+  }
+}
+
+/* Page header and breadcrumbs */
+.page-header {
+  margin-bottom: var(--space-6);
+}
+.page-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.back-button {
+  margin-bottom: var(--space-4);
+}
+.breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-3);
+  font-size: 0.9rem;
+}
+.breadcrumbs li + li::before {
+  content: '›';
+  margin-right: var(--space-2);
+  color: var(--color-muted);
+}
+.breadcrumbs a {
+  color: var(--color-muted);
+}
+.breadcrumbs [aria-current='page'] {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+/* Content blocks */
+.hero {
+  padding-block: var(--space-5) var(--space-6);
+}
+.hero h1 {
+  font-size: 2.25rem;
+}
+.section {
+  margin-bottom: var(--space-7);
+}
+.card-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--space-4);
+}
+.card {
+  display: block;
+  height: 100%;
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+.card-link {
+  color: inherit;
+  text-decoration: none;
+}
+.card-link:hover {
+  border-color: var(--color-primary);
+}
+.card-link h3 {
+  color: var(--color-primary);
+}
+.card p {
+  margin: 0;
+}
+.empty-state {
+  text-align: center;
+  padding: var(--space-7) var(--space-4);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+}
+
+/* Forms: actions are always in the same place, Cancel before the main action. */
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+/* Dialog */
+.dialog {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-5);
+  max-width: 28rem;
+  width: calc(100% - 2 * var(--space-4));
+}
+.dialog::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* Footer */
+.site-footer {
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-block: var(--space-5);
+}
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
