@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  ConflictException,
   HttpException,
   Injectable,
   InternalServerErrorException,
@@ -10,10 +11,12 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Error as MongooseError, isValidObjectId, Model, PipelineStage, Types } from 'mongoose';
 import { CreatePostDto } from './dto/create-post.dto';
+import { LikeResponseDto } from './dto/like-response.dto';
 import { MyPostsPage } from './dto/my-post-response.dto';
 import { PostResponseDto } from './dto/post-response.dto';
 import { TagPostsPage, TagsPage } from './dto/tag-response.dto';
 import { UpdateTagsDto } from './dto/update-tags.dto';
+import { Like, LikeDocument } from './schemas/like.schema';
 import { Post, PostDocument, PostStatus } from './schemas/post.schema';
 import { escapeRegex, normalizeTags } from './tag-rules';
 import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
@@ -23,9 +26,14 @@ const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 // Only published, non-hidden posts are public
 const VISIBLE_POSTS = { status: PostStatus.PUBLISHED, isHidden: { $ne: true } };
 
+const DUPLICATE_KEY = 11000;
+
 @Injectable()
 export class BlogService {
-  constructor(@InjectModel(Post.name) private readonly postModel: Model<PostDocument>) {}
+  constructor(
+    @InjectModel(Post.name) private readonly postModel: Model<PostDocument>,
+    @InjectModel(Like.name) private readonly likeModel: Model<LikeDocument>,
+  ) {}
 
   // BLG-01: the author always comes from the logged-in user, never from the request body
   async create(authorId: string, dto: CreatePostDto): Promise<PostResponseDto> {
@@ -149,6 +157,99 @@ export class BlogService {
   }
 
   // Map Mongoose validation errors to 400 (GEN-02 shape) and other database failures to 500
+  // BLG-06: like a published, visible post at most once.
+  // The unique (post, user) index is the real guard, so concurrent requests cannot create two likes.
+  async likePost(userId: string, postId: string): Promise<LikeResponseDto> {
+    const user = this.toUserObjectId(userId);
+    const post = await this.findLikeablePostId(postId);
+
+    try {
+      await this.likeModel.create({ post, user });
+    } catch (error) {
+      if ((error as { code?: number })?.code === DUPLICATE_KEY) {
+        throw new ConflictException('You have already liked this post');
+      }
+      throw new InternalServerErrorException('Could not like the post');
+    }
+
+    // Count only after the like was stored; atomic $inc keeps the counter in sync under concurrency
+    let updated: { likesCount: number } | null;
+    try {
+      updated = await this.postModel
+        .findOneAndUpdate({ _id: post }, { $inc: { likesCount: 1 } }, { new: true, projection: { likesCount: 1 } })
+        .lean<{ likesCount: number }>()
+        .exec();
+    } catch {
+      // The like was stored but not counted: undo it so the counter does not drift
+      await this.likeModel.deleteOne({ post, user }).exec().catch(() => undefined);
+      throw new InternalServerErrorException('Could not like the post');
+    }
+    if (!updated) {
+      // The post was deleted between the check and the update: do not leave an orphan like behind
+      await this.runDb('Could not like the post', () => this.likeModel.deleteOne({ post, user }).exec());
+      throw new NotFoundException('Post not found');
+    }
+    return { liked: true, likesCount: updated.likesCount };
+  }
+
+  // BLG-06: remove the logged-in user's like from a published, visible post
+  async unlikePost(userId: string, postId: string): Promise<LikeResponseDto> {
+    const user = this.toUserObjectId(userId);
+    const post = await this.findLikeablePostId(postId);
+
+    const { deletedCount } = await this.runDb('Could not remove the like', () =>
+      this.likeModel.deleteOne({ post, user }).exec(),
+    );
+    if (deletedCount === 0) {
+      throw new NotFoundException('You have not liked this post');
+    }
+
+    // Decrement only after a like was really removed, and never below 0
+    let updated: { likesCount: number } | null;
+    try {
+      updated = await this.postModel
+        .findOneAndUpdate(
+          { _id: post, likesCount: { $gt: 0 } },
+          { $inc: { likesCount: -1 } },
+          { new: true, projection: { likesCount: 1 } },
+        )
+        .lean<{ likesCount: number }>()
+        .exec();
+    } catch {
+      // The like was removed but the count was not: restore the like so the counter does not drift
+      await this.likeModel.create({ post, user }).catch(() => undefined);
+      throw new InternalServerErrorException('Could not remove the like');
+    }
+    return { liked: false, likesCount: updated?.likesCount ?? 0 };
+  }
+
+  private toUserObjectId(userId: string): Types.ObjectId {
+    if (!userId || !isValidObjectId(userId)) {
+      throw new UnauthorizedException('Not authenticated');
+    }
+    return new Types.ObjectId(userId);
+  }
+
+  // 404 for an invalid id, a missing post, a draft or a hidden post (BLG-06 only applies to visible posts)
+  private async findLikeablePostId(postId: string): Promise<Types.ObjectId> {
+    // Strict check: Mongoose's isValidObjectId also accepts any 12-character string
+    if (typeof postId !== 'string' || !OBJECT_ID_PATTERN.test(postId)) {
+      throw new NotFoundException('Post not found');
+    }
+    const post = await this.runDb('Could not load the post', () =>
+      this.postModel
+        .findOne({ _id: new Types.ObjectId(postId), status: PostStatus.PUBLISHED, isHidden: { $ne: true } })
+        .select('_id')
+        .lean<{ _id: Types.ObjectId }>()
+        .exec(),
+    );
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+    return post._id;
+  }
+
+  // Map unexpected database failures to a clean 500 instead of leaking driver errors
   private async runDb<T>(message: string, operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
