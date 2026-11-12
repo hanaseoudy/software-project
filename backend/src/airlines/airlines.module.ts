@@ -10,6 +10,7 @@ import { AirlinesController } from './airlines.controller';
 import { AirlinesService } from './airlines.service';
 import { UploadsModule } from '../uploads/uploads.module';
 import { JwtService } from '@nestjs/jwt';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -18,8 +19,9 @@ import { JwtService } from '@nestjs/jwt';
       { name: ModeratorAssignment.name, schema: ModeratorAssignmentSchema },
     ]),
     UploadsModule,
+    AuthModule,
   ],
   controllers: [AirlinesController],
-  providers: [JwtService, AirlinesService],
+  providers: [AirlinesService],
 })
 export class AirlinesModule {}
