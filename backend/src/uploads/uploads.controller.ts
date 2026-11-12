@@ -19,7 +19,7 @@ export class UploadsController {
   ) {
     const filePath = await this.uploadsService.getFilePath(category, filename);
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(filePath);
   }
 }

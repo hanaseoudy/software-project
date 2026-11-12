@@ -11,6 +11,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 
 @Module({
   imports: [
@@ -27,7 +28,7 @@ import { UploadsModule } from './uploads/uploads.module';
           throw new Error(
             'MongoDB URI is missing check env file',);
            }
-        console.log('uri loaded...');
+        warnIfDatabaseMissing(uri, (message) => console.warn(message));
         
 
         return {
