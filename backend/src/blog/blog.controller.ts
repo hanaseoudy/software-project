@@ -38,6 +38,9 @@ import { LikeResponseDto } from './dto/like-response.dto';
 import { ErrorResponseDto } from './dto/error-response.dto';
 import { MyPostSummaryDto } from './dto/my-post-response.dto';
 import type { MyPostsPage } from './dto/my-post-response.dto';
+import { ListPostsQueryDto } from './dto/list-posts-query.dto';
+import { PostSearchItemDto } from './dto/post-search-response.dto';
+import type { PostSearchPage } from './dto/post-search-response.dto';
 import { PaginatedResponseDto, PaginationQueryDto } from '../common/pagination/pagination';
 
 @ApiTags('blog')
@@ -97,6 +100,36 @@ export class BlogController {
     const userId = req.user?.sub;
     if (!userId) throw new UnauthorizedException('Not authenticated');
     return this.blogService.listMine(userId, query.page ?? 1);
+  }
+
+  @Get()
+  @ApiOperation({
+    summary: 'List and search published posts (BLG-09)',
+    description:
+      'Public, no login needed. Lists published, non-hidden posts with title, author, date and excerpt. ' +
+      'With "search", matches the keyword (case-insensitive, partial) in the title, the tags or the author name, ' +
+      'ordered by interaction score (likes + comments) descending, newest first as tie-breaker; ' +
+      'without it, newest first. Paginated with a fixed page size of 10 (GEN-05); no results returns an empty page.',
+  })
+  @ApiQuery({ name: 'search', required: false, type: String, example: 'luxor', description: 'At most 100 characters' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiExtraModels(PaginatedResponseDto, PostSearchItemDto)
+  @ApiOkResponse({
+    description: 'One page of published posts (an empty page means no results)',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(PaginatedResponseDto) },
+        { properties: { items: { type: 'array', items: { $ref: getSchemaPath(PostSearchItemDto) } } } },
+      ],
+    },
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid search keyword or page number',
+    type: ValidationErrorResponseDto,
+    example: { message: 'Validation failed', errors: { search: ['Search cannot be empty'] } },
+  })
+  list(@Query() query: ListPostsQueryDto): Promise<PostSearchPage> {
+    return this.blogService.listPublished(query.search, query.page ?? 1);
   }
 
   @Patch(':id')

@@ -14,12 +14,18 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { LikeResponseDto } from './dto/like-response.dto';
 import { MyPostsPage } from './dto/my-post-response.dto';
 import { PostResponseDto } from './dto/post-response.dto';
+import { PostSearchPage } from './dto/post-search-response.dto';
 import { TagPostsPage, TagsPage } from './dto/tag-response.dto';
 import { UpdateTagsDto } from './dto/update-tags.dto';
 import { Like, LikeDocument } from './schemas/like.schema';
 import { Post, PostDocument, PostStatus } from './schemas/post.schema';
+import { searchTextError, EXCERPT_LENGTH, toExcerpt } from './search-rules';
 import { escapeRegex, normalizeTags } from './tag-rules';
 import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
+import { AccountStatus, User, UserDocument } from '../users/schemas/user.schema';
+
+// ACC-12: a missing author account is shown under this name
+const DELETED_USER = 'Deleted user';
 
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
@@ -33,6 +39,7 @@ export class BlogService {
   constructor(
     @InjectModel(Post.name) private readonly postModel: Model<PostDocument>,
     @InjectModel(Like.name) private readonly likeModel: Model<LikeDocument>,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
   // BLG-01: the author always comes from the logged-in user, never from the request body
@@ -78,6 +85,131 @@ export class BlogService {
       commentsCount: post.commentsCount ?? 0,
     }));
     return paginate(items, total, page);
+  }
+
+  // GET /api/posts: published, non-hidden posts, page size 10 (GEN-05); posts of deactivated authors are hidden (ACC-12).
+  // BLG-09: with a keyword, case-insensitive partial match in the title, the tags or the author name,
+  // ordered by interaction score (likes + comments) descending, newest first as tie-breaker.
+  // Without a keyword the posts are listed newest first.
+  async listPublished(search: string | undefined, page = 1): Promise<PostSearchPage> {
+    let keyword: string | undefined;
+    if (search !== undefined) {
+      const error = searchTextError(search);
+      if (error) {
+        throw new BadRequestException({ message: 'Validation failed', errors: { search: [error] } });
+      }
+      keyword = escapeRegex(search.trim());
+    }
+
+    // ACC-12: posts of deactivated authors are never listed
+    const deactivated = await this.runDb('Could not load the posts', () =>
+      this.userModel.distinct('_id', { status: AccountStatus.DEACTIVATED }).exec(),
+    );
+    const match: Record<string, unknown> = { ...VISIBLE_POSTS, author: { $nin: deactivated } };
+    if (keyword !== undefined) {
+      // Authors whose display name ("firstName lastName") contains the keyword: one query, not one per post
+      const matchingAuthors = await this.runDb('Could not load the posts', () =>
+        this.userModel
+          .distinct('_id', {
+            $expr: {
+              $regexMatch: {
+                input: {
+                  $trim: { input: { $concat: [{ $ifNull: ['$firstName', ''] }, ' ', { $ifNull: ['$lastName', ''] }] } },
+                },
+                regex: keyword,
+                options: 'i',
+              },
+            },
+          })
+          .exec(),
+      );
+      match.$or = [
+        { title: { $regex: keyword, $options: 'i' } },
+        { tags: { $regex: keyword, $options: 'i' } },
+        { author: { $in: matchingAuthors } },
+      ];
+    }
+
+    const pipeline: PipelineStage[] = [
+      { $match: match },
+      { $addFields: { score: { $add: [{ $ifNull: ['$likesCount', 0] }, { $ifNull: ['$commentsCount', 0] }] } } },
+      {
+        $facet: {
+          items: [
+            { $sort: keyword !== undefined ? { score: -1, createdAt: -1, _id: -1 } : { createdAt: -1, _id: -1 } },
+            { $skip: skipFor(page) },
+            { $limit: PAGE_SIZE },
+            // Authors of this page only, in the same aggregation; only the display name is read
+            {
+              $lookup: {
+                from: this.userModel.collection.name,
+                let: { authorId: '$author' },
+                pipeline: [
+                  { $match: { $expr: { $eq: ['$_id', '$$authorId'] } } },
+                  { $project: { _id: 1, firstName: 1, lastName: 1 } },
+                ],
+                as: 'authorUser',
+              },
+            },
+            { $unwind: { path: '$authorUser', preserveNullAndEmptyArrays: true } },
+            {
+              $project: {
+                title: 1,
+                tags: 1,
+                createdAt: 1,
+                likesCount: 1,
+                commentsCount: 1,
+                authorId: '$authorUser._id',
+                authorName: {
+                  $trim: {
+                    input: {
+                      $concat: [
+                        { $ifNull: ['$authorUser.firstName', ''] },
+                        ' ',
+                        { $ifNull: ['$authorUser.lastName', ''] },
+                      ],
+                    },
+                  },
+                },
+                // One extra character tells whether the body was cut; the full body never leaves the database
+                excerpt: {
+                  $substrCP: [{ $trim: { input: { $ifNull: ['$content', ''] } } }, 0, EXCERPT_LENGTH + 1],
+                },
+              },
+            },
+          ],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ];
+
+    type Row = {
+      _id: Types.ObjectId;
+      title: string;
+      tags?: string[];
+      createdAt: Date;
+      likesCount?: number;
+      commentsCount?: number;
+      authorId?: Types.ObjectId;
+      authorName: string;
+      excerpt: string;
+    };
+    const [result] = await this.runDb('Could not load the posts', () =>
+      this.postModel.aggregate<{ items: Row[]; total: { count: number }[] }>(pipeline).exec(),
+    );
+    const items = (result?.items ?? []).map((row) => ({
+      id: row._id.toString(),
+      title: row.title,
+      author: row.authorId
+        ? { id: row.authorId.toString(), name: row.authorName }
+        : { id: null, name: DELETED_USER },
+      createdAt: row.createdAt,
+      excerpt: toExcerpt(row.excerpt ?? ''),
+      tags: row.tags ?? [],
+      likesCount: row.likesCount ?? 0,
+      commentsCount: row.commentsCount ?? 0,
+    }));
+    return paginate(items, result?.total[0]?.count ?? 0, page);
   }
 
   // BLG-08: the author edits the post's tags later. BLG-04 will extend this with the other fields.
