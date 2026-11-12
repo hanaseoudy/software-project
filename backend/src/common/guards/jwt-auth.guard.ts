@@ -6,6 +6,7 @@ import { Model } from 'mongoose';
 import type { Request } from 'express';
 import { ACCESS_COOKIE } from '../../auth/auth.cookies';
 import { Session, SessionDocument } from '../../auth/schemas/session.schema';
+import { AccountStatus, User, UserDocument } from '../../users/schemas/user.schema';
 
 export interface AuthPayload {
   sub: string;
@@ -21,6 +22,7 @@ export class JwtAuthGuard implements CanActivate {
     private jwtService: JwtService,
     private config: ConfigService,
     @InjectModel(Session.name) private sessionModel: Model<SessionDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>
   ) {}
 
   async canActivate(context: ExecutionContext) {
@@ -46,6 +48,7 @@ export class JwtAuthGuard implements CanActivate {
         _id: payload.sid,
         user: payload.sub,
         revokedAt: null,
+        expiresAt: { $gt: now },
         lastActivityAt: { $gt: new Date(now.getTime() - idleSeconds * 1000) },
       },
       { $set: { lastActivityAt: now } },
@@ -54,7 +57,12 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Not authenticated');
     }
 
-    request.user = payload;
+    const user = await this.userModel.findById(payload.sub).select('status role').lean();
+    if (!user || user.status !== AccountStatus.ACTIVE) {
+      await this.sessionModel.updateOne({ _id: session._id }, { $set: { revokedAt: now } });
+      throw new UnauthorizedException('Not authenticated');
+    }
+    request.user = { sub: payload.sub, sid: payload.sid, role: user.role };
     return true;
   }
 }

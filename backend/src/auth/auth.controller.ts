@@ -7,6 +7,7 @@ import {
   ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -73,6 +74,7 @@ export class AuthController {
     description: 'Account is suspended',
     example: { message: 'Account suspended', error: 'Forbidden', statusCode: 403 },
   })
+  @ApiResponse({ status: 423, description: 'Account is already locked after failed login attempts (ACC-05)' })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const { user, accessToken, refreshToken } = await this.authService.login(dto);
     this.authService.setAuthCookies(res, accessToken, refreshToken);
