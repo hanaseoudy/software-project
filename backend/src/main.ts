@@ -7,7 +7,8 @@ import { createSwaggerConfig } from './common/swagger.config';
 import { validationExceptionFactory } from './common/validation/validation-exception.factory';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: needed to verify Stripe webhook signatures (PAY-01)
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   app.use(cookieParser());
   app.setGlobalPrefix('api');
   app.useGlobalPipes(

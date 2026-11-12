@@ -449,3 +449,27 @@ tier rules and error format are the same as HTL-10. The two shorter routes are k
 routes for one part only. I reviewed the code and the new tests.
 Verification performed:
 Lint, build and all hotel unit tests passed under Node 24.
+
+Date: 2026-11-12
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-01 (TASK-64) - Stripe test payments and verified payment outcomes
+Prompt (summary of the conversation):
+I gave AI the project description and the PAY-01 story and asked it to implement PAY-01 on branch
+feature/PAY-01-TASK-64-stripe-payments without depending on unfinished teammate work (FLT-21, FLT-22, HTL-16, HTL-18, PAY-02
+are not merged). I then asked it to check its plan against the requirements sheet and list mismatches.
+Decisions I made: also store failureReason and retryCount (sheet says "only" ID, amount, currency,
+status - to confirm with TA); PAY-01 sets the booking to Confirmed and exposes an onBookingConfirmed
+hook for FLT-23 / HTL-17; charge in USD until PAY-04 merges; block payment until policies are
+accepted (PAY-02); a payment that succeeds after the hold ended leaves the booking unconfirmed
+(not defined by the sheet - to ask TA).
+
+How the output was used:
+AI added POST /api/payments, POST /api/payments/:id/retry, GET /api/payments/:id and
+POST /api/payments/webhook (Stripe signature verified, raw body enabled in main.ts), a Stripe client
+provider, a 60-second sweep that cancels PaymentIntents of expired holds, DTOs, Stripe env
+placeholders in .env.example and unit tests. It reads bookings only through the existing schemas on
+develop. I reviewed the code and tests.
+Verification performed:
+Build and lint passed. 18 new payment unit tests passed (run with NODE_OPTIONS=--experimental-vm-modules
+on Node 25 locally).
