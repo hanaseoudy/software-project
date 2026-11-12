@@ -527,3 +527,25 @@ reviewer's feedback, the controller and the AuthModule import were removed, so
 the PR only contains the schema, enum and reusable NotificationsService.
 Postman screenshots are attached to the PR as verification only.
 ================================================
+
+Date: 2026-11-12
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-03 (TASK-66) - Stripe refunds, status tracking and notifications
+Prompt (summary of the conversation):
+I gave AI the PAY-03 story and asked it to check it against the requirements sheet and project
+description before implementing, on branch feature/PAY-03-TASK-66-stripe-refunds (built on my PAY-01
+branch with my GEN-01 notifications merged in). Decisions: the cancellation tasks (FLT-26, HTL-21,
+FLT-06) compute the refund amount from the tiers and pass it with the applied tier, because the sheet
+says the user sees the amount before confirming; refunds reference bookings (no hotel schema change);
+the user is notified once, when Stripe returns the final result.
+
+How the output was used:
+AI added RefundsService.issueRefund (Stripe Refunds API, Pending record, validation that the booking is
+cancelled, amount > 0 and <= paid, one refund per booking), refund.updated / refund.failed handling in
+the existing Stripe webhook (Refunded / Failed, payment marked Refunded or Partially Refunded), an
+in-app notification via NotificationsService, GET /api/refunds/:id, findByBooking for booking details,
+and unit tests. I reviewed the code and tests.
+Verification performed:
+Build and lint passed. 13 new refund tests and the 18 payment tests passed (NODE_OPTIONS=--experimental-vm-modules
+on Node 25 locally).

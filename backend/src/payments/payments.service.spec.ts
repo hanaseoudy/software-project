@@ -61,6 +61,7 @@ function setup(options: { booking?: unknown; stripe?: boolean; webhookSecret?: s
     },
     webhooks: { constructEvent: jest.fn() },
   };
+  const refundsService = { handleStripeRefund: jest.fn() };
   const config = { get: jest.fn((key: string) => (key === 'STRIPE_WEBHOOK_SECRET' ? options.webhookSecret : undefined)) };
   const service = new PaymentsService(
     paymentModel as any,
@@ -68,8 +69,9 @@ function setup(options: { booking?: unknown; stripe?: boolean; webhookSecret?: s
     hotelModel as any,
     options.stripe === false ? null : (stripe as any),
     config as any,
+    refundsService as any,
   );
-  return { service, paymentModel, bookingModel, hotelModel, stripe };
+  return { service, paymentModel, bookingModel, hotelModel, stripe, refundsService };
 }
 
 const dto = { bookingType: BookingType.FLIGHT, bookingId: bookingId.toString() };

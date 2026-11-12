@@ -24,6 +24,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentResponseDto, PaymentSessionResponseDto } from './dto/payment-response.dto';
 import { BookingType, PaymentStatus } from './enums/payment.enums';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
+import { RefundsService } from './refunds.service';
 import { STRIPE_CLIENT } from './stripe.provider';
 
 /**
@@ -60,6 +61,7 @@ export class PaymentsService {
     @InjectModel(HotelBooking.name) private hotelBookingModel: Model<HotelBookingDocument>,
     @Inject(STRIPE_CLIENT) private readonly stripe: Stripe | null,
     private readonly config: ConfigService,
+    private readonly refundsService: RefundsService,
   ) {}
 
   /**
@@ -182,8 +184,13 @@ export class PaymentsService {
           { $set: { status: PaymentStatus.EXPIRED } },
         );
         break;
+      case 'refund.updated':
+      case 'refund.failed':
+        // PAY-03: Stripe reports the final refund result.
+        await this.refundsService.handleStripeRefund(event.data.object);
+        break;
       default:
-        break; // other events are not used by PAY-01
+        break; // other events are not used by PAY-01 / PAY-03
     }
   }
 

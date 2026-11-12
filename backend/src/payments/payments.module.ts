@@ -9,9 +9,12 @@ import {
   HotelBooking,
   HotelBookingSchema,
 } from '../hotel-bookings/schemas/hotel-booking.schema';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentExpiryService } from './payment-expiry.service';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
+import { RefundsController } from './refunds.controller';
+import { RefundsService } from './refunds.service';
 import { Payment, PaymentSchema } from './schemas/payment.schema';
 import { Refund, RefundSchema } from './schemas/refund.schema';
 import { stripeProvider } from './stripe.provider';
@@ -26,9 +29,10 @@ import { stripeProvider } from './stripe.provider';
       { name: HotelBooking.name, schema: HotelBookingSchema },
     ]),
     AuthModule, // JwtAuthGuard
+    NotificationsModule, // PAY-03 refund notifications (GEN-01)
   ],
-  controllers: [PaymentsController],
-  providers: [stripeProvider, PaymentsService, PaymentExpiryService],
-  exports: [MongooseModule, PaymentsService],
+  controllers: [PaymentsController, RefundsController],
+  providers: [stripeProvider, PaymentsService, RefundsService, PaymentExpiryService],
+  exports: [MongooseModule, PaymentsService, RefundsService],
 })
 export class PaymentsModule {}
