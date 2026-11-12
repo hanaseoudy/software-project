@@ -55,25 +55,29 @@ export class FlightsService {
       departureUtc,
     );
 
-    return this.flightsModel.create({
+    const departureLocalDate = dto.departureTime.split('T')[0]; // or via date-fns-tz
+
+    const flight = await this.flightsModel.create({
       airline: airlineId,
       flightNumber: dto.flightNumber,
-      departureAirport: departureAirport.iataCode,
-      arrivalAirport: arrivalAirport.iataCode,
-      departureTime: departureUtc,
-      arrivalTime: arrivalUtc,
-      status: FlightStatus.SCHEDULED,
+      departureAirport: departureAirport._id,
+      arrivalAirport: arrivalAirport._id,
+      departureTime: dto.departureTime,
+      arrivalTime: dto.arrivalTime,
+      departureLocalDate,
     });
+
+    // Populate the references before returning the response
+    return flight.populate(['airline', 'departureAirport', 'arrivalAirport']);
   }
 
   private async getModeratorAirlineId(userId: string) {
-    const assignment = await this.assignmentModel
-      .findOne({
-        moderatorId: userId,
-        providerType: ProviderType.AIRLINE,
-      })
-      .select('providerId')
-      .exec();
+    if (!userId)
+      throw new ForbiddenException('You are not assigned to an airline'); // new line
+    const assignment = await this.assignmentModel.findOne({
+      moderatorId: userId,
+      providerType: ProviderType.AIRLINE,
+    });
 
     if (!assignment) {
       throw new ForbiddenException('You are not assigned to an airline');

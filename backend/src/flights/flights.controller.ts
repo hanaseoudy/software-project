@@ -1,20 +1,13 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Patch,
-  Post,
-  UseInterceptors,
-  UploadedFile,
-  Req,
-} from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { FlightsService } from './flights.service';
 import { UserRole } from '../users/schemas/user.schema';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreateFlightsDto } from './dto/create-flights.dto';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthPayload } from '../common/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 
 @ApiTags('Flights')
 @Controller('flights')
@@ -40,9 +33,13 @@ export class FlightsController {
     description:
       'Conflict: Flight number already exists on this date for this airline.',
   })
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR)
   @Post()
-  create(@CurrentUser('id') userId: string, @Body() dto: CreateFlightsDto) {
-    return this.flights.create(userId, dto);
+  create(
+    @CurrentUser('sub') userId: AuthPayload,
+    @Body() dto: CreateFlightsDto,
+  ) {
+    return this.flights.create(userId.sub, dto);
   }
 }

@@ -9,6 +9,7 @@ import {
 } from '../users/schemas/moderatorassignment.schema';
 import { FlightsController } from './flights.controller';
 import { FlightsService } from './flights.service';
+import { JwtService } from '@nestjs/jwt';
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -19,6 +20,6 @@ import { FlightsService } from './flights.service';
     ]),
   ],
   controllers: [FlightsController],
-  providers: [FlightsService],
+  providers: [JwtService, FlightsService],
 })
 export class FlightsModule {}
