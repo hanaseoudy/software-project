@@ -310,3 +310,29 @@ update accept only photos stored by UploadsService (isStoredUrl for the hotel ca
 reviewed the changes and the new tests.
 Verification performed:
 Lint, build and all unit tests passed under Node 24 (53 tests in the HTL-01 branch).
+
+================================================
+Date: 2026-11-12
+Student: <your name>
+Tool: Claude
+Related Requirement: FLT-03
+Prompt:
+Asked to guide me through FLT-03 (airline moderator creates a flight) by
+questioning me and correcting my answers. Topics: where a new flight's
+airline comes from (POST /api/flights has no airline id in the URL), which
+fields the moderator sends versus which the system calculates, how to
+identify airports (IATA code lookup), and how to accept times entered in
+each airport's local time and store them in UTC.
+How the output was used:
+- Learned that the airline must come from the logged-in moderator's
+  ModeratorAssignment, never from the request body, and wrote the lookup
+  (403 if the moderator has no assigned airline).
+- Registered the ModeratorAssignment model in FlightsModule and injected it
+  into FlightsService.
+- Designed CreateFlightDto: moderator sends flightNumber, departure/arrival
+  airport IATA codes and local date-times (format YYYY-MM-DDTHH:mm, no
+  timezone); airline, status, cabins, departureLocalDate and
+  durationMinutes are filled in by the system.
+- Used the suggested regex for the local time format and reviewed it
+  before use.
+================================================
