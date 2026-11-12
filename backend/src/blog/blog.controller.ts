@@ -1,11 +1,14 @@
-import { Body, Controller, Get, Post, Query, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiCookieAuth,
   ApiCreatedResponse,
   ApiExtraModels,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -17,6 +20,8 @@ import { ValidationErrorResponseDto } from '../auth/dto/validation-error-respons
 import { BlogService } from './blog.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { PostResponseDto } from './dto/post-response.dto';
+import { ErrorResponseDto } from './dto/error-response.dto';
+import { UpdateTagsDto } from './dto/update-tags.dto';
 import { MyPostSummaryDto } from './dto/my-post-response.dto';
 import type { MyPostsPage } from './dto/my-post-response.dto';
 import { PaginatedResponseDto, PaginationQueryDto } from '../common/pagination/pagination';
@@ -78,5 +83,40 @@ export class BlogController {
     const userId = req.user?.sub;
     if (!userId) throw new UnauthorizedException('Not authenticated');
     return this.blogService.listMine(userId, query.page ?? 1);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Edit my post\'s tags (BLG-08)',
+    description:
+      'The author replaces the tags of their own post: up to 5 tags, each 1 to 30 characters, ' +
+      'stored trimmed, lowercase and without duplicates. Other fields are edited under BLG-04.',
+  })
+  @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
+  @ApiOkResponse({ description: 'Post updated', type: PostResponseDto })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    type: ValidationErrorResponseDto,
+    example: { message: 'Validation failed', errors: { tags: ['A post can have at most 5 tags'] } },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in', type: ErrorResponseDto })
+  @ApiForbiddenResponse({ description: 'The post belongs to another user', type: ErrorResponseDto })
+  @ApiNotFoundResponse({ description: 'Invalid post id or the post does not exist', type: ErrorResponseDto })
+  update(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdateTagsDto,
+  ): Promise<PostResponseDto> {
+    return this.blogService.update(this.requireUserId(req), id, dto);
+  }
+
+  // The user id always comes from the authenticated token, never from the body or query
+  private requireUserId(req: AuthenticatedRequest): string {
+    const user = req.user as (AuthenticatedRequest['user'] & { userId?: unknown; id?: unknown; _id?: unknown }) | undefined;
+    const userId = user?.userId ?? user?.id ?? user?._id ?? user?.sub;
+    if (!userId) throw new UnauthorizedException('Not authenticated');
+    return String(userId);
   }
 }
