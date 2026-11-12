@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Post, Query, Req, UnauthorizedException, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiCookieAuth,
@@ -6,7 +17,9 @@ import {
   ApiExtraModels,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiQuery,
+  ApiResponse,
   ApiTags,
   ApiUnauthorizedResponse,
   getSchemaPath,
@@ -17,6 +30,8 @@ import { ValidationErrorResponseDto } from '../auth/dto/validation-error-respons
 import { BlogService } from './blog.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { PostResponseDto } from './dto/post-response.dto';
+import { LikeResponseDto } from './dto/like-response.dto';
+import { ErrorResponseDto } from './dto/error-response.dto';
 import { MyPostSummaryDto } from './dto/my-post-response.dto';
 import type { MyPostsPage } from './dto/my-post-response.dto';
 import { PaginatedResponseDto, PaginationQueryDto } from '../common/pagination/pagination';
@@ -78,5 +93,56 @@ export class BlogController {
     const userId = req.user?.sub;
     if (!userId) throw new UnauthorizedException('Not authenticated');
     return this.blogService.listMine(userId, query.page ?? 1);
+  }
+
+  @Post(':id/like')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Like a post (BLG-06)',
+    description:
+      'Adds a like from the logged-in user to a published, visible post and returns the updated like count. ' +
+      'A user can like a post only once; a second like returns 409.',
+  })
+  @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
+  @ApiResponse({ status: 201, description: 'Post liked', type: LikeResponseDto })
+  @ApiResponse({ status: 401, description: 'Not logged in', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 404,
+    description: 'Invalid post id, or the post does not exist, is a draft or is hidden',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({ status: 409, description: 'You have already liked this post', type: ErrorResponseDto })
+  like(@Req() req: AuthenticatedRequest, @Param('id') id: string): Promise<LikeResponseDto> {
+    return this.blogService.likePost(this.requireUserId(req), id);
+  }
+
+  @Delete(':id/like')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Remove my like from a post (BLG-06)',
+    description:
+      'Removes the logged-in user\'s like from a published, visible post and returns the updated like count. ' +
+      'Returns 404 if the user has not liked the post.',
+  })
+  @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
+  @ApiResponse({ status: 200, description: 'Like removed', type: LikeResponseDto })
+  @ApiResponse({ status: 401, description: 'Not logged in', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 404,
+    description: 'Invalid post id, the post does not exist, is a draft or is hidden, or you have not liked it',
+    type: ErrorResponseDto,
+  })
+  unlike(@Req() req: AuthenticatedRequest, @Param('id') id: string): Promise<LikeResponseDto> {
+    return this.blogService.unlikePost(this.requireUserId(req), id);
+  }
+
+  // The user id always comes from the authenticated token, never from the body or query
+  private requireUserId(req: AuthenticatedRequest): string {
+    const user = req.user as (AuthenticatedRequest['user'] & { userId?: unknown; id?: unknown; _id?: unknown }) | undefined;
+    const userId = user?.userId ?? user?.id ?? user?._id ?? user?.sub;
+    if (!userId) throw new UnauthorizedException('Not authenticated');
+    return String(userId);
   }
 }
