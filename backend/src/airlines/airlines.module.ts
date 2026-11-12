@@ -9,6 +9,7 @@ import {
 import { AirlinesController } from './airlines.controller';
 import { AirlinesService } from './airlines.service';
 import { UploadsModule } from '../uploads/uploads.module';
+import { JwtService } from '@nestjs/jwt';
 
 @Module({
   imports: [
@@ -19,6 +20,6 @@ import { UploadsModule } from '../uploads/uploads.module';
     UploadsModule,
   ],
   controllers: [AirlinesController],
-  providers: [AirlinesService],
+  providers: [JwtService, AirlinesService],
 })
 export class AirlinesModule {}
