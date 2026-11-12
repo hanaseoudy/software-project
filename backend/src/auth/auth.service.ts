@@ -1,4 +1,11 @@
-import { ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
@@ -18,6 +25,9 @@ import {
   authCookieOptions,
   clearCookieOptions,
 } from './auth.cookies';
+
+const MAX_FAILED_LOGINS = 5;
+const LOCK_MINUTES = 15;
 
 interface RefreshPayload {
   sub: string;
@@ -67,11 +77,23 @@ export class AuthService {
     }
   }
 
-  async login(dto: LoginDto) {
-    const user = await this.userModel.findOne({ email: dto.email }).select('+passwordHash');
-    const passwordOk = user ? await bcrypt.compare(dto.password, user.passwordHash) : false;
 
+
+    async login(dto: LoginDto) {
+    const user = await this.userModel
+      .findOne({ email: dto.email })
+      .select('+passwordHash +failedLoginAttempts +lockedUntil');
+
+    // ACC-05: a locked account is rejected before the password is checked.
+    if (user?.lockedUntil && user.lockedUntil > new Date()) {
+      throw this.accountLocked(user.lockedUntil);
+    }
+
+    const passwordOk = user ? await bcrypt.compare(dto.password, user.passwordHash) : false;
     if (!user || !passwordOk) {
+      if (user) {
+        await this.recordFailedLogin(user);
+      }
       throw this.invalidCredentials();
     }
 
@@ -81,6 +103,14 @@ export class AuthService {
 
     if (user.status === AccountStatus.DEACTIVATED) {
       throw this.invalidCredentials();
+    }
+
+    // ACC-05: a successful login resets the counter.
+    if (user.failedLoginAttempts || user.lockedUntil) {
+      await this.userModel.updateOne(
+        { _id: user._id },
+        { $set: { failedLoginAttempts: 0, lockedUntil: null } },
+      );
     }
 
     const session = await this.sessionModel.create({
@@ -94,42 +124,69 @@ export class AuthService {
     return { user: await this.toAuthUser(user), ...tokens };
   }
 
-  async refresh(refreshToken: string | undefined) {
-    if (!refreshToken) {
-      throw this.notAuthenticated();
-    }
-
-    let payload: RefreshPayload;
-    try {
-      payload = await this.jwtService.verifyAsync<RefreshPayload>(refreshToken, {
-        secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
-      });
-    } catch {
-      throw this.notAuthenticated();
-    }
-
-    const session = await this.sessionModel.findOne({ _id: payload.sid, user: payload.sub });
-    if (!session || session.revokedAt) {
-      throw this.notAuthenticated();
-    }
-
-    const idle = session.lastActivityAt.getTime() <= Date.now() - this.idleTtl() * 1000;
-    const reused = session.refreshJti !== payload.jti;
-    const user = await this.userModel.findById(payload.sub);
-
-    if (idle || reused || !user || user.status !== AccountStatus.ACTIVE) {
-      session.revokedAt = new Date();
-      await session.save();
-      throw this.notAuthenticated();
-    }
-
-    session.refreshJti = randomUUID();
-    session.expiresAt = this.refreshExpiry();
-    await session.save();
-    const tokens = await this.signTokens(session, user);
-
-    return { user: await this.toAuthUser(user), ...tokens };
+  
+async refresh(refreshToken: string | undefined) {
+  if (!refreshToken) {
+    throw this.notAuthenticated();
   }
+
+  let payload: RefreshPayload;
+
+  try {
+    payload = await this.jwtService.verifyAsync<RefreshPayload>(
+      refreshToken,
+      {
+        secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      },
+    );
+  } catch {
+    throw this.notAuthenticated();
+  }
+
+  const user = await this.userModel.findById(payload.sub);
+
+  if (!user || user.status !== AccountStatus.ACTIVE) {
+    await this.revokeSession(payload.sid);
+    throw this.notAuthenticated();
+  }
+
+  const now = new Date();
+
+  // Atomically check and rotate the refresh token.
+  const session = await this.sessionModel.findOneAndUpdate(
+    {
+      _id: payload.sid,
+      user: payload.sub,
+      refreshJti: payload.jti,
+      revokedAt: null,
+      expiresAt: { $gt: now },
+      lastActivityAt: {
+        $gt: new Date(now.getTime() - this.idleTtl() * 1000),
+      },
+    },
+    {
+      $set: {
+        refreshJti: randomUUID(),
+        expiresAt: this.refreshExpiry(),
+      },
+    },
+    { returnDocument: 'after' },
+  );
+
+  if (!session) {
+    // Invalid, expired, idle, revoked, or reused refresh token.
+    await this.revokeSession(payload.sid);
+    throw this.notAuthenticated();
+  }
+
+  const tokens = await this.signTokens(session, user);
+
+  return {
+    user: await this.toAuthUser(user),
+    ...tokens,
+  };
+}
+
 
   async logout(accessToken: string | undefined, refreshToken: string | undefined) {
     const sessionId =
@@ -208,6 +265,38 @@ export class AuthService {
     };
   }
 
+
+    /** ACC-05: count a failed login; the 5th consecutive failure locks the account for 15 minutes. */
+  private async recordFailedLogin(user: UserDocument) {
+    await this.userModel.updateOne({ _id: user._id }, { $inc: { failedLoginAttempts: 1 } });
+    // Only matches once the count has reached 5, so concurrent failures lock exactly once.
+    await this.userModel.updateOne(
+      { _id: user._id, failedLoginAttempts: { $gte: MAX_FAILED_LOGINS } },
+      {
+        $set: {
+          failedLoginAttempts: 0,
+          lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60 * 1000),
+        },
+      },
+    );
+  }
+
+  private async revokeSession(sessionId: string) {
+    await this.sessionModel.updateOne({ _id: sessionId, revokedAt: null }, { $set: { revokedAt: new Date() } });
+  }
+
+  private accountLocked(lockedUntil: Date) {
+    const minutes = Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / 60000));
+    return new HttpException(
+      {
+        statusCode: HttpStatus.LOCKED,
+        message: `Account locked after too many failed login attempts. Try again in ${minutes} minute(s).`,
+        error: 'Locked',
+      },
+      HttpStatus.LOCKED,
+    );
+  }
+
   private refreshExpiry() {
     return new Date(Date.now() + this.refreshTtl() * 1000);
   }
@@ -239,3 +328,4 @@ export class AuthService {
     return new UnauthorizedException('Not authenticated');
   }
 }
+
