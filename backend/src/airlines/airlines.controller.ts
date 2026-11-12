@@ -8,6 +8,7 @@ import {
   Post,
   UseInterceptors,
   UploadedFile,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { AirlinesService } from './airlines.service';
@@ -16,9 +17,15 @@ import { UpdateAirlineDto } from './dto/update-airline.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UserRole } from '../users/schemas/user.schema';
-import type { AuthPayload } from '../common/guards/jwt-auth.guard';
+import {
+  JwtAuthGuard,
+  type AuthPayload,
+} from '../common/guards/jwt-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { UploadedImage } from '../uploads/uploads.service';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { imageUploadOptions } from '../uploads/image-upload.options';
+import { ImageCategory } from '../uploads/uploads.constants';
 
 @Controller('airlines')
 export class AirlinesController {
@@ -29,12 +36,14 @@ export class AirlinesController {
     return this.airlines.findOne(id);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @Post()
   create(@Body() dto: CreateAirlineDto) {
     return this.airlines.create(dto);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR)
   @Patch(':id')
   update(
@@ -45,9 +54,12 @@ export class AirlinesController {
     return this.airlines.update(id, dto, user);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR)
   @Post(':id/logo')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', imageUploadOptions(ImageCategory.AIRLINE)),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {

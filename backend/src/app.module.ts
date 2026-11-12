@@ -55,9 +55,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 
   controllers: [AppController],
   providers: [
-    AppService,
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
-    { provide: APP_GUARD, useClass: RolesGuard }, // new line
+    AppService, // new line
   ],
 })
 export class AppModule {}
