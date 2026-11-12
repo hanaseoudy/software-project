@@ -12,6 +12,10 @@ import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { warnIfDatabaseMissing } from './common/config/mongodb.config';
+import { AirlinesModule } from './airlines/airlines.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
+import { FlightsModule } from './flights/flights.module';
 
 @Module({
   imports: [
@@ -19,41 +23,41 @@ import { warnIfDatabaseMissing } from './common/config/mongodb.config';
       isGlobal: true,
     }),
     MongooseModule.forRootAsync({
-      inject:[ConfigService],
+      inject: [ConfigService],
 
-      useFactory:(configService:ConfigService)=>{
-        const uri=configService.get<string>('MONGODB_URI');
-        
-        if(!uri){
-          throw new Error(
-            'MongoDB URI is missing check env file',);
-           }
+      useFactory: (configService: ConfigService) => {
+        const uri = configService.get<string>('MONGODB_URI');
+
+        if (!uri) {
+          throw new Error('MongoDB URI is missing check env file');
+        }
         warnIfDatabaseMissing(uri, (message) => console.warn(message));
-        
 
         return {
-
-      uri,
-      autoCreate: true,
-      connectionFactory: (connection) => {
-        console.log('MongoDB connected successfully!');
-        return connection;
+          uri,
+          autoCreate: true,
+          connectionFactory: (connection) => {
+            console.log('MongoDB connected successfully!');
+            return connection;
+          },
+        };
       },
-    };
-  },
-}),
-AirportsModule,
-PaymentsModule,
-BlogModule,
-HotelBookingsModule,
-HotelsModule,
-UsersModule,
-AuthModule,
-UploadsModule,
-],
-
+    }),
+    AirportsModule,
+    PaymentsModule,
+    BlogModule,
+    HotelBookingsModule,
+    HotelsModule,
+    UsersModule,
+    AuthModule,
+    UploadsModule,
+    AirlinesModule,
+    FlightsModule,
+  ],
 
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService, // new line
+  ],
 })
 export class AppModule {}

@@ -38,7 +38,12 @@ export const CabinSchema = SchemaFactory.createForClass(Cabin);
 
 @Schema({ timestamps: true })
 export class Flight {
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Airline', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Airline',
+    required: true,
+    index: true,
+  })
   airline: Types.ObjectId;
 
   @Prop({ required: true, uppercase: true, trim: true })
@@ -72,11 +77,18 @@ export class Flight {
 
 export const FlightSchema = SchemaFactory.createForClass(Flight);
 
-FlightSchema.index({ departureAirport: 1, arrivalAirport: 1, departureLocalDate: 1 });
-FlightSchema.index({ airline: 1, flightNumber: 1, departureLocalDate: 1 }, { unique: true });
+FlightSchema.index({
+  departureAirport: 1,
+  arrivalAirport: 1,
+  departureLocalDate: 1,
+});
+FlightSchema.index(
+  { airline: 1, flightNumber: 1, departureLocalDate: 1 },
+  { unique: true },
+);
 
 FlightSchema.pre('validate', function () {
-  if (this.departureAirport.equals(this.arrivalAirport)) {
+  if (this.departureAirport?.equals(this.arrivalAirport)) {
     throw new Error('Departure and arrival airports must be different');
   }
   if (this.arrivalTime <= this.departureTime) {
