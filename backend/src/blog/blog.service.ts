@@ -10,12 +10,15 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Error as MongooseError, isValidObjectId, Model, PipelineStage, Types } from 'mongoose';
+import { CommentResponseDto } from './dto/comment-response.dto';
 import { CreatePostDto } from './dto/create-post.dto';
 import { LikeResponseDto } from './dto/like-response.dto';
 import { MyPostsPage } from './dto/my-post-response.dto';
 import { PostResponseDto } from './dto/post-response.dto';
 import { TagPostsPage, TagsPage } from './dto/tag-response.dto';
 import { UpdateTagsDto } from './dto/update-tags.dto';
+import { commentTextError } from './comment-rules';
+import { Comment, CommentDocument } from './schemas/comment.schema';
 import { Like, LikeDocument } from './schemas/like.schema';
 import { Post, PostDocument, PostStatus } from './schemas/post.schema';
 import { escapeRegex, normalizeTags } from './tag-rules';
@@ -33,6 +36,7 @@ export class BlogService {
   constructor(
     @InjectModel(Post.name) private readonly postModel: Model<PostDocument>,
     @InjectModel(Like.name) private readonly likeModel: Model<LikeDocument>,
+    @InjectModel(Comment.name) private readonly commentModel: Model<CommentDocument>,
   ) {}
 
   // BLG-01: the author always comes from the logged-in user, never from the request body
@@ -221,6 +225,47 @@ export class BlogService {
       throw new InternalServerErrorException('Could not remove the like');
     }
     return { liked: false, likesCount: updated?.likesCount ?? 0 };
+  }
+
+  // BLG-05: comment on a published, non-hidden post. Order of checks: 401 (user), 400 (text), 404 (post).
+  async addComment(userId: string, postId: string, text: unknown): Promise<CommentResponseDto> {
+    const author = this.toUserObjectId(userId);
+    const body = this.toCommentText(text);
+    const post = await this.findLikeablePostId(postId);
+
+    const comment = await this.runDb('Could not add the comment', () =>
+      this.commentModel.create({ post, author, text: body }),
+    );
+
+    // Count only after the comment was stored; atomic $inc keeps the counter in sync under concurrency
+    try {
+      const { matchedCount } = await this.postModel.updateOne({ _id: post }, { $inc: { commentsCount: 1 } }).exec();
+      if (matchedCount === 0) {
+        throw new NotFoundException('Post not found');
+      }
+    } catch (error) {
+      // The comment was stored but not counted (or the post was just deleted): undo it so nothing drifts
+      await this.commentModel.deleteOne({ _id: comment._id }).exec().catch(() => undefined);
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException('Could not add the comment');
+    }
+
+    return {
+      id: comment._id.toString(),
+      postId: post.toString(),
+      author: { id: author.toString() },
+      text: comment.text,
+      createdAt: comment.get('createdAt') as Date,
+    };
+  }
+
+  // BLG-05: service-level check that never assumes the text is a string (same rules as CreateCommentDto)
+  private toCommentText(value: unknown): string {
+    const error = commentTextError(value);
+    if (error) {
+      throw new BadRequestException({ message: 'Validation failed', errors: { text: [error] } });
+    }
+    return (value as string).trim();
   }
 
   private toUserObjectId(userId: string): Types.ObjectId {

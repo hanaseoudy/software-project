@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiBody,
   ApiCookieAuth,
   ApiCreatedResponse,
   ApiExtraModels,
@@ -36,6 +37,9 @@ import { PostResponseDto } from './dto/post-response.dto';
 import { UpdateTagsDto } from './dto/update-tags.dto';
 import { LikeResponseDto } from './dto/like-response.dto';
 import { ErrorResponseDto } from './dto/error-response.dto';
+import { CreateCommentDto } from './dto/create-comment.dto';
+import { CommentResponseDto } from './dto/comment-response.dto';
+import { StrictBody } from './strict-body.decorator';
 import { MyPostSummaryDto } from './dto/my-post-response.dto';
 import type { MyPostsPage } from './dto/my-post-response.dto';
 import { PaginatedResponseDto, PaginationQueryDto } from '../common/pagination/pagination';
@@ -167,6 +171,39 @@ export class BlogController {
   })
   unlike(@Req() req: AuthenticatedRequest, @Param('id') id: string): Promise<LikeResponseDto> {
     return this.blogService.unlikePost(this.requireUserId(req), id);
+  }
+
+  @Post(':id/comments')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Comment on a post (BLG-05)',
+    description:
+      'Login required. Adds a comment from the logged-in user to a published, visible post. ' +
+      'The text is trimmed and must be 1 to 500 characters; unknown fields are rejected. ' +
+      'Comments are stored for chronological display, oldest first.',
+  })
+  @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
+  @ApiBody({ type: CreateCommentDto })
+  @ApiResponse({ status: 201, description: 'Comment added', type: CommentResponseDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed; errors are grouped by field',
+    type: ValidationErrorResponseDto,
+    example: { message: 'Validation failed', errors: { text: ['Comment must be at most 500 characters'] } },
+  })
+  @ApiResponse({ status: 401, description: 'Not logged in', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 404,
+    description: 'Invalid post id, or the post does not exist, is a draft or is hidden',
+    type: ErrorResponseDto,
+  })
+  addComment(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @StrictBody() dto: CreateCommentDto,
+  ): Promise<CommentResponseDto> {
+    return this.blogService.addComment(this.requireUserId(req), id, dto.text);
   }
 
   // The user id always comes from the authenticated token, never from the body or query
