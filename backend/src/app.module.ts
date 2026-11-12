@@ -12,9 +12,9 @@ import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { AirlinesModule } from './airlines/airlines.module';
-import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { FlightsModule } from './flights/flights.module';
 
 @Module({
   imports: [
@@ -51,13 +51,12 @@ import { RolesGuard } from './common/guards/roles.guard';
     AuthModule,
     UploadsModule,
     AirlinesModule,
+    FlightsModule,
   ],
 
   controllers: [AppController],
   providers: [
-    AppService,
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
-    { provide: APP_GUARD, useClass: RolesGuard }, // new line
+    AppService, // new line
   ],
 })
 export class AppModule {}
