@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BookingType, PaymentStatus } from '../enums/payment.enums';
+import { RefundResponseDto } from './refund-response.dto';
 
 /** PAY-01: payment as returned to its owner. */
 export class PaymentResponseDto {
@@ -35,6 +36,12 @@ export class PaymentResponseDto {
 
   @ApiPropertyOptional()
   paidAt?: Date;
+
+  @ApiPropertyOptional({
+    type: RefundResponseDto,
+    description: 'Refund of this booking, if any, with status Pending, Refunded or Failed (PAY-03)',
+  })
+  refund?: RefundResponseDto;
 }
 
 /** PAY-01: returned when a payment is started or retried. */

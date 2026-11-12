@@ -18,7 +18,7 @@ function setup(options: { cancelled?: boolean; payment?: any; existingRefund?: b
   const payment =
     'payment' in options
       ? options.payment
-      : makeDoc({ userId, amount: 200, currency: 'USD', status: PaymentStatus.SUCCEEDED, stripePaymentIntentId: 'pi_1' });
+      : makeDoc({ userId, bookingType: BookingType.FLIGHT, bookingId, amount: 200, currency: 'USD', status: PaymentStatus.SUCCEEDED, stripePaymentIntentId: 'pi_1' });
   let created: any;
   const refundModel = {
     exists: jest.fn().mockResolvedValue(options.existingRefund ? { _id: 'r' } : null),
@@ -26,6 +26,7 @@ function setup(options: { cancelled?: boolean; payment?: any; existingRefund?: b
     findOne: jest.fn(),
     findById: jest.fn(),
     findOneAndUpdate: jest.fn().mockImplementation(async () => ({ ok: true })),
+    find: jest.fn().mockResolvedValue([]),
   };
   const paymentModel = {
     findOne: jest.fn().mockResolvedValue(payment),
@@ -39,6 +40,7 @@ function setup(options: { cancelled?: boolean; payment?: any; existingRefund?: b
       create: options.stripeThrows
         ? jest.fn().mockRejectedValue(new Error('charge already refunded'))
         : jest.fn().mockResolvedValue({ id: 're_1', status: options.stripeStatus ?? 'pending' }),
+      retrieve: jest.fn(),
     },
   };
   const notifications = { create: jest.fn().mockResolvedValue({}) };
@@ -126,6 +128,36 @@ describe('RefundsService (PAY-03)', () => {
       const result = await service.issueRefund(input);
       expect(result?.status).toBe(RefundStatus.FAILED);
       expect(notifications.create).toHaveBeenCalledWith(userId, expect.objectContaining({ title: 'Refund failed' }));
+    });
+  });
+
+  describe('refundUnconfirmedPayment', () => {
+    it('returns the full amount of a payment whose booking was not confirmed, even though it is not cancelled', async () => {
+      const { service, stripe, refundModel, payment } = setup({ cancelled: false });
+      await service.refundUnconfirmedPayment(payment, 200, 'Paid after the booking hold ended');
+      expect(stripe.refunds.create).toHaveBeenCalledWith(expect.objectContaining({ amount: 20000 }));
+      expect(refundModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 200, reason: 'Paid after the booking hold ended' }),
+      );
+    });
+
+    it('does nothing if a refund already exists', async () => {
+      const { service, stripe, payment } = setup({ existingRefund: true });
+      await service.refundUnconfirmedPayment(payment, 200, 'x');
+      expect(stripe.refunds.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('syncPendingRefunds', () => {
+    it('asks Stripe about old Pending refunds so none stays Pending forever', async () => {
+      const { service, refundModel, stripe, notifications } = setup();
+      const refund = makeDoc({ userId, paymentId: new Types.ObjectId(), bookingType: BookingType.HOTEL, bookingId, amount: 50, currency: 'USD', status: RefundStatus.PENDING, stripeRefundId: 're_9' });
+      refundModel.find.mockResolvedValue([refund]);
+      stripe.refunds.retrieve.mockResolvedValue({ id: 're_9', status: 'succeeded' });
+
+      expect(await service.syncPendingRefunds()).toBe(1);
+      expect(refund.status).toBe(RefundStatus.REFUNDED);
+      expect(notifications.create).toHaveBeenCalledTimes(1);
     });
   });
 

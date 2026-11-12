@@ -566,3 +566,21 @@ stored" - the failure message is read live from Stripe for GET /api/payments/:id
 changes and the updated tests.
 Verification performed:
 Build and lint passed; 22 payment unit tests passed.
+
+Date: 2026-11-12
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-03 (TASK-66) - follow-up review against the sheet and project description
+Prompt (summary of the conversation):
+I asked AI whether PAY-03 fully covers the requirements sheet and the project description, and to fix
+whatever did not match 100%.
+
+How the output was used:
+AI added: automatic full refund when money is taken but the booking is not confirmed (paid after the
+hold ended or wrong amount), so the booking stays unconfirmed (PDF 6.4) and no money is kept;
+the booking's refund status (Pending / Refunded / Failed) is returned with GET /api/payments/:id
+(payment ID = booking ID) so users can inspect payment and refund status (PDF 6.4); a re-check of
+refunds still Pending after 10 minutes so none stays Pending if a webhook is missed. I reviewed the
+changes and tests.
+Verification performed:
+Build and lint passed; 39 payment/refund unit tests passed.

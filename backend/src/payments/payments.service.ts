@@ -149,6 +149,8 @@ export class PaymentsService {
   async findOne(userId: string, paymentId: string): Promise<PaymentResponseDto> {
     const payment = await this.findOwnPayment(userId, paymentId);
     const response = this.toResponse(payment);
+    // PAY-03: the booking's refund status is shown with its payment.
+    response.refund = (await this.refundsService.findByBooking(payment.bookingType, payment.bookingId)) ?? undefined;
     if (payment.status === PaymentStatus.FAILED && payment.stripePaymentIntentId && this.stripe) {
       try {
         const intent = await this.stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
@@ -254,9 +256,10 @@ export class PaymentsService {
     // Confirm only a booking that is still Pending Payment and was paid within its hold.
     const confirmed = amountMatches && (await this.confirmBooking(payment, paidAt));
     if (!confirmed) {
-      this.logger.warn(
-        `Payment ${payment.id} succeeded but the booking was not confirmed (${amountMatches ? 'hold ended' : 'amount mismatch'})`,
-      );
+      const reason = amountMatches ? 'Paid after the booking hold ended' : 'Paid amount did not match the booking total';
+      this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed: ${reason}`);
+      // PDF 6.4: the booking stays unconfirmed; the money taken is returned in full (PAY-03).
+      await this.refundsService.refundUnconfirmedPayment(payment, intent.amount_received / 100, reason);
       return;
     }
 

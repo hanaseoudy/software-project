@@ -90,32 +90,82 @@ export class RefundsService {
       throw new ConflictException('This booking already has a refund');
     }
 
+    return this.createRefund(stripe, payment, amount, input.appliedPolicy, input.reason);
+  }
+
+  /**
+   * Money was taken but the booking was not confirmed (paid after the hold ended,
+   * or wrong amount). The booking stays unconfirmed and the full amount is returned.
+   */
+  async refundUnconfirmedPayment(payment: PaymentDocument, amountReceived: number, reason: string): Promise<void> {
+    if (!this.stripe || amountReceived <= 0) return;
+    const existing = await this.refundModel.exists({
+      paymentId: payment._id,
+      status: { $in: [RefundStatus.PENDING, RefundStatus.REFUNDED] },
+    });
+    if (existing) return;
+    const amount = Math.round(amountReceived * 100) / 100;
+    await this.createRefund(this.stripe, payment, amount, { refundPercent: 100, rule: 'booking not confirmed' }, reason);
+  }
+
+  /**
+   * PAY-03: re-check refunds still Pending after `olderThanMs`, in case Stripe's
+   * webhook was missed, so no refund stays Pending forever.
+   */
+  async syncPendingRefunds(olderThanMs = 10 * 60_000): Promise<number> {
+    if (!this.stripe) return 0;
+    const pending = await this.refundModel.find({
+      status: RefundStatus.PENDING,
+      stripeRefundId: { $exists: true },
+      createdAt: { $lte: new Date(Date.now() - olderThanMs) },
+    });
+    let updated = 0;
+    for (const refund of pending) {
+      try {
+        const stripeRefund = await this.stripe.refunds.retrieve(refund.stripeRefundId!);
+        const before = refund.status;
+        await this.applyStripeStatus(refund, stripeRefund);
+        if (refund.status !== before) updated += 1;
+      } catch (error) {
+        this.logger.warn(`Could not re-check refund ${refund.id}: ${(error as Error).message}`);
+      }
+    }
+    return updated;
+  }
+
+  private async createRefund(
+    stripe: Stripe,
+    payment: PaymentDocument,
+    amount: number,
+    appliedPolicy: Record<string, unknown> | undefined,
+    reason: string | undefined,
+  ): Promise<RefundResponseDto> {
     const refund = await this.refundModel.create({
       paymentId: payment._id,
       userId: payment.userId,
-      bookingType: input.bookingType,
-      bookingId,
+      bookingType: payment.bookingType,
+      bookingId: payment.bookingId,
       amount,
       currency: payment.currency,
       status: RefundStatus.PENDING,
-      reason: input.reason,
-      appliedPolicy: input.appliedPolicy,
+      reason,
+      appliedPolicy,
     });
 
-    if (input.bookingType === BookingType.FLIGHT) {
+    if (payment.bookingType === BookingType.FLIGHT) {
       // Flight bookings have a refund reference in their schema; hotel refunds are found by booking.
-      await this.flightBookingModel.updateOne({ _id: bookingId }, { $set: { refund: refund._id } });
+      await this.flightBookingModel.updateOne({ _id: payment.bookingId }, { $set: { refund: refund._id } });
     }
 
     try {
       const stripeRefund = await stripe.refunds.create({
-        payment_intent: payment.stripePaymentIntentId,
+        payment_intent: payment.stripePaymentIntentId!,
         amount: Math.round(amount * 100),
-        metadata: { refundId: refund.id, bookingType: input.bookingType, bookingId: bookingId.toString() },
+        metadata: { refundId: refund.id, bookingType: payment.bookingType, bookingId: payment.bookingId.toString() },
       });
       refund.stripeRefundId = stripeRefund.id;
       await refund.save();
-      // Test mode often finishes at once; otherwise the webhook finishes it later.
+      // Test mode often finishes at once; otherwise the webhook (or the re-check) finishes it later.
       await this.applyStripeStatus(refund, stripeRefund);
     } catch (error) {
       this.logger.error(`Stripe refund failed for refund ${refund.id}: ${(error as Error).message}`);

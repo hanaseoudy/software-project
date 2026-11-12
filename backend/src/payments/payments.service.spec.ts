@@ -62,7 +62,11 @@ function setup(options: { booking?: unknown; stripe?: boolean; webhookSecret?: s
     },
     webhooks: { constructEvent: jest.fn() },
   };
-  const refundsService = { handleStripeRefund: jest.fn() };
+  const refundsService = {
+    handleStripeRefund: jest.fn(),
+    refundUnconfirmedPayment: jest.fn(),
+    findByBooking: jest.fn().mockResolvedValue(null),
+  };
   const config = { get: jest.fn((key: string) => (key === 'STRIPE_WEBHOOK_SECRET' ? options.webhookSecret : undefined)) };
   const service = new PaymentsService(
     paymentModel as any,
@@ -195,6 +199,15 @@ describe('PaymentsService (PAY-01)', () => {
       expect(result.failureReason).toBe('Your card was declined.');
       expect(payment.save).not.toHaveBeenCalled();
     });
+
+    it('includes the refund status of the booking (PAY-03)', async () => {
+      const { service, paymentModel, refundsService } = setup();
+      paymentModel.findById.mockResolvedValue(makePayment({ status: PaymentStatus.REFUNDED }));
+      refundsService.findByBooking.mockResolvedValue({ id: 'r1', status: 'refunded', amount: 120.5 });
+
+      const result = await service.findOne(userId, bookingId.toString());
+      expect(result.refund).toEqual(expect.objectContaining({ status: 'refunded' }));
+    });
   });
 
   describe('webhook', () => {
@@ -255,7 +268,7 @@ describe('PaymentsService (PAY-01)', () => {
     });
 
     it('leaves the booking unconfirmed when paid after the hold ended', async () => {
-      const { service, stripe, paymentModel, bookingModel } = setup({ webhookSecret: 'whsec' });
+      const { service, stripe, paymentModel, bookingModel, refundsService } = setup({ webhookSecret: 'whsec' });
       const payment = makePayment();
       paymentModel.findOne.mockResolvedValue(payment);
       bookingModel.updateOne.mockResolvedValue({ modifiedCount: 0 });
@@ -270,6 +283,8 @@ describe('PaymentsService (PAY-01)', () => {
       await service.handleWebhook(Buffer.from('{}'), 'sig');
       expect(payment.status).toBe(PaymentStatus.SUCCEEDED);
       expect(handler).not.toHaveBeenCalled();
+      // PAY-03: the money is returned in full.
+      expect(refundsService.refundUnconfirmedPayment).toHaveBeenCalledWith(payment, 120.5, 'Paid after the booking hold ended');
     });
 
     it('marks a failed PaymentIntent as failed without storing the reason', async () => {
