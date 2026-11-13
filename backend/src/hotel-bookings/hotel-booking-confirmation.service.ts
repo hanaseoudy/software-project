@@ -85,7 +85,7 @@ export class HotelBookingConfirmationService {
               bookingReference: generateBookingReference(),
             },
           },
-          { new: true },
+          { returnDocument: 'after' },
         );
         if (confirmed) return confirmed;
 

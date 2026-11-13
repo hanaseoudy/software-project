@@ -564,6 +564,15 @@ The service is meant to be called by PAY-01 after it verifies the payment.
 The confirmation page is a frontend task (Milestone 2).
 
 Verification:
-(to be updated after local testing)
+Unit tests for generateBookingReference pass (3 tests, jest); tsc --noEmit and
+oxlint show no errors in the changed files. The service itself has no jest test
+(5 existing suites on develop already fail on an ES-module import error).
+Tested locally against MongoDB Atlas with Swagger and Postman, using a temporary
+endpoint that called confirmAfterPayment() and temporary scripts (all removed,
+not committed): a valid PENDING_PAYMENT reservation returned 201 with status
+CONFIRMED and a bookingReference; calling it again returned the same reservation
+and reference; a reservation with an expired hold returned 409; a
+BOOKING_CONFIRMED notification with the reference was created. Not tested with a
+real payment, because PAY-01 is not merged and nothing calls the service yet.
 ================================================
 ================================================
