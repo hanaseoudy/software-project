@@ -406,6 +406,7 @@ await this.assertImagesAreUploads(dto.images);
       beds: room.beds,
       maxOccupancy: room.maxOccupancy,
       pricePerNight: room.pricePerNight,
+      currency: room.currency,
       isActive: room.isActive,
     };
   }
