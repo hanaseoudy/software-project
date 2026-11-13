@@ -13,6 +13,7 @@ import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { AirlinesModule } from './airlines/airlines.module';
+import { AdminModule } from './admin/admin.module';
 import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 
 @Module({
@@ -51,6 +52,7 @@ import { warnIfDatabaseMissing } from './common/config/mongodb.config';
     AuthModule,
     UploadsModule,
     AirlinesModule,
+    AdminModule,
   ],
 
   controllers: [AppController],
