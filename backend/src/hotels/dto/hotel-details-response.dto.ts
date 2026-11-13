@@ -58,8 +58,14 @@ export class HotelDetailsResponseDto {
   @ApiProperty({ example: '675f1b2c9d3e4a0012345678' })
   city!: string;
 
+  @ApiProperty({ example: 'Cairo', description: 'Display name of the city' })
+  cityName!: string;
+
   @ApiProperty({ example: '675f1b2c9d3e4a0087654321' })
   country!: string;
+
+  @ApiProperty({ example: 'Egypt', description: 'Display name of the country' })
+  countryName!: string;
 
   @ApiProperty({ example: 5 })
   starRating!: number;

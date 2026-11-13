@@ -566,14 +566,20 @@ export class HotelsService {
     }
     const stay = this.parseStay(query);
 
-    const reviews = await this.findRecentReviews(hotel._id);
+    const [reviews, cityName, countryName] = await Promise.all([
+      this.findRecentReviews(hotel._id),
+      this.findCityName(hotel.city),
+      this.findCountryName(hotel.country),
+    ]);
     const details: HotelDetailsResponseDto = {
       id: hotel._id.toString(),
       name: hotel.name,
       description: hotel.description,
       address: hotel.address,
       city: hotel.city.toString(),
+      cityName,
       country: hotel.country.toString(),
+      countryName,
       starRating: hotel.starRating,
       amenities: hotel.amenities,
       images: hotel.images,
@@ -597,6 +603,18 @@ export class HotelsService {
       );
     }
     return details;
+  }
+
+  /** Display name of the hotel's city; empty if the reference row is gone. */
+  private async findCityName(cityId: Types.ObjectId): Promise<string> {
+    const city = await this.cityModel.findById(cityId).lean().exec();
+    return city?.name ?? '';
+  }
+
+  /** Display name of the hotel's country; empty if the reference row is gone. */
+  private async findCountryName(countryId: Types.ObjectId): Promise<string> {
+    const country = await this.countryModel.findById(countryId).lean().exec();
+    return country?.name ?? '';
   }
 
   /** Both dates or none; check-out must be after check-in. */

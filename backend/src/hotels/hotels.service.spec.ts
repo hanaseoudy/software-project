@@ -67,8 +67,8 @@ describe('HotelsService', () => {
     findOne: jest.fn(),
     create: jest.fn(),
   };
-  const cityModel = { exists: jest.fn() };
-  const countryModel = { exists: jest.fn() };
+  const cityModel = { exists: jest.fn(), findById: jest.fn() };
+  const countryModel = { exists: jest.fn(), findById: jest.fn() };
   const assignmentModel = { exists: jest.fn() };
   const bookingModel = { exists: jest.fn(), find: jest.fn() };
   const reviewModel = { find: jest.fn() };
@@ -1102,6 +1102,26 @@ describe('HotelsService', () => {
 
     beforeEach(() => {
       reviewModel.find.mockReturnValue(chain([]));
+      cityModel.findById.mockReturnValue(chain({ name: 'Cairo' }));
+      countryModel.findById.mockReturnValue(chain({ name: 'Egypt' }));
+    });
+
+    it('returns the city and country names alongside their ids', async () => {
+      const doc = hotelWithPolicy();
+      const result = await service.getDetails(idOf(), {});
+      expect(result.city).toBe(String(doc.city));
+      expect(result.cityName).toBe('Cairo');
+      expect(result.country).toBe(String(doc.country));
+      expect(result.countryName).toBe('Egypt');
+    });
+
+    it('falls back to empty names when the city or country row is missing', async () => {
+      hotelWithPolicy();
+      cityModel.findById.mockReturnValue(chain(null));
+      countryModel.findById.mockReturnValue(chain(null));
+      const result = await service.getDetails(idOf(), {});
+      expect(result.cityName).toBe('');
+      expect(result.countryName).toBe('');
     });
 
     it('returns 404 for a malformed id', async () => {
