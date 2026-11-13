@@ -15,6 +15,8 @@ import { UploadsModule } from './uploads/uploads.module';
 import { ItinerariesModule } from './itineraries/itineraries.module';
 import { AirlinesModule } from './airlines/airlines.module';
 import { warnIfDatabaseMissing } from './common/config/mongodb.config';
+import { ScheduleModule } from '@nestjs/schedule';
+import { FlightsModule } from './flights/flights.module';
 
 @Module({
   imports: [
@@ -53,6 +55,8 @@ import { warnIfDatabaseMissing } from './common/config/mongodb.config';
     UploadsModule,
     AirlinesModule,
     ItinerariesModule,
+    FlightsModule,
+    ScheduleModule.forRoot(),
   ],
 
   controllers: [AppController],
