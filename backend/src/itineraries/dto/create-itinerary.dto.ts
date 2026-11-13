@@ -1,9 +1,11 @@
 
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
+import { IsValidCalendarDate } from './is-valid-calendar-date.validator';
 import {
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
-  IsDateString,
   IsString,
   Matches,
   MaxLength,
@@ -25,7 +27,11 @@ export class CreateItineraryDto {
     example: ['DE', 'FR'],
     type: [String],
   })
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value) ? value.map((v: unknown) => typeof v === 'string' ? v.toUpperCase() : v) : value,
+  )
   @IsArray()
+  @ArrayUnique({ message: 'Duplicate country codes are not allowed' })
   @ArrayMinSize(1)
   @IsString({ each: true })
   @Matches(/^[A-Z]{2}$/, { each: true })
@@ -34,6 +40,6 @@ export class CreateItineraryDto {
   @ApiProperty({
     example: '2026-12-15',
   })
-  @IsDateString()
+  @IsValidCalendarDate()
   startDate: string;
 }

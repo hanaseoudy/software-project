@@ -1,5 +1,6 @@
 
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   ArrayMinSize,
   ArrayUnique,
@@ -40,6 +41,9 @@ export class UpdateItineraryDto {
     uniqueItems: true,
   })
   @ValidateIf((_, value) => value !== undefined)
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value) ? value.map((v: unknown) => typeof v === 'string' ? v.toUpperCase() : v) : value,
+  )
   @IsArray({
     message: 'countryIds must be an array',
   })
