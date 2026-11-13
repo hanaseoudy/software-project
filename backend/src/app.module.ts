@@ -8,9 +8,12 @@ import { BlogModule } from './blog/blog.module';
 import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
-
+import { UploadsModule } from './uploads/uploads.module';
+import { AirlinesModule } from './airlines/airlines.module';
+import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 
 @Module({
   imports: [
@@ -18,38 +21,37 @@ import { AirportsModule } from './airports/airports.module';
       isGlobal: true,
     }),
     MongooseModule.forRootAsync({
-      inject:[ConfigService],
+      inject: [ConfigService],
 
-      useFactory:(configService:ConfigService)=>{
-        const uri=configService.get<string>('MONGODB_URI');
-        
-        if(!uri){
-          throw new Error(
-            'MongoDB URI is missing check env file',);
-           }
-        console.log('uri loaded...');
-        
+      useFactory: (configService: ConfigService) => {
+        const uri = configService.get<string>('MONGODB_URI');
+
+        if (!uri) {
+          throw new Error('MongoDB URI is missing check env file');
+        }
+        warnIfDatabaseMissing(uri, (message) => console.warn(message));
 
         return {
-
-      uri,
-      autoCreate: true,
-      connectionFactory: (connection) => {
-        console.log('MongoDB connected successfully!');
-        return connection;
+          uri,
+          autoCreate: true,
+          connectionFactory: (connection) => {
+            console.log('MongoDB connected successfully!');
+            return connection;
+          },
+        };
       },
-    };
-  },
-}),
-AirportsModule,
-PaymentsModule,
-BlogModule,
-HotelBookingsModule,
-HotelsModule,
-UsersModule,
-AuthModule,
-],
-
+    }),
+    AirportsModule,
+    PaymentsModule,
+    BlogModule,
+    HotelBookingsModule,
+    HotelsModule,
+    UsersModule,
+    NotificationsModule,
+    AuthModule,
+    UploadsModule,
+    AirlinesModule,
+  ],
 
   controllers: [AppController],
   providers: [AppService],

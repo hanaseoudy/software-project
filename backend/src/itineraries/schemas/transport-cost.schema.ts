@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Types } from 'mongoose';
+import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 
 export type TransportCostDocument = HydratedDocument<TransportCost>;
 
@@ -14,7 +14,7 @@ export enum IntercityTransportMode {
 
 @Schema({ timestamps: true })
 export class TransportCost {
-  @Prop({ type: Types.ObjectId, ref: 'ItineraryDay', required: true, index: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'ItineraryDay', required: true, index: true })
   dayId: Types.ObjectId;
 
   @Prop({ type: String, required: true, trim: true })
