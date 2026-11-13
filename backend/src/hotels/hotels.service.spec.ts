@@ -15,6 +15,7 @@ import { UploadsService } from '../uploads/uploads.service';
 import { HotelsService } from './hotels.service';
 import { Hotel } from './schemas/hotel.schema';
 import { Room } from './schemas/room.schema';
+import { RoomAvailability } from './schemas/room-availability.schema';
 
 const referenceResult = (value: unknown) => ({ select: () => ({ lean: async () => value }) });
 
@@ -47,7 +48,12 @@ const makeHotelDoc = () => {
 describe('HotelsService', () => {
   let service: HotelsService;
   const hotelModel = { create: jest.fn(), findById: jest.fn() };
-  const roomModel = { exists: jest.fn(), create: jest.fn() };
+  const roomModel = {
+    exists: jest.fn(),
+    create: jest.fn(),
+    findOne: jest.fn(),
+  };
+  const availabilityModel = { findOne: jest.fn(), create: jest.fn() };
   const cityModel = { exists: jest.fn() };
   const countryModel = { exists: jest.fn() };
   const assignmentModel = { exists: jest.fn() };
@@ -78,6 +84,10 @@ describe('HotelsService', () => {
         HotelsService,
         { provide: getModelToken(Hotel.name), useValue: hotelModel },
         { provide: getModelToken(Room.name), useValue: roomModel },
+        {
+          provide: getModelToken(RoomAvailability.name),
+          useValue: availabilityModel,
+        },
         { provide: getModelToken(City.name), useValue: cityModel },
         { provide: getModelToken(Country.name), useValue: countryModel },
         {
@@ -620,5 +630,146 @@ describe('HotelsService', () => {
         'db down',
       );
     });
+  });
+
+  describe('addRoomBookableRange', () => {
+    const idOf = () => new Types.ObjectId().toString();
+    const dto = { startDate: '2026-12-01', endDate: '2026-12-31' };
+    const setup = () => {
+      const hotel = makeHotelDoc();
+      const room = { _id: new Types.ObjectId() };
+      hotelModel.findById.mockReturnValue(execResult(hotel));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+      roomModel.findOne.mockReturnValue(execResult(room));
+      availabilityModel.findOne.mockReturnValue(execResult(null));
+      availabilityModel.create.mockImplementation(
+        (data: Record<string, unknown>) =>
+          Promise.resolve({ _id: new Types.ObjectId(), ...data }),
+      );
+      return { hotel, room };
+    };
+    const call = (body = dto) =>
+      service.addRoomBookableRange(idOf(), idOf(), body, moderator);
+
+    it('returns 404 when the hotel does not exist', async () => {
+      hotelModel.findById.mockReturnValue(execResult(null));
+      await expect(call()).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('returns 403 when the moderator is not assigned to the hotel', async () => {
+      hotelModel.findById.mockReturnValue(execResult(makeHotelDoc()));
+      assignmentModel.exists.mockReturnValue(execResult(null));
+      await expect(call()).rejects.toBeInstanceOf(ForbiddenException);
+      expect(availabilityModel.create).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 when the room is not in this hotel', async () => {
+      setup();
+      roomModel.findOne.mockReturnValue(execResult(null));
+      await expect(call()).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('returns 404 for a malformed room id', async () => {
+      setup();
+      await expect(
+        service.addRoomBookableRange(idOf(), 'not-an-id', dto, moderator),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('creates the range and returns plain dates', async () => {
+      const { hotel, room } = setup();
+
+      const result = await call();
+
+      expect(roomModel.findOne.mock.calls[0][0]).toEqual({
+        _id: expect.any(String),
+        hotel: hotel._id,
+      });
+      expect(availabilityModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          room: room._id,
+          hotel: hotel._id,
+          type: 'available',
+          startDate: new Date('2026-12-01T00:00:00.000Z'),
+          endDate: new Date('2026-12-31T00:00:00.000Z'),
+        }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          roomId: String(room._id),
+          hotelId: String(hotel._id),
+          type: 'available',
+          startDate: '2026-12-01',
+          endDate: '2026-12-31',
+        }),
+      );
+    });
+
+    it('accepts a one-day range', async () => {
+      setup();
+      await expect(
+        call({ startDate: '2026-12-01', endDate: '2026-12-01' }),
+      ).resolves.toBeDefined();
+    });
+
+    it('checks overlap with both days included, for available ranges of this room only', async () => {
+      const { room } = setup();
+      await call();
+      expect(availabilityModel.findOne).toHaveBeenCalledWith({
+        room: room._id,
+        type: 'available',
+        startDate: { $lte: new Date('2026-12-31T00:00:00.000Z') },
+        endDate: { $gte: new Date('2026-12-01T00:00:00.000Z') },
+      });
+    });
+
+    it('returns 409 and does not save when the range overlaps', async () => {
+      setup();
+      availabilityModel.findOne.mockReturnValue(
+        execResult({
+          startDate: new Date('2026-12-20T00:00:00.000Z'),
+          endDate: new Date('2027-01-05T00:00:00.000Z'),
+        }),
+      );
+
+      const error = await call().catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).message).toContain(
+        '2026-12-20 to 2027-01-05',
+      );
+      expect(availabilityModel.create).not.toHaveBeenCalled();
+    });
+
+    const expectBadRequest = async (
+      body: { startDate: string; endDate: string },
+      field: string,
+    ) => {
+      setup();
+      const error = await call(body).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = (error as BadRequestException).getResponse() as {
+        errors: Record<string, string[]>;
+      };
+      expect(Object.keys(response.errors)).toContain(field);
+      expect(availabilityModel.create).not.toHaveBeenCalled();
+    };
+
+    it('rejects an end date before the start date', async () => {
+      await expectBadRequest(
+        { startDate: '2026-12-31', endDate: '2026-12-01' },
+        'endDate',
+      );
+    });
+
+    it.each(['2026-02-30', '2026-13-01', '2026-00-10'])(
+      'rejects %s because it is not a real day',
+      async (value) => {
+        await expectBadRequest(
+          { startDate: value, endDate: '2027-01-01' },
+          'startDate',
+        );
+      },
+    );
   });
 });
