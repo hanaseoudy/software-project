@@ -540,3 +540,30 @@ reviewer's feedback, the controller and the AuthModule import were removed, so
 the PR only contains the schema, enum and reusable NotificationsService.
 Postman screenshots are attached to the PR as verification only.
 ================================================
+================================================
+Date: 2026-11-13
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-11 (TASK-18), ACC-17, HTL-22, FLT-29
+
+Prompt (summary of the conversation):
+Help me implement ACC-11: restrict bookings and private itineraries to their
+owner, let admins view all bookings and moderators view bookings for their own
+hotel or airline. The booking and itinerary endpoints do not exist yet, so
+build a reusable checker the team can call, matching the names and error style
+of the ITN-01 itinerary service as the team leader asked.
+
+How the output was used:
+Used the generated AccessControlService and AccessControlModule after
+reviewing them against ACC-11. It provides assertCanViewHotelBooking,
+assertCanViewFlightBooking and assertCanViewItinerary (403 with messages
+matching ITN-01), plus hotelBookingListFilter and flightBookingListFilter for
+list pages. Moderator access uses the ModeratorAssignment collection; flights
+are read from the flights collection directly because the Flight schema
+currently fails to load (reported to the team).
+
+Verification:
+Added 20 unit tests covering owners, admins, hotel and airline moderators,
+other users, public/private itineraries and list filters; all pass. Lint and
+build passed locally.
+================================================
