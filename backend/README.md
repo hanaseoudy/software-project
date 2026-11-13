@@ -112,3 +112,57 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+
+## Backend audit regression checks
+
+Run commands from `backend`, where `package.json` is located. Node 24 is used in CI.
+On PowerShell use `npm.cmd` if execution policy prevents `npm.ps1` from running.
+The installed dependencies require `NODE_OPTIONS=--experimental-vm-modules` for Jest.
+
+E2E tests require a **disposable local MongoDB**, never the shared Atlas database.
+For example, start `docker run --rm -d --name travel-e2e -p 127.0.0.1:27029:27017 mongo:8`, then:
+
+```powershell
+$env:NODE_OPTIONS='--experimental-vm-modules'
+$env:TEST_MONGODB_URI='mongodb://127.0.0.1:27029'
+npm.cmd run lint
+npm.cmd run build
+npm.cmd run test -- --ci --runInBand
+npm.cmd run test:e2e -- --ci --runInBand
+```
+
+Stop your test container afterward with `docker stop travel-e2e`.
+`test/setup-e2e.ts` runs before application imports, refuses remote hosts and URI
+options/credentials/database paths, overrides `MONGODB_URI`, and generates a unique
+`travel_e2e_<uuid>` database. It also supplies ephemeral JWT secrets and upload storage.
+The suite drops only its generated database and removes only its temporary upload
+directory. CI starts its own MongoDB service and runs all four checks. No Atlas
+credentials are needed. If a run is forcibly terminated, discard its test container.
+
+Configuration and compatibility:
+
+- `UPLOADS_DIR` accepts relative or absolute paths; relative paths resolve against the
+  backend process working directory. File URLs and upload/deletion behavior are unchanged.
+- Image responses use `Cache-Control: no-cache`. Existing image-serving authorization
+  is unchanged; this header alone does not provide private image access.
+- A MongoDB URI without an explicit database emits a credential-free warning. The URI
+  and driver behavior are unchanged. `authSource=admin` is not an application database
+  selection; add `/travel_booking` before the query string if that is the intended database.
+- Swagger registers `cookie` (legacy access-cookie alias), `access_token`, and
+  `refresh_token`. Authentication cookie settings and route authorization are unchanged.
+- Refresh replay still revokes the whole session. Parallel requests using the same
+  refresh token yield one success and one 401, then the winning tokens are also revoked.
+  Clients must serialize refresh requests. Changing this policy requires team approval.
+
+Deferred by explicit request (2026-11-12):
+
+- GEN-11: flight statuses retain `HELD`, omit `COMPLETED`, and default to `HELD`.
+  This differs from the reviewed lifecycle (PendingPayment, Confirmed, Completed,
+  Expired, Cancelled). No schema or database migration was performed. Any future
+  migration must distinguish active holds from expired holds; an enum change alone
+  will not implement the booking lifecycle.
+- ACC-05: lockout implementation is unchanged. Tests characterize five 401 failures,
+  a subsequent 423, a 15-minute lock, and reset after successful login. They do not
+  establish concurrency safety of the existing two-update failed-login logic. The
+  fifth-attempt lockout message and concurrency/reset concerns remain for team review.

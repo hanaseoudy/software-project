@@ -42,6 +42,24 @@ validation while preserving existing application logic and tests.
 ================================================
 
 ================================================
+Date: 2026-11-06
+Student: Kenzy ellkany
+Tool: Claude
+Related Requirement: PAY-02
+
+Prompt:
+Help me implement PAY-02 (provider policy display and recorded
+acceptance before payment) in our NestJS backend, based on the project
+PDF and the requirements sheet. Then match it to our real Flight,
+Airline, Hotel, FlightBooking and HotelBooking schemas.
+
+How the output was used:
+Used the generated PoliciesModule (controller, service, module) after
+adapting it to our existing schemas. Acceptance is stored in the
+existing policiesAcceptedAt field on both booking types, and
+assertAccepted() is exposed so PAY-01 can block payment until the
+policies are accepted. Added @nestjs/swagger, installed and ran
+npm run build to verify the code compiles.
 Date: 2026-11-07
 Student: Hana Seoudy
 Tool: Codex
@@ -97,6 +115,25 @@ tests and E2E tests passed locally.
 
 ================================================
 Date: 2026-11-07
+Student: Kenzy ellkany 
+Tool: Claude
+Related Requirement: GEN-01
+
+Prompt:
+Help me implement GEN-01 (in-app notifications with unread count,
+notification list and mark as read) in our NestJS backend, based on
+the project PDF and the requirements sheet. Match it to our existing
+backend structure and schemas.
+
+How the output was used:
+Used the generated NotificationsModule (schema, enum, service,
+controller, module) after reviewing it. The service exposes create()
+and createForMany() so other modules (payments, flights, admin) can
+send notifications for booking confirmation, cancellation, refund,
+flight schedule change and suspension. Endpoints: list, unread count,
+mark one as read, mark all as read, all restricted to the owner.
+Registered the module in app.module.ts, ran npm run build, started the
+app and confirmed the routes respond with 401 until auth is merged.
 Student: Nour Hossam
 Tool: Claude
 Related Requirement: ACC-01 (TASK-10), GEN-13
@@ -140,6 +177,26 @@ airport records. The recovered implementation is working and ready for final rev
 Date: 2026-11-07
 Student: Nour Hossam
 Tool: Claude
+Related Requirement: ACC-18 (TASK-105)
+
+Prompt (summary of the conversation):
+Help me implement admin-account seeding (ACC-18): admin accounts are created
+by a setup command instead of self-registration, following the same pattern
+as the existing reference-data seed.
+
+How the output was used:
+Used the generated admin.seed.ts and the seed:admin npm script after
+reviewing them against ACC-18. Admin details come from ADMIN_* environment
+variables (placeholders documented in .env.example), the password follows
+the registration rules and is hashed with bcrypt (GEN-13). The command is
+safe to rerun and refuses to promote an existing non-admin account.
+Self-registration already forces the user role (ACC-01 whitelist).
+
+Verification:
+Ran npm run seed:admin twice (created, then "already exists"), checked the
+refusal for an existing non-admin email, and confirmed in Postman that
+registering with "role": "admin" still creates a normal user. Lint, build,
+unit tests and E2E tests passed locally.
 Related Requirement: ACC-04 (TASK-11)
 
 Prompt (summary of the conversation):
@@ -161,12 +218,11 @@ Verification:
 Tested POST /api/auth/login in Postman (success, wrong password, unknown
 email, invalid email, suspended with correct and wrong password). Lint,
 build, unit tests and E2E tests passed locally.
-================================================
-
 
 ================================================
+
 ================================================
-================================================
+
 
 Date: 2026-11-07
 Student: Mariam Haithem
@@ -189,6 +245,101 @@ Verification performed:
 Lint and build passed and all unit tests passed under Node 24. E2E tests were not run locally
 (no MongoDB available); they run in CI. Swagger and Postman checks need the login (ACC-04)
 to be merged first.
+
+================================================
+
+================================================
+
+
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-09 (TASK-51)
+Prompt (summary of the conversation):
+I asked AI to implement HTL-09 (hotel moderator sets the hotel's check-in and check-out
+times). I asked for one separate branch per ticket. After AI read the Jira ticket and listed
+the files it would change, I approved the plan. The endpoint reuses the same "assigned
+moderator only" check as the hotel edit endpoint from HTL-01.
+
+How the output was used:
+AI added PUT /api/hotels/:id/check-times with a DTO that validates both times as 24-hour
+HH:mm, a service method, the controller route with Swagger documentation, and unit tests for
+the DTO, service and controller.
+
+Verification performed:
+Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
+the student after pulling the branch (results are added to the pull request).
+
+================================================
+
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-10 (TASK-52)
+Prompt (summary of the conversation):
+I asked AI to implement HTL-10 (hotel moderator defines cancellation tiers) on its own branch,
+built on top of the HTL-09 branch so the two do not conflict. After AI read the Jira ticket and
+listed the files it would change, I approved the plan. The endpoint reuses the "assigned
+moderator only" check from HTL-01. The rule for choosing which tier applies (FLT-09) is not in
+the code yet, so this ticket only stores and validates the tiers.
+
+How the output was used:
+AI added PUT /api/hotels/:id/cancellation-tiers with a DTO, a service method that validates
+every tier (unique whole-number days >= 0, refund 0-100, one clear message per problem), the
+controller route with Swagger documentation, and unit tests for the DTO, service and controller.
+The new list replaces the old one; an empty list removes all tiers.
+
+Verification performed:
+Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
+the student after pulling the branch (results are added to the pull request).
+
+
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-03 (TASK-46)
+Prompt (summary of the conversation):
+I asked AI to implement HTL-03 (a hotel moderator adds an individually bookable room) on its own
+branch, built on top of the HTL-10 branch. After AI read the Jira ticket and listed the files it
+would change, I approved the plan. The endpoint reuses the "assigned moderator only" check from
+HTL-01 and the existing Room schema, which already has a unique room number per hotel.
+
+How the output was used:
+AI added POST /api/hotels/:id/rooms with a DTO that validates the room number, type, beds
+(whole number >= 1), maximum occupancy (whole number >= 1) and price per night (> 0, at most
+2 decimals), a service method that returns 409 for a duplicate room number in the same hotel
+(also when the database unique index rejects a race), the controller route with Swagger
+documentation, and unit tests for the DTO, service and controller.
+
+Verification performed:
+Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
+the student after pulling the branch (results are added to the pull request).
+
+================================================
+================================================
+================================================
+
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-04 (TASK-47)
+Prompt (summary of the conversation):
+I asked AI to implement HTL-04 (a hotel moderator defines the date ranges when a room can be
+booked, without overlaps) on its own branch, built on top of the HTL-03 branch. The ticket
+depends on HTL-03 (room creation), which is not merged yet. After AI read the Jira ticket and
+the existing RoomAvailability schema, I asked it to continue the same way as the previous
+tickets.
+
+How the output was used:
+AI added POST /api/hotels/:id/rooms/:roomId/availability for the assigned hotel moderator. The
+range uses plain dates (YYYY-MM-DD), both days included. The service checks that the dates are
+real, that the end is not before the start, and that the range does not overlap another
+bookable range of the same room (409 with the conflicting dates). It also added the DTOs,
+Swagger documentation and unit tests for the DTO, service and controller.
+
+Verification performed:
+Lint, build and all unit tests passed under Node 24. Postman and Swagger checks are done by
+the student after pulling the branch (results are added to the pull request).
 ================================================
 Date: 2026-11-08
 Student: Kenzy ellkany
@@ -208,6 +359,9 @@ saveForOwner() and isStoredUrl() on top of assertWithinLimit() and deleteByUrl()
 Multer options (image-upload.options.ts), so the post, activity, hotel and airline owners can
 enforce the per-record limits.
 
+================================================
+
+================================================
 Student: Nour Hossam
 Tool: Claude
 Related Requirement: ACC-19 (TASK-109), ACC-04
@@ -229,6 +383,43 @@ Verification:
 Tested in Postman: /me without cookies (401), login sets both cookies with
 HttpOnly and Secure (200), /me after login (200), /me with a fake token (401).
 Lint, build, unit tests and E2E tests passed locally.
+
+================================================
+
+================================================
+Date: 2026-11-08
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-06 (TASK-13), ACC-19
+
+Prompt (summary of the conversation):
+Help me implement ACC-06: logout that clears the auth cookies and revokes the
+refresh token on the server, and expire a session after 30 minutes with no
+authenticated request. Then help debug why /auth/me returned 401 right after
+login.
+
+How the output was used:
+Used the generated Session schema, refresh and logout endpoints, and the
+updated JwtAuthGuard after reviewing them against ACC-06. Each login creates
+a server-side session; tokens carry its id. The guard records lastActivityAt
+on every authenticated request and rejects sessions idle for 30 minutes.
+Refresh rotates both tokens and revokes the session if an old refresh token
+is reused. Logout revokes the session (killing both tokens immediately) and
+clears the cookies.
+Debugging found that @Prop({ type: Types.ObjectId }) creates a Mixed field in
+NestJS, so string ids are never cast and queries silently match nothing.
+Fixed in the Session schema with Schema.Types.ObjectId and reported to the
+team, since other schemas use the same pattern.
+
+Verification:
+Tested in Postman: login, /me, refresh (200); logout (200); /me, /me with the
+old copied access token, and refresh after logout (401); idle timeout with a
+temporary 60-second limit (401). Lint, build, unit tests and E2E tests passed
+locally.
+
+================================================
+
+================================================
 Date: 2026-11-08
 Student: Hana Seoudy
 Tool: Codex
@@ -257,19 +448,20 @@ could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
 
-   ================================================
-   Date: 2026-11-10
-   Student: Sara Gomaa
-   Tool: Claude
-   Related Requirement: FLT-01, GEN-08
-   Prompt:
-   Asked Claude to question me step by step through FLT-01 (airline profile
-   create/view/edit): schema review against the user stories, DTO
-   validation, ownership checks, error codes, logo upload.
-   How the output was used:
-   Used the explanations and corrections to write the DTOs, service and
-   controller myself. Reviewed and adjusted every snippet before committing.
-   ================================================
+================================================
+Date: 2026-11-10
+Student: Sara Gomaa
+Tool: Claude
+Related Requirement: FLT-01, GEN-08
+Prompt:
+Asked Claude to question me step by step through FLT-01 (airline profile
+create/view/edit): schema review against the user stories, DTO
+validation, ownership checks, error codes, logo upload.
+How the output was used:
+Used the explanations and corrections to write the DTOs, service and
+controller myself. Reviewed and adjusted every snippet before committing.
+===============================================
+
 Date: 2026-11-08
 Student: Nour Hossam
 Tool: Claude
@@ -293,6 +485,10 @@ Added unit tests for RolesGuard covering no required roles, allowed and
 rejected roles, missing user, controller-level roles and method-level
 overrides. Lint, build, all unit tests (26) and E2E tests passed locally.
 
+================================================
+
+================================================
+
 Date: 2026-11-09
 Student: Mariam Haithem
 Tool: Claude (Claude Sonnet 5.5)
@@ -310,3 +506,37 @@ update accept only photos stored by UploadsService (isStoredUrl for the hotel ca
 reviewed the changes and the new tests.
 Verification performed:
 Lint, build and all unit tests passed under Node 24 (53 tests in the HTL-01 branch).
+
+Date: 2026-11-11
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-09 / HTL-10 (TASK-51, TASK-52) - contract endpoint PUT /api/hotels/:id/policies
+Prompt (summary of the conversation):
+The team leader said the official API contract endpoints must exist (extra endpoints are allowed only
+with a reason). The contract lists PUT /api/hotels/:id/policies for the hotel policies, but the code only
+had PUT /check-times and PUT /cancellation-tiers. I asked AI to add the missing endpoint.
+
+How the output was used:
+AI added PUT /api/hotels/:id/policies (moderator of that hotel only). It accepts checkInTime, checkOutTime
+and cancellationTiers in one body; fields that are not sent stay unchanged; an empty body is a 400; the
+tier rules and error format are the same as HTL-10. The two shorter routes are kept as convenience
+routes for one part only. I reviewed the code and the new tests.
+Verification performed:
+Lint, build and all hotel unit tests passed under Node 24.
+
+================================================
+Date: 2026-11-12
+Student: Kenzy
+Tool: Claude
+Related Requirement: GEN-01
+Prompt:
+I need to verify the in-app notifications requirement (GEN-01). Please guide me
+step by step to test my NotificationsService with Postman, and help me fix the
+errors I get.
+How the output was used:
+Used the explanation to temporarily add a controller and test the service
+(list, unread count, mark one as read, mark all as read) in Postman. After the
+reviewer's feedback, the controller and the AuthModule import were removed, so
+the PR only contains the schema, enum and reusable NotificationsService.
+Postman screenshots are attached to the PR as verification only.
+================================================

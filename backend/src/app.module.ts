@@ -8,13 +8,12 @@ import { BlogModule } from './blog/blog.module';
 import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { AirlinesModule } from './airlines/airlines.module';
-import { APP_GUARD } from '@nestjs/core';
-import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
-import { RolesGuard } from './common/guards/roles.guard';
+import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 
 @Module({
   imports: [
@@ -30,7 +29,7 @@ import { RolesGuard } from './common/guards/roles.guard';
         if (!uri) {
           throw new Error('MongoDB URI is missing check env file');
         }
-        console.log('uri loaded...');
+        warnIfDatabaseMissing(uri, (message) => console.warn(message));
 
         return {
           uri,
@@ -48,14 +47,13 @@ import { RolesGuard } from './common/guards/roles.guard';
     HotelBookingsModule,
     HotelsModule,
     UsersModule,
+    NotificationsModule,
     AuthModule,
     UploadsModule,
     AirlinesModule,
   ],
 
   controllers: [AppController],
-  providers: [
-    AppService, // new line
-  ],
+  providers: [AppService],
 })
 export class AppModule {}
