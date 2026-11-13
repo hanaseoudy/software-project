@@ -17,6 +17,7 @@ import {
   ProviderType,
 } from '../users/schemas/moderatorassignment.schema';
 import { CreateFlightsDto } from './dto/create-flights.dto';
+import { AddCabinDto } from './dto/add-cabin.dto';
 
 @Injectable()
 export class FlightsService {
@@ -36,6 +37,9 @@ export class FlightsService {
       dto.arrivalAirport,
     );
 
+    this.assertRealLocalDateTime(dto.departureTime, 'departureTime');
+    this.assertRealLocalDateTime(dto.arrivalTime, 'arrivalTime');
+
     const departureUtc = fromZonedTime(
       dto.departureTime,
       departureAirport.timezone,
@@ -49,23 +53,33 @@ export class FlightsService {
       arrivalUtc,
     );
 
+    const departureLocalDate = dto.departureTime.split('T')[0]; // or via date-fns-tz
+
     await this.ensureNoDuplicateFlight(
       airlineId,
       dto.flightNumber,
-      departureUtc,
+      departureLocalDate,
     );
 
-    const departureLocalDate = dto.departureTime.split('T')[0]; // or via date-fns-tz
-
-    const flight = await this.flightsModel.create({
-      airline: airlineId,
-      flightNumber: dto.flightNumber,
-      departureAirport: departureAirport._id,
-      arrivalAirport: arrivalAirport._id,
-      departureTime: dto.departureTime,
-      arrivalTime: dto.arrivalTime,
-      departureLocalDate,
-    });
+    let flight: FlightDocument;
+    try {
+      flight = await this.flightsModel.create({
+        airline: airlineId,
+        flightNumber: dto.flightNumber,
+        departureAirport: departureAirport._id,
+        arrivalAirport: arrivalAirport._id,
+        departureTime: departureUtc,
+        arrivalTime: arrivalUtc,
+        departureLocalDate,
+      });
+    } catch (err: any) {
+      if (err.code === 11000) {
+        throw new ConflictException(
+          'A flight with this number already exists on this date',
+        );
+      }
+      throw err;
+    }
 
     // Populate the references before returning the response
     return flight.populate(['airline', 'departureAirport', 'arrivalAirport']);
@@ -112,7 +126,7 @@ export class FlightsService {
     const arrivalAirport = airportByCode.get(arrivalIata);
 
     if (!departureAirport || !arrivalAirport) {
-      throw new NotFoundException('One or both airports do not exist');
+      throw new BadRequestException('One or both airports do not exist');
     }
 
     return { departureAirport, arrivalAirport };
@@ -141,22 +155,31 @@ export class FlightsService {
     }
   }
 
+  private assertRealLocalDateTime(value: string, field: string): void {
+    const [datePart, timePart] = value.split('T');
+    const [y, m, d] = datePart.split('-').map(Number);
+    const [hh, mm] = timePart.split(':').map(Number);
+
+    const probe = new Date(Date.UTC(y, m - 1, d, hh, mm));
+    const isReal =
+      probe.getUTCFullYear() === y &&
+      probe.getUTCMonth() === m - 1 &&
+      probe.getUTCDate() === d &&
+      probe.getUTCHours() === hh &&
+      probe.getUTCMinutes() === mm;
+
+    if (!isReal) {
+      throw new BadRequestException(`${field} is not a real date and time`);
+    }
+  }
+
   private async ensureNoDuplicateFlight(
     airlineId: ModeratorAssignment['providerId'],
     flightNumber: string,
-    departureUtc: Date,
+    departureLocalDate: string,
   ): Promise<void> {
-    const { startOfDay, endOfDay } = this.getUtcDayBounds(departureUtc);
-
     const existingFlight = await this.flightsModel
-      .exists({
-        airline: airlineId,
-        flightNumber,
-        departureTime: {
-          $gte: startOfDay,
-          $lte: endOfDay,
-        },
-      })
+      .exists({ airline: airlineId, flightNumber, departureLocalDate })
       .exec();
 
     if (existingFlight) {
@@ -164,15 +187,5 @@ export class FlightsService {
         'A flight with this number already exists on this date',
       );
     }
-  }
-
-  private getUtcDayBounds(date: Date): { startOfDay: Date; endOfDay: Date } {
-    const startOfDay = new Date(date);
-    startOfDay.setUTCHours(0, 0, 0, 0);
-
-    const endOfDay = new Date(date);
-    endOfDay.setUTCHours(23, 59, 59, 999);
-
-    return { startOfDay, endOfDay };
   }
 }
