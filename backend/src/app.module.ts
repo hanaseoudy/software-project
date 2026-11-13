@@ -8,6 +8,7 @@ import { BlogModule } from './blog/blog.module';
 import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
@@ -49,6 +50,7 @@ import { FlightsModule } from './flights/flights.module';
     HotelBookingsModule,
     HotelsModule,
     UsersModule,
+    NotificationsModule,
     AuthModule,
     UploadsModule,
     AirlinesModule,
@@ -56,8 +58,6 @@ import { FlightsModule } from './flights/flights.module';
   ],
 
   controllers: [AppController],
-  providers: [
-    AppService, // new line
-  ],
+  providers: [AppService],
 })
 export class AppModule {}

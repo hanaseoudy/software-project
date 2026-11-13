@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 import { CabinClass } from './airline.schema';
+import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants';
 
 export type FlightDocument = HydratedDocument<Flight>;
 
@@ -26,7 +27,10 @@ export class Cabin {
   heldSeats: number; // in a 10-minute pending hold
 
   @Prop({ required: true, min: 0.01 })
-  price: number; // adult/child fare; infants pay 10% (calculated at booking)
+  price: number; // adult/child fare in USD (platform currency, PAY-04); infants pay 10% (calculated at booking)
+
+  @Prop({ required: true, default: PLATFORM_CURRENCY, enum: [PLATFORM_CURRENCY] })
+  currency: string; // PAY-04: always USD
 
   @Prop({ required: true, min: 0 })
   freeBags: number;

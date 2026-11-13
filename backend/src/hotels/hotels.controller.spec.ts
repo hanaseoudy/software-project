@@ -14,6 +14,7 @@ describe('HotelsController', () => {
     updatePolicies: jest.fn(),
     setCancellationTiers: jest.fn(),
     createRoom: jest.fn(),
+    addRoomBookableRange: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -101,5 +102,20 @@ describe('HotelsController', () => {
     await controller.createRoom('h1', body, { user } as never);
 
     expect(service.createRoom).toHaveBeenCalledWith('h1', body, user);
+  });
+
+  it('addRoomBookableRange passes the ids, body and the authenticated user', async () => {
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
+    const body = { startDate: '2026-12-01', endDate: '2026-12-31' };
+    service.addRoomBookableRange.mockResolvedValue({ id: 'a1' });
+
+    await controller.addRoomBookableRange('h1', 'r1', body, { user } as never);
+
+    expect(service.addRoomBookableRange).toHaveBeenCalledWith(
+      'h1',
+      'r1',
+      body,
+      user,
+    );
   });
 });
