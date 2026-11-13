@@ -26,6 +26,9 @@ import { TransportCost, TransportCostDocument } from './schemas/transport-cost.s
 import { CreateItineraryDto } from './dto/create-itinerary.dto';
 import { UpdateItineraryDto } from './dto/update-itinerary.dto';
 
+import { City, CityDocument } from '../reference-data/schemas/city.schema';
+import { CreateItineraryDayDto } from './dto/create-itinerary-day.dto';
+import { UpdateItineraryDayDto } from './dto/update-itinerary-day.dto';
 @Injectable()
 export class ItinerariesService {
   constructor(
@@ -45,6 +48,8 @@ export class ItinerariesService {
     private readonly transportCostModel: Model<TransportCostDocument>,
     @InjectConnection()
     private readonly connection: Connection,
+    @InjectModel(City.name)
+private readonly cityModel: Model<CityDocument>,
   ) {}
 
   private async validateCountries(countryIds: string[]): Promise<void> {
@@ -93,6 +98,173 @@ export class ItinerariesService {
     }
 
     return itinerary;
+  }
+
+  private async getOwnedItinerary(
+    userId: string,
+    itineraryId: string,
+  ) {
+    this.validateObjectId(itineraryId);
+
+    const itinerary = await this.itineraryModel.findOne({
+      _id: new Types.ObjectId(itineraryId),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!itinerary) {
+      throw new NotFoundException('Itinerary not found');
+    }
+
+    return itinerary;
+  }
+
+  private async validateCity(cityId: string) {
+    const city = await this.cityModel.findOne({ cityId });
+
+    if (!city) {
+      throw new BadRequestException('Invalid cityId');
+    }
+
+    return city;
+  }
+
+  private deriveDayDate(
+    startDate: Date,
+    dayNumber: number,
+  ): string {
+    const date = new Date(startDate);
+    date.setUTCDate(date.getUTCDate() + dayNumber - 1);
+    return date.toISOString().slice(0, 10);
+  }
+
+  // ITN-05: Add a new itinerary day
+
+  // ITN-05: Add a new itinerary day
+  async addDay(
+    userId: string,
+    itineraryId: string,
+    dto: CreateItineraryDayDto,
+  ) {
+    const itinerary = await this.getOwnedItinerary(
+      userId,
+      itineraryId,
+    );
+
+    await this.validateCity(dto.cityId);
+
+    // Retry if two requests try to create the same day number.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const lastDay = await this.itineraryDayModel
+        .findOne({ itineraryId: itinerary._id })
+        .sort({ dayNumber: -1 })
+        .lean();
+
+      const dayNumber = lastDay ? lastDay.dayNumber + 1 : 1;
+
+      if (dayNumber > 60) {
+        throw new BadRequestException(
+          'An itinerary cannot exceed 60 days',
+        );
+      }
+
+      try {
+        const day = await this.itineraryDayModel.create({
+          itineraryId: itinerary._id,
+          dayNumber,
+          cityId: dto.cityId,
+          notes: dto.notes,
+        });
+
+        return {
+          ...day.toObject(),
+          date: this.deriveDayDate(
+            itinerary.startDate,
+            dayNumber,
+          ),
+        };
+      } catch (error: unknown) {
+        // MongoDB duplicate-key error.
+        // Another request may have created this day number first.
+        const isDuplicateKey =
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === 11000;
+
+        if (!isDuplicateKey) {
+          throw error;
+        }
+      }
+    }
+
+    throw new BadRequestException(
+      'Could not add itinerary day. Please retry.',
+    );
+  }
+
+
+  // ITN-05: List days in sequential order
+  async findDays(userId: string, itineraryId: string) {
+    const itinerary = await this.getOwnedItinerary(
+      userId,
+      itineraryId,
+    );
+
+    const days = await this.itineraryDayModel
+      .find({ itineraryId: itinerary._id })
+      .sort({ dayNumber: 1 })
+      .lean();
+
+    return days.map((day) => ({
+      ...day,
+      date: this.deriveDayDate(
+        itinerary.startDate,
+        day.dayNumber,
+      ),
+    }));
+  }
+
+  // ITN-05: Update a day's city or notes
+  async updateDay(
+    userId: string,
+    itineraryId: string,
+    dayId: string,
+    dto: UpdateItineraryDayDto,
+  ) {
+    const itinerary = await this.getOwnedItinerary(
+      userId,
+      itineraryId,
+    );
+
+    this.validateObjectId(dayId);
+
+    const day = await this.itineraryDayModel.findOne({
+      _id: new Types.ObjectId(dayId),
+      itineraryId: itinerary._id,
+    });
+
+    if (!day) {
+      throw new NotFoundException('Itinerary day not found');
+    }
+
+    if (dto.cityId !== undefined) {
+      await this.validateCity(dto.cityId);
+      day.cityId = dto.cityId;
+    }
+
+    if (dto.notes !== undefined) {
+      day.notes = dto.notes;
+    }
+
+    await day.save();
+
+    return {
+      ...day.toObject(),
+      date: this.deriveDayDate(
+        itinerary.startDate,
+        day.dayNumber,
+      ),
+    };
   }
 
 
