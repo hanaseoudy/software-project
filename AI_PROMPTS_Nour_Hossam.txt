@@ -1,0 +1,60 @@
+AI usage log - Nour Hossam (Accounts & Admin)
+
+================================================
+Date: 2026-11-13
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-08 (TASK-15), ACC-13
+
+Prompt (summary of the conversation):
+Help me implement ACC-08: a logged-in user changes their password by entering
+the current password and a new one that meets the password rules. Follow the
+API contract endpoint PATCH /api/auth/change-password. It should also clear
+mustChangePassword so moderators created by ACC-13 can finish first login.
+
+How the output was used:
+Used the generated ChangePasswordDto, AuthService.changePassword and the
+controller route after reviewing them against ACC-08. The endpoint requires
+login (JwtAuthGuard), checks the current password (400 if wrong), rejects a
+new password equal to the current one (400), applies the register password
+rules, saves the new bcrypt hash, sets mustChangePassword to false, and logs
+out the user's other sessions while keeping the current one. Errors use the
+same "Validation failed" format as register.
+
+Verification:
+Added 9 unit tests (service and DTO); all 13 auth tests pass. Lint and build
+passed locally. Tested in Postman with the ACC-13 moderator: wrong current
+password 400, same password 400, weak password 400, success 200, login with
+the new password shows mustChangePassword false, and 401 when logged out.
+Swagger shows the endpoint and its responses.
+================================================
+
+================================================
+Date: 2026-11-13
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-09 (TASK-16)
+
+Prompt (summary of the conversation):
+Help me implement ACC-09: any logged-in user edits their name, phone number
+and preferred currency, saving only if all fields pass validation. Follow the
+API contract endpoints GET /api/users/me and PATCH /api/users/me.
+
+How the output was used:
+Used the generated UpdateProfileDto, UsersService and UsersController after
+reviewing them against ACC-09. Both routes require login and always use the
+id from the login cookie. PATCH changes only the fields sent; the phone
+number is cleaned (spaces and dashes removed) and must be 7-15 digits, null
+removes it; the preferred currency must be in the supported list (EGP, USD,
+EUR, GBP, SAR, AED, JPY), which is a display setting for itinerary budgets
+(ITN-18), while bookings and payments stay in USD (PAY-04). If any field is
+invalid the whole request is rejected and nothing is saved. Email and role
+are stripped and cannot be changed. The scaffold users spec files were
+replaced with real tests.
+
+Verification:
+16 unit tests pass (service, controller, DTO). Lint and build passed locally.
+Tested in Postman: GET profile 200, full update 200, invalid phone and
+currency 400 with nothing saved (checked with GET), email/role only 400,
+and 401 when logged out. Swagger shows both endpoints.
+================================================
