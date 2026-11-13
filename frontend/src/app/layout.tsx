@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { RouteFocus } from '@/components/RouteFocus';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SessionProvider } from '@/lib/session';
 import './globals.css';
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <SessionProvider>
           <SiteHeader />
+          <RouteFocus />
           <main id="main" className="container page">
             {children}
           </main>

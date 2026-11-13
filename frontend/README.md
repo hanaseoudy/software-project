@@ -9,6 +9,9 @@ npm run dev            # http://localhost:3001
 ```
 
 All `/api/*` requests are proxied to the backend, so the httpOnly auth cookies work (ACC-19).
+For `npm run build` / `npm start`, set `BACKEND_URL` before building: the proxy address is fixed at build time.
+
+With `npm run dev`, http://localhost:3001/ui-kit shows every shared component in action (hidden in production).
 
 ## Site structure (GEN-14)
 
@@ -24,3 +27,15 @@ All `/api/*` requests are proxied to the backend, so the httpOnly auth cookies w
   action. Cancel asks before discarding unsaved changes and only drops that form's data.
 - Use the spacing and colour variables in `src/app/globals.css` (`--space-*`, `--color-*`).
 - Menus only hide pages. The backend still checks every permission (GEN-13).
+
+## Clear and quick to use (GEN-15)
+
+- **Actions:** `<Button>` — one `primary` (main action) per screen, `secondary` for the rest, `danger` only for
+  destructive ones. Pass `busy` while saving: it shows e.g. "Saving…" and can't be pressed twice.
+- **Labels:** wrap inputs in `<FormField label hint error>`. Every field gets a visible label, "(optional)" when
+  not required, a hint and its error underneath (pass the backend's `errors[field]` array, GEN-02).
+  After a failed submit call `focusFirstError(form)`.
+- **Statuses:** `<StatusBadge status={booking.status} />` shows plain words ("Awaiting payment", not
+  `PENDING_PAYMENT`). Use `formatMoney`, `formatDate`, `formatDateTime` (with the airport time zone) from `src/lib/format.ts`.
+- **Fewer steps:** each role's main tasks are one click from the home page (`QUICK_ACTIONS` in `navigation.ts`).
+  Menus work with the keyboard (↓ ↑ Home End Escape), and after each page change the cursor moves to the page title.

@@ -15,7 +15,11 @@ function MenuLink({ item, pathname }: { item: NavItem; pathname: string }) {
   );
 }
 
-/** A labelled dropdown. Opens on click, closes on Escape, outside click or navigation. */
+/**
+ * A labelled dropdown. Opens on click, closes on Escape, outside click or navigation.
+ * Keyboard (GEN-15): ↓ opens it and moves to the first link, ↑/↓ move between links,
+ * Home/End jump to the first/last, Escape closes it and returns to the menu button.
+ */
 function Dropdown({
   id,
   label,
@@ -31,22 +35,65 @@ function Dropdown({
   onToggle: () => void;
   children: React.ReactNode;
 }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const focusOnOpen = useRef<'first' | null>(null);
+
+  const links = () => Array.from(panelRef.current?.querySelectorAll<HTMLElement>('.menu-link') ?? []);
+
+  useEffect(() => {
+    if (open && focusOnOpen.current === 'first') links()[0]?.focus();
+    focusOnOpen.current = null;
+  }, [open]);
+
+  function onTriggerKey(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (open) links()[0]?.focus();
+      else {
+        focusOnOpen.current = 'first';
+        onToggle();
+      }
+    }
+  }
+
+  function onPanelKey(e: React.KeyboardEvent) {
+    const items = links();
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    const move: Record<string, number> = {
+      ArrowDown: (index + 1) % items.length,
+      ArrowUp: (index - 1 + items.length) % items.length,
+      Home: 0,
+      End: items.length - 1,
+    };
+    if (e.key in move) {
+      e.preventDefault();
+      items[move[e.key]]?.focus();
+    } else if (e.key === 'Escape') {
+      e.stopPropagation();
+      onToggle();
+      triggerRef.current?.focus();
+    }
+  }
+
   return (
     <div className="dropdown" data-open={open || undefined}>
       <button
+        ref={triggerRef}
         type="button"
         className="menu-trigger"
         aria-expanded={open}
         aria-controls={`menu-${id}`}
         data-active={active || undefined}
         onClick={onToggle}
+        onKeyDown={onTriggerKey}
       >
         {label}
         <span aria-hidden="true" className="chevron">
           ▾
         </span>
       </button>
-      <div id={`menu-${id}`} className="dropdown-panel" hidden={!open}>
+      <div id={`menu-${id}`} ref={panelRef} className="dropdown-panel" hidden={!open} onKeyDown={onPanelKey}>
         {children}
       </div>
     </div>

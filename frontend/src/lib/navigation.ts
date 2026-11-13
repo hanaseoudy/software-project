@@ -91,6 +91,36 @@ export const GUEST_ITEMS: NavItem[] = [
   { label: 'Register', href: '/register', description: 'Create a new account.', audiences: ['guest'] },
 ];
 
+export interface QuickAction {
+  label: string;
+  href: string;
+  audiences: Audience[];
+}
+
+/**
+ * GEN-15: the most common task for each role, one click from its home page
+ * instead of menu → section → page. Labels start with a verb so the action is clear.
+ */
+export const QUICK_ACTIONS: QuickAction[] = [
+  { label: 'Search flights', href: '/flights', audiences: PUBLIC },
+  { label: 'Search hotels', href: '/hotels', audiences: PUBLIC },
+  { label: 'Plan an itinerary', href: '/account/itineraries', audiences: USER },
+  { label: 'Browse itineraries', href: '/itineraries', audiences: ['guest'] },
+  { label: 'View my bookings', href: '/account/bookings', audiences: USER },
+  { label: 'Create an account', href: '/register', audiences: ['guest'] },
+  { label: 'Manage flights', href: '/airline/flights', audiences: ['airline'] },
+  { label: 'Edit airline profile', href: '/airline/profile', audiences: ['airline'] },
+  { label: 'Manage rooms', href: '/hotel/rooms', audiences: ['hotel'] },
+  { label: 'View reservations', href: '/hotel/reservations', audiences: ['hotel'] },
+  { label: 'Review reports', href: '/admin/reports', audiences: ['admin'] },
+  { label: 'Manage accounts', href: '/admin/accounts', audiences: ['admin'] },
+  { label: 'View all bookings', href: '/admin/bookings', audiences: ['admin'] },
+];
+
+export function quickActionsFor(audience: Audience): QuickAction[] {
+  return QUICK_ACTIONS.filter((a) => a.audiences.includes(audience));
+}
+
 /** ACC-04: each role lands on its own home page. */
 export const HOME_BY_AUDIENCE: Record<Audience, string> = {
   guest: '/',
