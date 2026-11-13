@@ -17,7 +17,7 @@ import {
   ProviderType,
 } from '../users/schemas/moderatorassignment.schema';
 import { CreateFlightsDto } from './dto/create-flights.dto';
-import { AddCabinDto } from './dto/add-cabin.dto';
+import { formatFlightWithLocalTimes } from './utils/flight-time.formatter';
 
 @Injectable()
 export class FlightsService {
@@ -82,7 +82,13 @@ export class FlightsService {
     }
 
     // Populate the references before returning the response
-    return flight.populate(['airline', 'departureAirport', 'arrivalAirport']);
+    const populatedFlight = await flight.populate([
+      'airline',
+      'departureAirport',
+      'arrivalAirport',
+    ]);
+
+    return formatFlightWithLocalTimes(populatedFlight);
   }
 
   private async getModeratorAirlineId(userId: string) {
