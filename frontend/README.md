@@ -39,3 +39,22 @@ With `npm run dev`, http://localhost:3001/ui-kit shows every shared component in
   `PENDING_PAYMENT`). Use `formatMoney`, `formatDate`, `formatDateTime` (with the airport time zone) from `src/lib/format.ts`.
 - **Fewer steps:** each role's main tasks are one click from the home page (`QUICK_ACTIONS` in `navigation.ts`).
   Menus work with the keyboard (↓ ↑ Home End Escape), and after each page change the cursor moves to the page title.
+
+## Feedback and error recovery (GEN-16)
+
+- **Calling the backend:** use `apiFetch()` from `src/lib/api.ts`. It sends the cookies and throws an `ApiError`
+  with a plain message ("We couldn't reach the server…", "Your session has ended…"), the GEN-02
+  `fieldErrors`, and `retryable` when trying again can help.
+- **Actions (save, book, delete):** `const save = useAction(fn, { success: 'Saved.' })`. Use `save.busy` on the
+  `<Button busy>`, `save.fieldErrors[field]` on `<FormField error>` and `save.run(...)` to start. It shows a success
+  message, or an error message with **Try again** for network/server errors, and ignores double clicks.
+- **Messages:** `useToast()` → `success()`, `info()`, `error(message, { label: 'Try again', onClick })`.
+  Success hides after 5 s; errors stay until closed.
+- **Loading / failed loads:** `<LoadingState label="Loading bookings…" />` and `<ErrorState message onRetry />`.
+  `src/app/loading.tsx` and `src/app/error.tsx` cover whole pages automatically (crash → "Something went wrong"
+  with Try again). An offline banner appears when the connection drops.
+- **Preventing input errors:** use the right input type (`email`, `date` with `min`, `number` with `min`/`max`),
+  `maxLength` with `<FormField count={{ value, max }}>` for a live character counter, and check the form before sending.
+- **Destructive actions** (GEN-03): `<ConfirmDialog destructive>` before deleting or cancelling.
+- **Responsive:** layouts adapt at tablet (≤ 64rem) and phone (≤ 40rem) widths. Put tables in
+  `<div className="table-wrap">` so they scroll inside their box, and side-by-side inputs in `<div className="field-row">`.

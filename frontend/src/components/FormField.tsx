@@ -24,6 +24,7 @@ export function FormField({
   hint,
   error,
   required = false,
+  count,
   children,
 }: {
   label: string;
@@ -31,13 +32,17 @@ export function FormField({
   hint?: string;
   error?: string | string[];
   required?: boolean;
+  /** GEN-16: shows "12 / 500 characters" so users see the limit before they reach it. */
+  count?: { value: string; max: number };
   children: (props: FieldControlProps) => React.ReactNode;
 }) {
   const id = `${name}-${useId()}`;
   const hintId = hint ? `${id}-hint` : undefined;
   const errorText = Array.isArray(error) ? error.join(' ') : error;
   const errorId = errorText ? `${id}-error` : undefined;
-  const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
+  const countId = count ? `${id}-count` : undefined;
+  const describedBy = [hintId, countId, errorId].filter(Boolean).join(' ') || undefined;
+  const near = count ? count.value.length >= count.max * 0.9 : false;
 
   return (
     <div className="field" data-invalid={errorText ? true : undefined}>
@@ -57,6 +62,11 @@ export function FormField({
         'aria-invalid': errorText ? true : undefined,
         'aria-describedby': describedBy,
       })}
+      {count && (
+        <p id={countId} className="field-count" data-near={near || undefined} aria-live={near ? 'polite' : 'off'}>
+          {count.value.length} / {count.max} characters
+        </p>
+      )}
       {errorText && (
         <p id={errorId} className="field-error" role="alert">
           {errorText}
