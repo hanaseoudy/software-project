@@ -17,6 +17,7 @@ import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { FlightsModule } from './flights/flights.module';
+import { ItinerariesModule } from './itineraries/itineraries.module';
 
 @Module({
   imports: [

@@ -141,7 +141,9 @@ export class FlightsService {
       );
     }
 
-    return updated.populate(['airline', 'departureAirport', 'arrivalAirport']);
+    return formatFlightWithLocalTimes(
+      await flight.populate(['airline', 'departureAirport', 'arrivalAirport']),
+    );
   }
 
   private async getModeratorAirlineId(userId: string) {
