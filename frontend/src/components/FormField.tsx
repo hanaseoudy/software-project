@@ -41,15 +41,18 @@ export function FormField({
 
   return (
     <div className="field" data-invalid={errorText ? true : undefined}>
-      <label htmlFor={id} className="field-label">
-        {label}
-        {!required && <span className="field-optional"> (optional)</span>}
-      </label>
-      {hint && (
-        <p id={hintId} className="field-hint">
-          {hint}
-        </p>
-      )}
+      {/* Label + hint, control, then error: three parts so fields side by side line up (GEN-17). */}
+      <div className="field-head">
+        <label htmlFor={id} className="field-label">
+          {label}
+          {!required && <span className="field-optional"> (optional)</span>}
+        </label>
+        {hint && (
+          <p id={hintId} className="field-hint">
+            {hint}
+          </p>
+        )}
+      </div>
       {children({
         id,
         name,
@@ -57,11 +60,13 @@ export function FormField({
         'aria-invalid': errorText ? true : undefined,
         'aria-describedby': describedBy,
       })}
-      {errorText && (
-        <p id={errorId} className="field-error" role="alert">
-          {errorText}
-        </p>
-      )}
+      <div className="field-after">
+        {errorText && (
+          <p id={errorId} className="field-error" role="alert">
+            {errorText}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

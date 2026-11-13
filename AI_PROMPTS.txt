@@ -972,3 +972,24 @@ Verification performed:
 Frontend lint and build passed. A scripted headless Firefox run against the local backend passed 15/15
 checks (menus per role, breadcrumbs, Back, Cancel/discard, field errors, busy button, status labels,
 admin login/logout, keyboard menu, phone layout). Production build: pages 200, /ui-kit and unknown pages 404.
+================================================
+Date: 2026-11-17
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: GEN-17 (TASK-113) - consistent visual design and component styling
+Prompt (summary of the conversation):
+I gave AI the GEN-17 story and asked it to build it the same way as GEN-14/15 and to check that it runs and
+works. Later I asked it to check the branch against the requirement: GEN-17 had been built on top of GEN-16,
+which must wait for GEN-02/03/04, so I asked for GEN-17 on its own (it has no dependencies).
+
+How the output was used:
+AI turned the frontend styles into one design system: a colour palette with colour roles, a type scale,
+weights, spacing, radius, shadow, control height and layer tokens, and replaced the raw colours and mixed
+font sizes/radii with them. It unified control heights, corner radius and the keyboard focus outline, added
+consistent select/checkbox/radio/disabled/table styles, made side-by-side fields line up, added a
+design-token check to `npm run lint` (so CI fails on raw colours or sizes), and a design-system section on the
+dev-only /ui-kit page. It then rebuilt the branch on GEN-15 without GEN-16's code (toasts, loading/error
+states, offline banner, character counter, responsive breakpoints), which stays in its own PR. I reviewed it.
+Verification performed:
+Frontend npm ci, lint (with the design-token check) and production build passed. Started the built site:
+pages return 200, unknown paths 404 and the dev-only /ui-kit 404; the shipped CSS has no GEN-16 styles.

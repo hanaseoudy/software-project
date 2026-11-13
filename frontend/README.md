@@ -39,3 +39,17 @@ With `npm run dev`, http://localhost:3001/ui-kit shows every shared component in
   `PENDING_PAYMENT`). Use `formatMoney`, `formatDate`, `formatDateTime` (with the airport time zone) from `src/lib/format.ts`.
 - **Fewer steps:** each role's main tasks are one click from the home page (`QUICK_ACTIONS` in `navigation.ts`).
   Menus work with the keyboard (↓ ↑ Home End Escape), and after each page change the cursor moves to the page title.
+
+## Consistent visual design (GEN-17)
+
+- **One design system:** every colour, font size, weight, spacing, radius, shadow, control height and layer is a
+  CSS variable in the `:root` block of `src/app/globals.css`. Components use the *role* tokens
+  (`--color-primary`, `--color-text`, `--color-danger`, …), not the raw palette. See them all at `/ui-kit` (dev).
+- **Never type a raw value:** no `#hex`/`rgb()` colours, `font-size: 13px`, `border-radius: 6px`, `z-index: 999`,
+  or inline styles. `npm run lint` runs `scripts/check-design-tokens.mjs`, which fails (also in CI) and lists the file
+  and line. Need a new value? Add a token to `:root` first.
+- **Use the shared classes:** `.button` (+ `button-primary` / `button-ghost` / `button-danger`), `.input` (inputs,
+  selects, textareas), `.card`, `.table-wrap` + `.table`, `.badge`, `.row`, `.field-row`. All controls are one height
+  (`--control-height`), share one corner radius and one keyboard focus outline, so rows line up.
+- Put tables in `<div className="table-wrap">` and side-by-side inputs in `<div className="field-row">`; fields in a
+  row keep their inputs level even when only some have a hint.
