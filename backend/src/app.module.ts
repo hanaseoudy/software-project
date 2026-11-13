@@ -11,7 +11,6 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
-import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 
 @Module({
   imports: [
@@ -46,10 +45,11 @@ AirportsModule,
 PaymentsModule,
 BlogModule,
 HotelBookingsModule,
-HotelsModule,
+HotelsModule,//
 UsersModule,
 AuthModule,
 UploadsModule,
+ItinerariesModule,
 ],
 
 
