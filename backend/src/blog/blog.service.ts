@@ -14,12 +14,23 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { LikeResponseDto } from './dto/like-response.dto';
 import { MyPostsPage } from './dto/my-post-response.dto';
 import { PostResponseDto } from './dto/post-response.dto';
+import { PublicAuthorDto, PublicPostDetailDto, PublicPostsPage } from './dto/public-post-response.dto';
 import { TagPostsPage, TagsPage } from './dto/tag-response.dto';
 import { UpdateTagsDto } from './dto/update-tags.dto';
+import { Comment, CommentDocument } from './schemas/comment.schema';
 import { Like, LikeDocument } from './schemas/like.schema';
 import { Post, PostDocument, PostStatus } from './schemas/post.schema';
 import { escapeRegex, normalizeTags } from './tag-rules';
 import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
+import { AccountStatus, User, UserDocument } from '../users/schemas/user.schema';
+
+// BLG-02: list rows show the first 200 characters of the body
+const EXCERPT_LENGTH = 200;
+
+// ACC-12: comments of deactivated (or missing) accounts are shown under this name
+const DELETED_USER = 'Deleted user';
+
+type PublicUser = { name: string; deactivated: boolean };
 
 const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
 
@@ -33,6 +44,8 @@ export class BlogService {
   constructor(
     @InjectModel(Post.name) private readonly postModel: Model<PostDocument>,
     @InjectModel(Like.name) private readonly likeModel: Model<LikeDocument>,
+    @InjectModel(Comment.name) private readonly commentModel: Model<CommentDocument>,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
   // BLG-01: the author always comes from the logged-in user, never from the request body
@@ -78,6 +91,120 @@ export class BlogService {
       commentsCount: post.commentsCount ?? 0,
     }));
     return paginate(items, total, page);
+  }
+
+  // BLG-02: public list of published, non-hidden posts, newest first, optional tag filter, page size 10 (GEN-05).
+  // ACC-12: posts of deactivated authors are hidden.
+  async listPublished(tag: string | undefined, page = 1): Promise<PublicPostsPage> {
+    const deactivated = await this.runDb('Could not load the posts', () =>
+      this.userModel.distinct('_id', { status: AccountStatus.DEACTIVATED }).exec(),
+    );
+    const filter = {
+      ...VISIBLE_POSTS,
+      author: { $nin: deactivated },
+      ...(tag !== undefined ? { tags: String(tag).trim().toLowerCase() } : {}),
+    };
+    const [posts, total] = await this.runDb('Could not load the posts', () =>
+      Promise.all([
+        this.postModel
+          .find(filter)
+          .select('title author content tags images likesCount commentsCount createdAt')
+          .sort({ createdAt: -1, _id: -1 })
+          .skip(skipFor(page))
+          .limit(PAGE_SIZE)
+          .lean<(Post & { _id: Types.ObjectId; createdAt: Date })[]>()
+          .exec(),
+        this.postModel.countDocuments(filter).exec(),
+      ]),
+    );
+    const users = await this.loadPublicUsers(posts.map((post) => post.author));
+    const items = posts.map((post) => ({
+      id: post._id.toString(),
+      title: post.title,
+      author: this.toPublicAuthor(users, post.author),
+      createdAt: post.createdAt,
+      excerpt: Array.from((post.content ?? '').trim()).slice(0, EXCERPT_LENGTH).join('').trim(),
+      tags: post.tags ?? [],
+      images: (post.images ?? []).map((image) => image.url),
+      likesCount: post.likesCount ?? 0,
+      commentsCount: post.commentsCount ?? 0,
+    }));
+    return paginate(items, total, page);
+  }
+
+  // BLG-02: public post page. 404 for an invalid id, a missing, draft or hidden post,
+  // or a post by a deactivated author (ACC-12). Visible comments are shown oldest first (BLG-05).
+  async getPublished(postId: string): Promise<PublicPostDetailDto> {
+    if (typeof postId !== 'string' || !OBJECT_ID_PATTERN.test(postId)) {
+      throw new NotFoundException('Post not found');
+    }
+    const post = await this.runDb('Could not load the post', () =>
+      this.postModel
+        .findOne({ _id: new Types.ObjectId(postId), ...VISIBLE_POSTS })
+        .select('title author content tags images likesCount createdAt')
+        .lean<Post & { _id: Types.ObjectId; createdAt: Date }>()
+        .exec(),
+    );
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+    const comments = await this.runDb('Could not load the comments', () =>
+      this.commentModel
+        .find({ post: post._id, isHidden: { $ne: true } })
+        .select('author text createdAt')
+        .sort({ createdAt: 1, _id: 1 })
+        .lean<(Comment & { _id: Types.ObjectId; createdAt: Date })[]>()
+        .exec(),
+    );
+    const users = await this.loadPublicUsers([post.author, ...comments.map((comment) => comment.author)]);
+    if (users.get(post.author.toString())?.deactivated) {
+      throw new NotFoundException('Post not found');
+    }
+    return {
+      id: post._id.toString(),
+      title: post.title,
+      author: this.toPublicAuthor(users, post.author),
+      createdAt: post.createdAt,
+      content: post.content,
+      tags: post.tags ?? [],
+      images: (post.images ?? []).map((image) => image.url),
+      likesCount: post.likesCount ?? 0,
+      comments: comments.map((comment) => ({
+        id: comment._id.toString(),
+        author: this.toPublicAuthor(users, comment.author),
+        text: comment.text,
+        createdAt: comment.createdAt,
+      })),
+    };
+  }
+
+  // One query for all authors on the page (no N+1). Only the display name and status are read,
+  // never email, password, phone, role or tokens.
+  private async loadPublicUsers(ids: Types.ObjectId[]): Promise<Map<string, PublicUser>> {
+    const uniqueIds = [...new Set(ids.map((id) => id.toString()))];
+    if (uniqueIds.length === 0) return new Map();
+    const users = await this.runDb('Could not load the authors', () =>
+      this.userModel
+        .find({ _id: { $in: uniqueIds } })
+        .select('firstName lastName status')
+        .lean<{ _id: Types.ObjectId; firstName?: string; lastName?: string; status?: AccountStatus }[]>()
+        .exec(),
+    );
+    return new Map(
+      users.map((user) => [
+        user._id.toString(),
+        {
+          name: `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim(),
+          deactivated: user.status === AccountStatus.DEACTIVATED,
+        },
+      ]),
+    );
+  }
+
+  // ACC-12: deactivated or missing accounts are shown as "Deleted user" without an id
+  private toPublicAuthor(users: Map<string, PublicUser>, id: Types.ObjectId): PublicAuthorDto {
+    const user = users.get(id.toString());
+    return user && !user.deactivated ? { id: id.toString(), name: user.name } : { id: null, name: DELETED_USER };
   }
 
   // BLG-08: the author edits the post's tags later. BLG-04 will extend this with the other fields.
