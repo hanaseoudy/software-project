@@ -75,3 +75,21 @@ setBaggagePolicy to AirlinesService, expose the protected route in
 AirlinesController, and test the policy updates. Reviewed and adjusted
 every snippet before committing.
 ================================================
+
+================================================
+Date: 2026-11-13
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: GEN-06
+Prompt:
+Asked to quiz me step by step on designing GEN-06 (displaying flight
+times in each airport's local time zone): choosing an exportable
+formatter pattern, converting UTC timestamps to each airport's IANA
+timezone with date-fns-tz (formatInTimeZone), preserving UTC fields while
+adding local-time fields, and converting Mongoose documents via
+.toObject() before serialization.
+How the output was used:
+Used the guided concepts and code structure to create the reusable
+formatFlightWithLocalTimes helper and wire it into FlightsService.
+Reviewed and adjusted every snippet before committing.
+================================================
