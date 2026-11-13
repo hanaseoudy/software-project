@@ -18,6 +18,7 @@ import { CreateAirlineDto } from './dto/create-airline.dto';
 import { UpdateAirlineDto } from './dto/update-airline.dto';
 import { UploadedImage, UploadsService } from '../uploads/uploads.service';
 import { ImageCategory } from '../uploads/uploads.constants';
+import { SetCancellationPolicyDto } from './dto/set-cancellation-policy.dto';
 
 @Injectable()
 export class AirlinesService {
@@ -52,6 +53,49 @@ export class AirlinesService {
     this.validateObjectId(id);
     const airline = await this.airlineModel.findById(id);
     if (!airline) throw new NotFoundException('Airline not found');
+    return airline;
+  }
+
+  async setCancellationPolicy(
+    id: string,
+    dto: SetCancellationPolicyDto,
+    user: AuthPayload,
+  ) {
+    // 1. Validate ObjectId format and verify moderator owns this airline (400 / 403)
+    await this.assertOwnsAirline(id, user.sub);
+
+    // 2. Defensive check for unique daysBeforeDeparture thresholds (400)
+    const uniqueDays = new Set(dto.rules.map((r) => r.daysBeforeDeparture));
+    if (uniqueDays.size !== dto.rules.length) {
+      throw new BadRequestException(
+        'Each cancellation tier must have a unique daysBeforeDeparture threshold',
+      );
+    }
+
+    // 3. Sort descending by daysBeforeDeparture for clean storage & FLT-26 lookup
+    const sortedRules = [...dto.rules]
+      .sort((a, b) => b.daysBeforeDeparture - a.daysBeforeDeparture)
+      .map((rule) => ({
+        daysBeforeDeparture: rule.daysBeforeDeparture,
+        refundPercent: rule.refundPercent,
+      }));
+
+    // 4. Update the embedded cancellationPolicy subdocument
+    const airline = await this.airlineModel.findByIdAndUpdate(
+      id,
+      {
+        cancellationPolicy: {
+          rules: sortedRules,
+        },
+      },
+      { new: true, runValidators: true },
+    );
+
+    // 5. Ensure airline still exists (404)
+    if (!airline) {
+      throw new NotFoundException('Airline not found');
+    }
+
     return airline;
   }
 

@@ -9,12 +9,14 @@ import {
   UseInterceptors,
   UploadedFile,
   UseGuards,
+  Put,
 } from '@nestjs/common';
 import {
   ApiBody,
   ApiConsumes,
   ApiCookieAuth,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -33,6 +35,7 @@ import type { UploadedImage } from '../uploads/uploads.service';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { imageUploadOptions } from '../uploads/image-upload.options';
 import { ImageCategory } from '../uploads/uploads.constants';
+import { SetCancellationPolicyDto } from './dto/set-cancellation-policy.dto';
 
 @Controller('airlines')
 export class AirlinesController {
@@ -137,5 +140,45 @@ export class AirlinesController {
     @CurrentUser() user: AuthPayload,
   ) {
     return this.airlines.setLogo(id, file, user);
+  }
+
+  @Put(':id/cancellation-policy')
+  @ApiCookieAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Define cancellation policy tiers for an airline (FLT-09)',
+    description:
+      'Sets unique days-before-departure thresholds (>= 0) and refund percentages (0–100%).',
+  })
+  @ApiParam({ name: 'id', description: 'MongoDB ObjectId of the airline' })
+  @ApiResponse({
+    status: 200,
+    description: 'Cancellation policy updated successfully.',
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Bad Request: Invalid airline ID, out-of-range values, or duplicate daysBeforeDeparture thresholds.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized: Missing or invalid authentication cookie.',
+  })
+  @ApiResponse({
+    status: 403,
+    description:
+      'Forbidden: User is not the assigned moderator for this airline.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found: Airline does not exist.',
+  })
+  async setCancellationPolicy(
+    @Param('id') id: string,
+    @Body() dto: SetCancellationPolicyDto,
+    @CurrentUser() user: AuthPayload,
+  ) {
+    return this.airlines.setCancellationPolicy(id, dto, user);
   }
 }
