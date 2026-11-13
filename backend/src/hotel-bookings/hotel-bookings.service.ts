@@ -19,6 +19,8 @@ import {
   HotelBookingStatus,
 } from './schemas/hotel-booking.schema';
 import { RoomLock } from './schemas/room-lock.schema';
+import { parseCalendarDate } from './utils/calendar-date';
+import { isStayFullyAvailable } from './utils/stay-availability';
 
 export const HOLD_DURATION_MS = 10 * 60 * 1000; // HTL-18: 10-minute hold
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -45,10 +47,13 @@ export class HotelBookingsService {
     userId: string,
     dto: HoldHotelBookingDto,
   ): Promise<HotelBookingDocument> {
-    const checkIn = new Date(dto.checkIn);
-    const checkOut = new Date(dto.checkOut);
-    checkIn.setUTCHours(0, 0, 0, 0);
-    checkOut.setUTCHours(0, 0, 0, 0);
+    const checkIn = parseCalendarDate(dto.checkIn);
+    const checkOut = parseCalendarDate(dto.checkOut);
+    if (!checkIn || !checkOut) {
+      throw new BadRequestException(
+        'Dates must be real calendar dates in YYYY-MM-DD format',
+      );
+    }
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
 
@@ -143,6 +148,28 @@ export class HotelBookingsService {
           throw new ConflictException(
             'One or more rooms are blocked for the selected dates',
           );
+        }
+
+        // 2b) Every night of the stay must fall inside an `available` range
+        const availableRanges = await this.availabilityModel
+          .find({
+            room: { $in: roomObjectIds },
+            type: AvailabilityType.AVAILABLE,
+            startDate: { $lt: checkOut },
+            endDate: { $gte: checkIn },
+          })
+          .select('room startDate endDate')
+          .lean()
+          .session(session);
+        for (const roomId of roomIds) {
+          const ranges = availableRanges.filter(
+            (r) => String(r.room) === roomId,
+          );
+          if (!isStayFullyAvailable(checkIn, checkOut, ranges)) {
+            throw new ConflictException(
+              'One or more rooms are not available for every night of the selected dates',
+            );
+          }
         }
 
         // 3) Confirmed reservations or unexpired holds that overlap

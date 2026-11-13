@@ -3,12 +3,12 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
-  IsDateString,
   IsInt,
   IsMongoId,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { IsCalendarDate } from './is-calendar-date.decorator';
 
 export class HoldRoomDto {
   @ApiProperty({ description: 'Room id' })
@@ -32,11 +32,11 @@ export class HoldHotelBookingDto {
   hotelId: string;
 
   @ApiProperty({ example: '2026-12-20' })
-  @IsDateString()
+  @IsCalendarDate()
   checkIn: string;
 
   @ApiProperty({ example: '2026-12-23' })
-  @IsDateString()
+  @IsCalendarDate()
   checkOut: string;
 
   @ApiProperty({ type: [HoldRoomDto] })

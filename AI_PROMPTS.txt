@@ -250,9 +250,37 @@ TypeScript type-check (tsc --noEmit) passed. Tested POST /api/hotel-bookings
 locally against MongoDB Atlas with a test hotel and 2 rooms: in Swagger 201
 (PENDING_PAYMENT, totalPrice 600), 409 on the same dates again, and 400 when
 check-out is before check-in; in Postman 201 and 409. A temporary fixed user id
-was used for local testing only and was not committed. The expiry cron job and
-the auth guard are not included yet (waiting for FLT-22 and the JWT guard to be
-merged).
+was used for local testing only and was not committed. (The auth guard and the
+expiry cron job were added afterwards, see the next entry.)
+================================================
+Date: 2026-11-13
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: HTL-18 (TASK-58) - review fixes on PR #42
+
+Prompt (summary of the conversation):
+The team leader reviewed PR #42 and asked for 4 fixes: (1) every request
+returned 401, so add JwtAuthGuard, import AuthModule and use req.user.sub;
+(2) make sure every night of the stay is inside an available range; (3) reject
+invalid dates such as 2027-02-30 and timestamps with time zones, accepting only
+real YYYY-MM-DD dates; (4) implement hold expiry so expired holds become EXPIRED.
+
+How the output was used:
+Merged develop into the branch. Controller now uses @UseGuards(JwtAuthGuard)
+and req.user.sub; HotelBookingsModule imports AuthModule. Added a pure helper
+isStayFullyAvailable (assumes the end date of an available range is inclusive)
+used inside the transaction together with the existing blocked check. Added a
+pure parseCalendarDate helper and an @IsCalendarDate DTO decorator (the service
+re-checks the dates). Added HotelHoldExpiryService (@Cron every minute marks
+PENDING_PAYMENT holds with holdExpiresAt <= now as EXPIRED), ScheduleModule in
+AppModule and the @nestjs/schedule dependency.
+
+Verification:
+Unit tests for the two helpers pass (11 tests, jest). tsc --noEmit and oxlint
+show no errors in the changed files (tsc still reports errors in the existing
+hotels.service.spec.ts, not part of this PR). Not yet tested against MongoDB
+Atlas: the guarded endpoint, the availability check and the cron job must be
+tested locally after a real login.
 ================================================
 ================================================
 

@@ -3,25 +3,30 @@ import {
   Controller,
   Post,
   Req,
-  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
+  ApiCookieAuth,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOperation,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
 import { HoldHotelBookingDto } from './dto/hold-hotel-booking.dto';
 import { HotelBookingsService } from './hotel-bookings.service';
 
 @ApiTags('Hotel Bookings')
+@ApiCookieAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('hotel-bookings')
 export class HotelBookingsController {
   constructor(private readonly hotelBookingsService: HotelBookingsService) {}
 
-  // TODO: add the auth guard once it is available (userId comes from req.user).
   @Post()
   @ApiOperation({
     summary:
@@ -45,12 +50,15 @@ export class HotelBookingsController {
   })
   @ApiBadRequestResponse({
     description:
-      'Invalid dates (check-out not after check-in, check-in in the past), duplicate room, room from another hotel, or too many guests',
+      'Invalid dates (not a real YYYY-MM-DD date, check-out not after check-in, check-in in the past), duplicate room, room from another hotel, or too many guests',
     example: {
       message: 'checkOut must be after checkIn',
       error: 'Bad Request',
       statusCode: 400,
     },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing or invalid access token',
   })
   @ApiNotFoundResponse({
     description: 'Hotel (or one of the rooms) not found or not available',
@@ -62,21 +70,14 @@ export class HotelBookingsController {
   })
   @ApiConflictResponse({
     description:
-      'A room is blocked, or already reserved (confirmed reservation or unexpired hold); nothing was held',
+      'A room is blocked, not fully available for every night, or already reserved (confirmed reservation or unexpired hold); nothing was held',
     example: {
       message: 'One or more rooms are already reserved for the selected dates',
       error: 'Conflict',
       statusCode: 409,
     },
   })
-  hold(
-    @Req() req: { user?: { id?: string; userId?: string; sub?: string } },
-    @Body() dto: HoldHotelBookingDto,
-  ) {
-    const userId = req.user?.id ?? req.user?.userId ?? req.user?.sub;
-    if (!userId) {
-      throw new UnauthorizedException('Authentication required');
-    }
-    return this.hotelBookingsService.createHold(userId, dto);
+  hold(@Req() req: AuthenticatedRequest, @Body() dto: HoldHotelBookingDto) {
+    return this.hotelBookingsService.createHold(req.user!.sub, dto);
   }
 }
