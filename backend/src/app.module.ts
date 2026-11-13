@@ -13,8 +13,12 @@ import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ItinerariesModule } from './itineraries/itineraries.module';
-import { AirlinesModule } from './airlines/airlines.module';
+
 import { warnIfDatabaseMissing } from './common/config/mongodb.config';
+import { AirlinesModule } from './airlines/airlines.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
+import { FlightsModule } from './flights/flights.module';
 
 @Module({
   imports: [
@@ -53,6 +57,7 @@ import { warnIfDatabaseMissing } from './common/config/mongodb.config';
     UploadsModule,
     AirlinesModule,
     ItinerariesModule,
+    FlightsModule,
   ],
 
   controllers: [AppController],

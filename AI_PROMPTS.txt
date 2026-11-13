@@ -448,20 +448,19 @@ could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
 
-================================================
-Date: 2026-11-10
-Student: Sara Gomaa
-Tool: Claude
-Related Requirement: FLT-01, GEN-08
-Prompt:
-Asked Claude to question me step by step through FLT-01 (airline profile
-create/view/edit): schema review against the user stories, DTO
-validation, ownership checks, error codes, logo upload.
-How the output was used:
-Used the explanations and corrections to write the DTOs, service and
-controller myself. Reviewed and adjusted every snippet before committing.
-===============================================
-
+   ================================================
+   Date: 2026-11-10
+   Student: Sara Gomaa
+   Tool: Claude
+   Related Requirement: FLT-01, GEN-08
+   Prompt:
+   Asked Claude to question me step by step through FLT-01 (airline profile
+   create/view/edit): schema review against the user stories, DTO
+   validation, ownership checks, error codes, logo upload.
+   How the output was used:
+   Used the explanations and corrections to write the DTOs, service and
+   controller myself. Reviewed and adjusted every snippet before committing.
+   ================================================
 Date: 2026-11-08
 Student: Nour Hossam
 Tool: Claude
@@ -552,17 +551,26 @@ Lint, build and all hotel unit tests passed under Node 24.
 ================================================
 
 Date: 2026-11-12
-Student: Kenzy
+Student: Sara Gomaa
 Tool: Claude
-Related Requirement: GEN-01
+Related Requirement: FLT-03
 Prompt:
-I need to verify the in-app notifications requirement (GEN-01). Please guide me
-step by step to test my NotificationsService with Postman, and help me fix the
-errors I get.
+Asked to guide me through FLT-03 (airline moderator creates a flight) by
+questioning me and correcting my answers. Topics: where a new flight's
+airline comes from (POST /api/flights has no airline id in the URL), which
+fields the moderator sends versus which the system calculates, how to
+identify airports (IATA code lookup), and how to accept times entered in
+each airport's local time and store them in UTC.
 How the output was used:
-Used the explanation to temporarily add a controller and test the service
-(list, unread count, mark one as read, mark all as read) in Postman. After the
-reviewer's feedback, the controller and the AuthModule import were removed, so
-the PR only contains the schema, enum and reusable NotificationsService.
-Postman screenshots are attached to the PR as verification only.
+- Learned that the airline must come from the logged-in moderator's
+  ModeratorAssignment, never from the request body, and wrote the lookup
+  (403 if the moderator has no assigned airline).
+- Registered the ModeratorAssignment model in FlightsModule and injected it
+  into FlightsService.
+- Designed CreateFlightDto: moderator sends flightNumber, departure/arrival
+  airport IATA codes and local date-times (format YYYY-MM-DDTHH:mm, no
+  timezone); airline, status, cabins, departureLocalDate and
+  durationMinutes are filled in by the system.
+- Used the suggested regex for the local time format and reviewed it
+  before use.
 ================================================

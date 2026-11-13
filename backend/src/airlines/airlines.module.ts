@@ -9,7 +9,6 @@ import {
 import { AirlinesController } from './airlines.controller';
 import { AirlinesService } from './airlines.service';
 import { UploadsModule } from '../uploads/uploads.module';
-import { JwtService } from '@nestjs/jwt';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
