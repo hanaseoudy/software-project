@@ -42,6 +42,9 @@ import { CommentResponseDto } from './dto/comment-response.dto';
 import { StrictBody } from './strict-body.decorator';
 import { MyPostSummaryDto } from './dto/my-post-response.dto';
 import type { MyPostsPage } from './dto/my-post-response.dto';
+import { ListPostsQueryDto } from './dto/list-posts-query.dto';
+import { PublicPostDetailDto, PublicPostSummaryDto } from './dto/public-post-response.dto';
+import type { PublicPostsPage } from './dto/public-post-response.dto';
 import { PaginatedResponseDto, PaginationQueryDto } from '../common/pagination/pagination';
 
 @ApiTags('blog')
@@ -101,6 +104,53 @@ export class BlogController {
     const userId = req.user?.sub;
     if (!userId) throw new UnauthorizedException('Not authenticated');
     return this.blogService.listMine(userId, query.page ?? 1);
+  }
+
+  @Get()
+  @ApiOperation({
+    summary: 'Browse published posts (BLG-02)',
+    description:
+      'Public, no login needed. Lists published, non-hidden posts newest first with title, author, date, ' +
+      'excerpt, tags, images, like count and comment count. Optional exact tag filter. ' +
+      'Paginated with a fixed page size of 10 (GEN-05); no results returns an empty page. Keyword search is BLG-09.',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'tag', required: false, type: String, example: 'egypt', description: 'Tag name, 1 to 30 characters' })
+  @ApiExtraModels(PaginatedResponseDto, PublicPostSummaryDto)
+  @ApiOkResponse({
+    description: 'One page of published posts',
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(PaginatedResponseDto) },
+        { properties: { items: { type: 'array', items: { $ref: getSchemaPath(PublicPostSummaryDto) } } } },
+      ],
+    },
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid tag or page number',
+    type: ValidationErrorResponseDto,
+    example: { message: 'Validation failed', errors: { tag: ['Tag must be at most 30 characters'] } },
+  })
+  list(@Query() query: ListPostsQueryDto): Promise<PublicPostsPage> {
+    return this.blogService.listPublished(query.tag, query.page ?? 1);
+  }
+
+  // Declared after GET /posts/mine so "mine" is not treated as an id
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Open a published post (BLG-02)',
+    description:
+      'Public, no login needed. Shows title, author, date, body, tags, images, like count and the visible ' +
+      'comments oldest first. Drafts, hidden posts and posts of deactivated authors return 404.',
+  })
+  @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
+  @ApiOkResponse({ description: 'The post page', type: PublicPostDetailDto })
+  @ApiNotFoundResponse({
+    description: 'Invalid post id, or the post does not exist, is a draft or is hidden',
+    type: ErrorResponseDto,
+  })
+  findOne(@Param('id') id: string): Promise<PublicPostDetailDto> {
+    return this.blogService.getPublished(id);
   }
 
   @Patch(':id')
