@@ -1,6 +1,6 @@
 import { IsEnum, IsInt, IsNumber, Min, IsPositive } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { CabinClass } from '../schemas/airline.schema'; // adjust path to where your enum lives
+import { CabinClass } from '../../airlines/schemas/airline.schema';
 
 export class AddCabinDto {
   @ApiProperty({ enum: CabinClass })
