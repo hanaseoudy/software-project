@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Req,
+  Get,
   UseGuards,
 } from '@nestjs/common';
 
@@ -33,6 +34,25 @@ export class ItinerariesController {
   constructor(
     private readonly itinerariesService: ItinerariesService,
   ) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'List my itineraries (ITN-03)',
+  })
+  findAll(@Req() req: AuthenticatedRequest) {
+    return this.itinerariesService.findAll(req.user!.sub);
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get my itinerary details (ITN-03)',
+  })
+  findOne(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    return this.itinerariesService.findOne(req.user!.sub, id);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create itinerary (ITN-01)' })

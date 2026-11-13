@@ -69,6 +69,33 @@ export class ItinerariesService {
     }
   }
 
+  // ITN-03: List itineraries belonging to the logged-in user
+  async findAll(userId: string) {
+    return this.itineraryModel
+      .find({ userId: new Types.ObjectId(userId) })
+      .sort({ updatedAt: -1, _id: -1 })
+      .lean();
+  }
+
+  // ITN-03: View details of an itinerary owned by the user
+  async findOne(userId: string, itineraryId: string) {
+    this.validateObjectId(itineraryId);
+
+    const itinerary = await this.itineraryModel
+      .findOne({
+        _id: new Types.ObjectId(itineraryId),
+        userId: new Types.ObjectId(userId),
+      })
+      .lean();
+
+    if (!itinerary) {
+      throw new NotFoundException('Itinerary not found');
+    }
+
+    return itinerary;
+  }
+
+
   async create(userId: string, dto: CreateItineraryDto) {
     await this.validateCountries(dto.countryIds);
 
