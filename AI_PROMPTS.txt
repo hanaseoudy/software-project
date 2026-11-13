@@ -448,20 +448,19 @@ could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
 
-================================================
-Date: 2026-11-10
-Student: Sara Gomaa
-Tool: Claude
-Related Requirement: FLT-01, GEN-08
-Prompt:
-Asked Claude to question me step by step through FLT-01 (airline profile
-create/view/edit): schema review against the user stories, DTO
-validation, ownership checks, error codes, logo upload.
-How the output was used:
-Used the explanations and corrections to write the DTOs, service and
-controller myself. Reviewed and adjusted every snippet before committing.
-===============================================
-
+   ================================================
+   Date: 2026-11-10
+   Student: Sara Gomaa
+   Tool: Claude
+   Related Requirement: FLT-01, GEN-08
+   Prompt:
+   Asked Claude to question me step by step through FLT-01 (airline profile
+   create/view/edit): schema review against the user stories, DTO
+   validation, ownership checks, error codes, logo upload.
+   How the output was used:
+   Used the explanations and corrections to write the DTOs, service and
+   controller myself. Reviewed and adjusted every snippet before committing.
+   ================================================
 Date: 2026-11-08
 Student: Nour Hossam
 Tool: Claude

@@ -18,6 +18,8 @@ import {
 } from '../users/schemas/moderatorassignment.schema';
 import { CreateFlightsDto } from './dto/create-flights.dto';
 import { formatFlightWithLocalTimes } from './utils/flight-time.formatter';
+import { AddCabinDto } from './dto/add-cabin.dto';
+import { isValidObjectId } from 'mongoose';
 
 @Injectable()
 export class FlightsService {
@@ -89,6 +91,57 @@ export class FlightsService {
     ]);
 
     return formatFlightWithLocalTimes(populatedFlight);
+  }
+
+  async addCabin(flightId: string, userId: string, dto: AddCabinDto) {
+    if (!isValidObjectId(flightId)) {
+      throw new BadRequestException('Invalid flight ID format');
+    }
+    if (!isValidObjectId(userId)) {
+      throw new BadRequestException('Invalid user ID format');
+    }
+
+    const flight = await this.flightsModel.findById(flightId);
+    if (!flight) {
+      throw new NotFoundException('Flight not found');
+    }
+
+    // 3. Security: Check if this moderator owns the airline that owns this flight
+    const moderatorAirlineId = await this.getModeratorAirlineId(userId);
+    if (flight.airline.toString() !== moderatorAirlineId.toString()) {
+      throw new ForbiddenException(
+        'You do not have permission to modify cabins for this flight',
+      );
+    }
+
+    // 4. Rule: Each cabin category used at most once per flight
+    const cabinExists = flight.cabins.some(
+      (c) => c.cabinClass === dto.cabinClass,
+    );
+    if (cabinExists) {
+      throw new ConflictException(
+        `Cabin class ${dto.cabinClass} already exists on this flight`,
+      );
+    }
+
+    if (flight.status !== FlightStatus.SCHEDULED) {
+      throw new ConflictException(
+        'Cabins can only be added to Scheduled flights',
+      );
+    }
+
+    const updated = await this.flightsModel.findOneAndUpdate(
+      { _id: flightId, 'cabins.cabinClass': { $ne: dto.cabinClass } },
+      { $push: { cabins: { ...dto, bookedSeats: 0, heldSeats: 0 } } },
+      { new: true, runValidators: true },
+    );
+    if (!updated) {
+      throw new ConflictException(
+        'Cabin could not be added: it may already exist or the flight changed. Please retry.',
+      );
+    }
+
+    return updated.populate(['airline', 'departureAirport', 'arrivalAirport']);
   }
 
   private async getModeratorAirlineId(userId: string) {
