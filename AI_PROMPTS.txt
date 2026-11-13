@@ -540,3 +540,30 @@ reviewer's feedback, the controller and the AuthModule import were removed, so
 the PR only contains the schema, enum and reusable NotificationsService.
 Postman screenshots are attached to the PR as verification only.
 ================================================
+Date: 2026-11-13
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: HTL-17 (TASK-57)
+
+Prompt (summary of the conversation):
+Help me implement HTL-17: after a successful payment, set the whole hotel
+reservation (all rooms) to Confirmed, generate a unique booking reference and
+send an in-app notification with the reservation details. The payment module
+(PAY-01) is not merged yet, so build the part that runs after payment.
+
+How the output was used:
+Used the generated HotelBookingConfirmationService.confirmAfterPayment(): one
+atomic update moves a still-valid PENDING_PAYMENT hold (holdExpiresAt in the
+future) to CONFIRMED and sets a random bookingReference (HTL-XXXXXXXX, retried
+if the unique index reports a duplicate); a repeated call returns the same
+confirmed reservation; an expired or cancelled reservation is rejected with 409.
+It then calls the existing NotificationsService (GEN-01) with type
+BOOKING_CONFIRMED; a notification failure is logged and does not undo the
+confirmation. Also used the generateBookingReference helper and its unit tests.
+The service is meant to be called by PAY-01 after it verifies the payment.
+The confirmation page is a frontend task (Milestone 2).
+
+Verification:
+(to be updated after local testing)
+================================================
+================================================
