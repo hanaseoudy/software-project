@@ -540,3 +540,32 @@ reviewer's feedback, the controller and the AuthModule import were removed, so
 the PR only contains the schema, enum and reusable NotificationsService.
 Postman screenshots are attached to the PR as verification only.
 ================================================
+Date: 2026-11-13
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: HTL-16 (TASK-56)
+
+Prompt (summary of the conversation):
+Help me implement HTL-16: a registered user books one or more rooms of the same
+hotel for the same dates in one reservation, assigning adults and children to
+each room, with at least one adult per reservation, no room above its maximum
+occupancy, and total price = sum over rooms of nights x that room's price at
+booking time. The same rules already run inside the HTL-18 hold (PR #42), so
+keep this PR independent: pure functions plus unit tests.
+
+How the output was used:
+Used the generated hotel-booking-rules helpers (countNights, buildReservation,
+calculateTotalPrice and the individual assert functions). They are framework-free
+(no @nestjs imports), are not wired into any service in this PR, and throw a
+plain HotelBookingRuleError. The "at least one adult" rule is checked for the
+whole reservation, not per room (HTL-16). Children are handled as a count per
+room; whether children's individual ages (0-17) must be stored is an open
+question for the reviewer.
+
+Verification:
+Unit tests with jest for the helpers pass (13 tests: nights, guest counts, one
+adult per reservation, distinct rooms, same hotel, max occupancy, price sum and
+rounding, and buildReservation). tsc --noEmit and oxlint show no errors in the
+changed files. No endpoint or database behaviour was changed or tested here.
+================================================
+================================================
