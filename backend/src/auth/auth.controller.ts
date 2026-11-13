@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -20,6 +20,7 @@ import { RegisterDto } from './dto/register.dto';
 import { RegisterResponseDto } from './dto/register-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { ValidationErrorResponseDto } from './dto/validation-error-response.dto';
 
 @ApiTags('auth')
@@ -125,5 +126,27 @@ export class AuthController {
   })
   me(@Req() req: AuthenticatedRequest) {
     return this.authService.me(req.user!.sub);
+  }
+
+  @Patch('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth(ACCESS_COOKIE)
+  @ApiOperation({
+    summary: 'Change the password of the logged-in user (ACC-08)',
+    description:
+      'Checks the current password, saves the new one and sets mustChangePassword to false (ACC-13). Other sessions of this user are logged out; this one stays logged in.',
+  })
+  @ApiOkResponse({ description: 'Password changed', schema: { example: { message: 'Password changed' } } })
+  @ApiBadRequestResponse({
+    description: 'Validation failed, wrong current password, or the new password is the same as the current one',
+    type: ValidationErrorResponseDto,
+    example: { message: 'Validation failed', errors: { currentPassword: ['Current password is incorrect'] } },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Not logged in, or the session is no longer valid',
+    example: { message: 'Not authenticated', error: 'Unauthorized', statusCode: 401 },
+  })
+  changePassword(@Req() req: AuthenticatedRequest, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(req.user!.sub, req.user!.sid, dto);
   }
 }

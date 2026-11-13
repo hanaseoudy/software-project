@@ -1,0 +1,30 @@
+AI usage log - Nour Hossam (Accounts & Admin)
+
+================================================
+Date: 2026-11-13
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-08 (TASK-15), ACC-13
+
+Prompt (summary of the conversation):
+Help me implement ACC-08: a logged-in user changes their password by entering
+the current password and a new one that meets the password rules. Follow the
+API contract endpoint PATCH /api/auth/change-password. It should also clear
+mustChangePassword so moderators created by ACC-13 can finish first login.
+
+How the output was used:
+Used the generated ChangePasswordDto, AuthService.changePassword and the
+controller route after reviewing them against ACC-08. The endpoint requires
+login (JwtAuthGuard), checks the current password (400 if wrong), rejects a
+new password equal to the current one (400), applies the register password
+rules, saves the new bcrypt hash, sets mustChangePassword to false, and logs
+out the user's other sessions while keeping the current one. Errors use the
+same "Validation failed" format as register.
+
+Verification:
+Added 9 unit tests (service and DTO); all 13 auth tests pass. Lint and build
+passed locally. Tested in Postman with the ACC-13 moderator: wrong current
+password 400, same password 400, weak password 400, success 200, login with
+the new password shows mustChangePassword false, and 401 when logged out.
+Swagger shows the endpoint and its responses.
+================================================
