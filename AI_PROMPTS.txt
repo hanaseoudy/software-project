@@ -540,3 +540,23 @@ reviewer's feedback, the controller and the AuthModule import were removed, so
 the PR only contains the schema, enum and reusable NotificationsService.
 Postman screenshots are attached to the PR as verification only.
 ================================================
+================================================
+Date: 2026-11-13
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-19 (TASK-37) - passenger details and extra baggage
+Prompt (summary of the conversation):
+I asked how to implement FLT-19: the user enters each passenger's full name, date of birth and
+passport/ID number, optionally adds extra baggage per passenger up to the airline's maximum, and the
+baggage fee is added to the booking total. I wanted it independent of unmerged work.
+
+How the output was used:
+AI added only NEW files: PassengerDetailsDto (class-validator + Swagger), a pure helper
+utils/baggage-fees.ts (policy check, per-passenger fee, total, booking total) and utils/birth-date.ts
+(strict YYYY-MM-DD, real day, not in the future), plus jest specs. The helpers have no @nestjs imports
+because some existing suites on develop fail on an ES-module import error. Nothing is wired into the
+booking service/endpoint yet; that depends on FLT-22 (PR #39) and will follow after it is merged.
+I reviewed the code and the tests.
+Verification performed:
+npx jest src/flight-bookings: 2 suites, 13 tests passed. tsc reports no errors in flight-bookings files.
+================================================
