@@ -702,3 +702,21 @@ post cleanup, and transaction rollback after simulated database failures.
 Jest was run with Node's --experimental-vm-modules option.
 No production database records were used. No commit or push was performed.
 ================================================
+
+================================================
+Date: 2026-11-13
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-04
+Prompt:
+Asked to guide me step by step through FLT-04 (cabin categories and
+baggage allowance per flight): choosing between embedded subdocuments
+and a separate collection based on CabinSchema, DTO validation rules,
+duplicate cabin class checks, moderator ownership verification,
+AuthModule import troubleshooting, and Swagger error responses.
+How the output was used:
+Used the explanations and code examples to implement AddCabinDto,
+FlightsService.addCabin, and POST /api/flights/:id/cabins in
+FlightsController, and verified the endpoint in Postman. Reviewed and
+adjusted every snippet before committing.
+================================================
