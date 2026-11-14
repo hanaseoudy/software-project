@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -34,7 +35,7 @@ import { ValidationErrorResponseDto } from '../auth/dto/validation-error-respons
 import { BlogService } from './blog.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { PostResponseDto } from './dto/post-response.dto';
-import { UpdateTagsDto } from './dto/update-tags.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 import { LikeResponseDto } from './dto/like-response.dto';
 import { ErrorResponseDto } from './dto/error-response.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
@@ -157,10 +158,9 @@ export class BlogController {
   @UseGuards(JwtAuthGuard)
   @ApiCookieAuth()
   @ApiOperation({
-    summary: 'Edit my post\'s tags (BLG-08)',
+    summary: 'Edit my post (BLG-04, BLG-08)',
     description:
-      'The author replaces the tags of their own post: up to 5 tags, each 1 to 30 characters, ' +
-      'stored trimmed, lowercase and without duplicates. Other fields are edited under BLG-04.',
+      'The author can update title, content, status and tags. Omitted fields remain unchanged.',
   })
   @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
   @ApiOkResponse({ description: 'Post updated', type: PostResponseDto })
@@ -175,9 +175,23 @@ export class BlogController {
   update(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() dto: UpdateTagsDto,
+    @Body() dto: UpdatePostDto,
   ): Promise<PostResponseDto> {
     return this.blogService.update(this.requireUserId(req), id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Delete my post and its comments and likes (BLG-04)' })
+  @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)' })
+  @ApiResponse({ status: 204, description: 'Post deleted' })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({ description: 'The post belongs to another user' })
+  @ApiNotFoundResponse({ description: 'Invalid post id or post not found' })
+  async remove(@Req() req: AuthenticatedRequest, @Param('id') id: string): Promise<void> {
+    await this.blogService.deletePost(this.requireUserId(req), id);
   }
 
   @Post(':id/like')
