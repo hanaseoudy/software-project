@@ -13,18 +13,17 @@ import {
   ItineraryDocument,
   ItineraryVisibility,
 } from './schemas/itinerary.schema';
-
 import {
   Country,
   CountryDocument,
 } from '../reference-data/schemas/country.schema';
-
 import { ItineraryDay, ItineraryDayDocument } from './schemas/itinerary-day.schema';
 import { Activity, ActivityDocument } from './schemas/activity.schema';
 import { BudgetEntry, BudgetEntryDocument } from './schemas/budget-entry.schema';
 import { TransportCost, TransportCostDocument } from './schemas/transport-cost.schema';
 import { CreateItineraryDto } from './dto/create-itinerary.dto';
 import { UpdateItineraryDto } from './dto/update-itinerary.dto';
+import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
 
 import { City, CityDocument } from '../reference-data/schemas/city.schema';
 import { CreateItineraryDayDto } from './dto/create-itinerary-day.dto';
@@ -34,10 +33,8 @@ export class ItinerariesService {
   constructor(
     @InjectModel(Itinerary.name)
     private readonly itineraryModel: Model<ItineraryDocument>,
-
     @InjectModel(Country.name)
     private readonly countryModel: Model<CountryDocument>,
-
     @InjectModel(ItineraryDay.name)
     private readonly itineraryDayModel: Model<ItineraryDayDocument>,
     @InjectModel(Activity.name)
@@ -74,30 +71,77 @@ private readonly cityModel: Model<CityDocument>,
     }
   }
 
-  // ITN-03: List itineraries belonging to the logged-in user
-  async findAll(userId: string) {
-    return this.itineraryModel
-      .find({ userId: new Types.ObjectId(userId) })
-      .sort({ updatedAt: -1, _id: -1 })
-      .lean();
+  // ITN-03: Paginated list, including the number of days in each itinerary.
+  async findAll(userId: string, page = 1) {
+    const filter = { userId: new Types.ObjectId(userId) };
+    const [total, itineraries] = await Promise.all([
+      this.itineraryModel.countDocuments(filter),
+      this.itineraryModel.find(filter)
+        .sort({ updatedAt: -1, _id: -1 })
+        .skip(skipFor(page))
+        .limit(PAGE_SIZE)
+        .lean(),
+    ]);
+
+    const ids = itineraries.map(itinerary => itinerary._id);
+    const counts = ids.length
+      ? await this.itineraryDayModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+          { $match: { itineraryId: { $in: ids } } },
+          { $group: { _id: '$itineraryId', count: { $sum: 1 } } },
+        ])
+      : [];
+    const countsById = new Map(counts.map(item => [item._id.toString(), item.count]));
+
+    const items = itineraries.map(itinerary => ({
+      id: itinerary._id.toString(),
+      title: itinerary.title,
+      countryIds: itinerary.countryIds,
+      startDate: itinerary.startDate.toISOString().slice(0, 10),
+      visibility: itinerary.visibility,
+      dayCount: countsById.get(itinerary._id.toString()) ?? 0,
+    }));
+
+    return paginate(items, total, page);
   }
 
-  // ITN-03: View details of an itinerary owned by the user
+  // ITN-03: Details include days ordered by dayNumber, with derived dates.
   async findOne(userId: string, itineraryId: string) {
     this.validateObjectId(itineraryId);
-
-    const itinerary = await this.itineraryModel
-      .findOne({
-        _id: new Types.ObjectId(itineraryId),
-        userId: new Types.ObjectId(userId),
-      })
-      .lean();
+    const itinerary = await this.itineraryModel.findOne({
+      _id: new Types.ObjectId(itineraryId),
+      userId: new Types.ObjectId(userId),
+    }).lean();
 
     if (!itinerary) {
       throw new NotFoundException('Itinerary not found');
     }
 
-    return itinerary;
+    const days = await this.itineraryDayModel
+      .find({ itineraryId: itinerary._id })
+      .sort({ dayNumber: 1 })
+      .lean();
+
+    const formattedDays = days.map(day => {
+      const date = new Date(itinerary.startDate);
+      date.setUTCDate(date.getUTCDate() + day.dayNumber - 1);
+      return {
+        id: day._id.toString(),
+        dayNumber: day.dayNumber,
+        cityId: day.cityId,
+        notes: day.notes ?? '',
+        date: date.toISOString().slice(0, 10),
+      };
+    });
+
+    return {
+      id: itinerary._id.toString(),
+      title: itinerary.title,
+      countryIds: itinerary.countryIds,
+      startDate: itinerary.startDate.toISOString().slice(0, 10),
+      visibility: itinerary.visibility,
+      dayCount: formattedDays.length,
+      days: formattedDays,
+    };
   }
 
   private async getOwnedItinerary(
@@ -139,8 +183,6 @@ private readonly cityModel: Model<CityDocument>,
     date.setUTCDate(date.getUTCDate() + dayNumber - 1);
     return date.toISOString().slice(0, 10);
   }
-
-  // ITN-05: Add a new itinerary day
 
   // ITN-05: Add a new itinerary day
   async addDay(
@@ -271,6 +313,7 @@ private readonly cityModel: Model<CityDocument>,
   }
 
 
+  // ITN-01: Keep existing create, update and delete behavior unchanged.
   async create(userId: string, dto: CreateItineraryDto) {
     await this.validateCountries(dto.countryIds);
 
@@ -283,38 +326,25 @@ private readonly cityModel: Model<CityDocument>,
     });
   }
 
-  async update(
-    userId: string,
-    itineraryId: string,
-    dto: UpdateItineraryDto,
-  ) {
+  async update(userId: string, itineraryId: string, dto: UpdateItineraryDto) {
     this.validateObjectId(itineraryId);
-
     const itinerary = await this.itineraryModel.findById(itineraryId);
-
     if (!itinerary) {
       throw new NotFoundException('Itinerary not found');
     }
-
     if (itinerary.userId.toString() !== userId) {
-      throw new ForbiddenException(
-        'You cannot edit another user\'s itinerary',
-      );
+      throw new ForbiddenException('You cannot edit another user\'s itinerary');
     }
-
     if (dto.countryIds !== undefined) {
       await this.validateCountries(dto.countryIds);
       itinerary.countryIds = dto.countryIds;
     }
-
     if (dto.title !== undefined) {
       itinerary.title = dto.title;
     }
-
     if (dto.startDate !== undefined) {
       itinerary.startDate = new Date(`${dto.startDate}T00:00:00.000Z`);
     }
-
     return itinerary.save();
   }
 
