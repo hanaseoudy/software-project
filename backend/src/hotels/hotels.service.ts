@@ -16,6 +16,7 @@ import {
 } from '../users/schemas/moderatorassignment.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { CreateRoomAvailabilityDto } from './dto/create-room-availability.dto';
+import { CreateRoomBlockDto } from './dto/create-room-block.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
 import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dto';
@@ -32,6 +33,10 @@ import {
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { UploadsService } from '../uploads/uploads.service';
 import { ImageCategory } from '../uploads/uploads.constants';
+import {
+  HotelBooking,
+  HotelBookingStatus,
+} from '../hotel-bookings/schemas/hotel-booking.schema';
 import { Hotel, HotelDocument } from './schemas/hotel.schema';
 import { Room, RoomDocument } from './schemas/room.schema';
 import {
@@ -40,6 +45,12 @@ import {
   RoomAvailabilityDocument,
 } from './schemas/room-availability.schema';
 
+/** HTL-06: reservations that stop a room from being blocked, deactivated or deleted. */
+const ACTIVE_RESERVATION_STATUSES = [
+  HotelBookingStatus.CONFIRMED,
+  HotelBookingStatus.PENDING_PAYMENT,
+];
+
 @Injectable()
 export class HotelsService {
   constructor(
@@ -47,6 +58,8 @@ export class HotelsService {
     @InjectModel(Room.name) private readonly roomModel: Model<Room>,
     @InjectModel(RoomAvailability.name)
     private readonly availabilityModel: Model<RoomAvailability>,
+    @InjectModel(HotelBooking.name)
+    private readonly bookingModel: Model<HotelBooking>,
     @InjectModel(City.name) private readonly cityModel: Model<City>,
     @InjectModel(Country.name) private readonly countryModel: Model<Country>,
     @InjectModel(ModeratorAssignment.name)
@@ -351,6 +364,137 @@ await this.assertImagesAreUploads(dto.images);
       endDate: end,
     });
     return this.toAvailabilityResponse(range);
+  }
+
+  /** HTL-06: the assigned moderator blocks a date range so the room cannot be booked. */
+  async blockRoomDates(
+    hotelId: string,
+    roomId: string,
+    dto: CreateRoomBlockDto,
+    user: AuthPayload,
+  ): Promise<RoomAvailabilityResponseDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+    const room = await this.findRoomOrFail(hotel, roomId);
+
+    const start = this.parseDay(dto.startDate);
+    const end = this.parseDay(dto.endDate);
+    const errors: Record<string, string[]> = {};
+    if (!start) {
+      errors.startDate = [
+        'Start date must be a real date in YYYY-MM-DD format',
+      ];
+    }
+    if (!end) {
+      errors.endDate = ['End date must be a real date in YYYY-MM-DD format'];
+    }
+    if (start && end && end < start) {
+      errors.endDate = ['End date must be on or after the start date'];
+    }
+    if (!start || !end || Object.keys(errors).length > 0) {
+      throw new BadRequestException({ message: 'Validation failed', errors });
+    }
+
+    // A stay uses the nights from check-in up to (not including) check-out,
+    // so it overlaps the blocked days when it starts on or before the last day and ends after the first.
+    const reserved = await this.bookingModel
+      .exists({
+        'rooms.room': room._id,
+        status: { $in: ACTIVE_RESERVATION_STATUSES },
+        checkIn: { $lte: end },
+        checkOut: { $gt: start },
+      })
+      .exec();
+    if (reserved) {
+      throw new ConflictException(
+        'These dates overlap a Confirmed or Pending Payment reservation for this room',
+      );
+    }
+
+    const overlappingBlock = await this.availabilityModel
+      .findOne({
+        room: room._id,
+        type: AvailabilityType.BLOCKED,
+        startDate: { $lte: end },
+        endDate: { $gte: start },
+      })
+      .exec();
+    if (overlappingBlock) {
+      throw new ConflictException(
+        `These dates overlap an existing blocked range (${this.formatDay(overlappingBlock.startDate)} to ${this.formatDay(overlappingBlock.endDate)})`,
+      );
+    }
+
+    const block = await this.availabilityModel.create({
+      room: room._id,
+      hotel: hotel._id,
+      type: AvailabilityType.BLOCKED,
+      startDate: start,
+      endDate: end,
+      reason: dto.reason ?? '',
+    });
+    return this.toAvailabilityResponse(block);
+  }
+
+  /** HTL-06: the assigned moderator deactivates a room; search skips inactive rooms. */
+  async deactivateRoom(
+    hotelId: string,
+    roomId: string,
+    user: AuthPayload,
+  ): Promise<RoomResponseDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+    const room = await this.findRoomOrFail(hotel, roomId);
+
+    if (!room.isActive) {
+      return this.toRoomResponse(room);
+    }
+
+    // No dates are given, so any reservation that has not ended yet counts.
+    const now = new Date();
+    const today = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const reserved = await this.bookingModel
+      .exists({
+        'rooms.room': room._id,
+        status: { $in: ACTIVE_RESERVATION_STATUSES },
+        checkOut: { $gt: today },
+      })
+      .exec();
+    if (reserved) {
+      throw new ConflictException(
+        'This room has a Confirmed or Pending Payment reservation that has not ended yet',
+      );
+    }
+
+    room.isActive = false;
+    await room.save();
+    return this.toRoomResponse(room);
+  }
+
+  /** HTL-06: the assigned moderator deletes a room that has never been reserved. */
+  async deleteRoom(
+    hotelId: string,
+    roomId: string,
+    user: AuthPayload,
+  ): Promise<void> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+    const room = await this.findRoomOrFail(hotel, roomId);
+
+    // Any booking record counts (whatever its status), so history is never left pointing at a missing room.
+    const everReserved = await this.bookingModel
+      .exists({ 'rooms.room': room._id })
+      .exec();
+    if (everReserved) {
+      throw new ConflictException(
+        'This room has been reserved before and cannot be deleted; deactivate it instead',
+      );
+    }
+
+    await this.availabilityModel.deleteMany({ room: room._id }).exec();
+    await this.roomModel.deleteOne({ _id: room._id }).exec();
   }
 
   private async findRoomOrFail(
