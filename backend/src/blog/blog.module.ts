@@ -7,6 +7,7 @@ import { Post, PostSchema } from './schemas/post.schema';
 import { Comment, CommentSchema } from './schemas/comment.schema';
 import { Like, LikeSchema } from './schemas/like.schema';
 import { AuthModule } from '../auth/auth.module';
+import { UploadsModule } from '../uploads/uploads.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AuthModule } from '../auth/auth.module';
       
     ]),
     AuthModule,
+    UploadsModule, // BLG-10: shared GEN-08 image storage
   ],
   controllers: [BlogController, TagsController],
   providers: [BlogService],

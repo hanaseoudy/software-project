@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 import { MAX_TAG_LENGTH, MAX_TAGS } from '../tag-rules';
+import { ImageCategory, MAX_IMAGES } from '../../uploads/uploads.constants';
 
 export type PostDocument = HydratedDocument<Post>;
 
@@ -46,7 +47,15 @@ export class Post {
   })
   tags: string[];
 
-  @Prop({ type: [{ url: { type: String, required: true } }], default: [] })
+  // BLG-10 / GEN-08: database-level image limit, so it holds even if the service check is bypassed
+  @Prop({
+    type: [{ url: { type: String, required: true } }],
+    default: [],
+    validate: {
+      validator: (images: unknown[]) => images.length <= MAX_IMAGES[ImageCategory.POST],
+      message: `A post can have at most ${MAX_IMAGES[ImageCategory.POST]} images`,
+    },
+  })
   images: { _id?: Types.ObjectId; url: string }[];
 
   @Prop({ default: false })
