@@ -1,6 +1,12 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, isValidObjectId } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { AccountStatus, User, UserDocument, UserRole } from '../users/schemas/user.schema';
 import {
@@ -10,7 +16,9 @@ import {
 } from '../users/schemas/moderatorassignment.schema';
 import { Hotel } from '../hotels/schemas/hotel.schema';
 import { Airline } from '../airlines/schemas/airline.schema';
+import { Session, SessionDocument } from '../auth/schemas/session.schema';
 import { CreateModeratorDto } from './dto/create-moderator.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AdminService {
@@ -19,6 +27,7 @@ export class AdminService {
     @InjectModel(ModeratorAssignment.name) private assignmentModel: Model<ModeratorAssignmentDocument>,
     @InjectModel(Hotel.name) private hotelModel: Model<Hotel>,
     @InjectModel(Airline.name) private airlineModel: Model<Airline>,
+    @InjectModel(Session.name) private sessionModel: Model<SessionDocument>,
   ) {}
 
   async createModerator(dto: CreateModeratorDto) {
@@ -66,6 +75,42 @@ export class AdminService {
       providerType: dto.providerType,
       providerId: dto.providerId,
       mustChangePassword: user.mustChangePassword,
+    };
+  }
+
+  /** ACC-07a: set a temporary password; the account must change it at its next login (ACC-08). */
+  async resetPassword(userId: string, dto: ResetPasswordDto) {
+    if (!isValidObjectId(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (user.role === UserRole.ADMIN) {
+      throw new ForbiddenException("An admin's password cannot be reset here");
+    }
+
+    await this.userModel.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          passwordHash: await bcrypt.hash(dto.temporaryPassword, 10),
+          mustChangePassword: true,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+      },
+    );
+
+    await this.sessionModel.updateMany({ user: user._id, revokedAt: null }, { $set: { revokedAt: new Date() } });
+
+    return {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+      mustChangePassword: true,
     };
   }
 
