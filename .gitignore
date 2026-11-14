@@ -81,3 +81,9 @@ pids/
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # uploaded images (GEN-08)
 backend/uploads/
+
+# ============================
+# Postman
+# ============================
+postman/*
+.postman

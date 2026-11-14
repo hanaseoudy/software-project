@@ -15,8 +15,11 @@ import {
   ProviderType,
 } from '../users/schemas/moderatorassignment.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
+import { CreateRoomAvailabilityDto } from './dto/create-room-availability.dto';
+import { CreateRoomBlockDto } from './dto/create-room-block.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
+import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dto';
 import { RoomResponseDto } from './dto/room-response.dto';
 import {
   CancellationTiersResponseDto,
@@ -30,14 +33,33 @@ import {
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { UploadsService } from '../uploads/uploads.service';
 import { ImageCategory } from '../uploads/uploads.constants';
+import {
+  HotelBooking,
+  HotelBookingStatus,
+} from '../hotel-bookings/schemas/hotel-booking.schema';
 import { Hotel, HotelDocument } from './schemas/hotel.schema';
 import { Room, RoomDocument } from './schemas/room.schema';
+import {
+  AvailabilityType,
+  RoomAvailability,
+  RoomAvailabilityDocument,
+} from './schemas/room-availability.schema';
+
+/** HTL-06: Confirmed and Pending Payment reservations stop a room from being blocked or deactivated. */
+const ACTIVE_RESERVATION_STATUSES = [
+  HotelBookingStatus.CONFIRMED,
+  HotelBookingStatus.PENDING_PAYMENT,
+];
 
 @Injectable()
 export class HotelsService {
   constructor(
     @InjectModel(Hotel.name) private readonly hotelModel: Model<Hotel>,
     @InjectModel(Room.name) private readonly roomModel: Model<Room>,
+    @InjectModel(RoomAvailability.name)
+    private readonly availabilityModel: Model<RoomAvailability>,
+    @InjectModel(HotelBooking.name)
+    private readonly bookingModel: Model<HotelBooking>,
     @InjectModel(City.name) private readonly cityModel: Model<City>,
     @InjectModel(Country.name) private readonly countryModel: Model<Country>,
     @InjectModel(ModeratorAssignment.name)
@@ -290,6 +312,221 @@ await this.assertImagesAreUploads(dto.images);
     }
   }
 
+  /** HTL-04: the assigned moderator defines a date range when a room can be booked. */
+  async addRoomBookableRange(
+    hotelId: string,
+    roomId: string,
+    dto: CreateRoomAvailabilityDto,
+    user: AuthPayload,
+  ): Promise<RoomAvailabilityResponseDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+    const room = await this.findRoomOrFail(hotel, roomId);
+
+    const start = this.parseDay(dto.startDate);
+    const end = this.parseDay(dto.endDate);
+    const errors: Record<string, string[]> = {};
+    if (!start) {
+      errors.startDate = [
+        'Start date must be a real date in YYYY-MM-DD format',
+      ];
+    }
+    if (!end) {
+      errors.endDate = ['End date must be a real date in YYYY-MM-DD format'];
+    }
+    if (start && end && end < start) {
+      errors.endDate = ['End date must be on or after the start date'];
+    }
+    if (!start || !end || Object.keys(errors).length > 0) {
+      throw new BadRequestException({ message: 'Validation failed', errors });
+    }
+
+    // Both days are included, so two ranges overlap when each starts on or before the other ends.
+    const overlapping = await this.availabilityModel
+      .findOne({
+        room: room._id,
+        type: AvailabilityType.AVAILABLE,
+        startDate: { $lte: end },
+        endDate: { $gte: start },
+      })
+      .exec();
+    if (overlapping) {
+      throw new ConflictException(
+        `These dates overlap an existing bookable range (${this.formatDay(overlapping.startDate)} to ${this.formatDay(overlapping.endDate)})`,
+      );
+    }
+
+    const range = await this.availabilityModel.create({
+      room: room._id,
+      hotel: hotel._id,
+      type: AvailabilityType.AVAILABLE,
+      startDate: start,
+      endDate: end,
+    });
+    return this.toAvailabilityResponse(range);
+  }
+
+  /** HTL-06: the assigned moderator blocks a date range so the room cannot be booked. */
+  async blockRoomDates(
+    hotelId: string,
+    roomId: string,
+    dto: CreateRoomBlockDto,
+    user: AuthPayload,
+  ): Promise<RoomAvailabilityResponseDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+    const room = await this.findRoomOrFail(hotel, roomId);
+
+    const start = this.parseDay(dto.startDate);
+    const end = this.parseDay(dto.endDate);
+    const errors: Record<string, string[]> = {};
+    if (!start) {
+      errors.startDate = [
+        'Start date must be a real date in YYYY-MM-DD format',
+      ];
+    }
+    if (!end) {
+      errors.endDate = ['End date must be a real date in YYYY-MM-DD format'];
+    }
+    if (start && end && end < start) {
+      errors.endDate = ['End date must be on or after the start date'];
+    }
+    if (!start || !end || Object.keys(errors).length > 0) {
+      throw new BadRequestException({ message: 'Validation failed', errors });
+    }
+
+    // A stay uses the nights from check-in up to (not including) check-out,
+    // so it overlaps the blocked days when it starts on or before the last day and ends after the first.
+    const reserved = await this.bookingModel
+      .exists({
+        'rooms.room': room._id,
+        status: { $in: ACTIVE_RESERVATION_STATUSES },
+        checkIn: { $lte: end },
+        checkOut: { $gt: start },
+      })
+      .exec();
+    if (reserved) {
+      throw new ConflictException(
+        'These dates overlap a Confirmed or Pending Payment reservation for this room',
+      );
+    }
+
+    const block = await this.availabilityModel.create({
+      room: room._id,
+      hotel: hotel._id,
+      type: AvailabilityType.BLOCKED,
+      startDate: start,
+      endDate: end,
+      reason: dto.reason ?? '',
+    });
+    return this.toAvailabilityResponse(block);
+  }
+
+  /** HTL-06: the assigned moderator deactivates a room; search skips inactive rooms. */
+  async deactivateRoom(
+    hotelId: string,
+    roomId: string,
+    user: AuthPayload,
+  ): Promise<RoomResponseDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+    const room = await this.findRoomOrFail(hotel, roomId);
+
+    if (!room.isActive) {
+      return this.toRoomResponse(room);
+    }
+
+    // No dates are given, so any reservation that has not ended yet counts.
+    const now = new Date();
+    const today = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const reserved = await this.bookingModel
+      .exists({
+        'rooms.room': room._id,
+        status: { $in: ACTIVE_RESERVATION_STATUSES },
+        checkOut: { $gt: today },
+      })
+      .exec();
+    if (reserved) {
+      throw new ConflictException(
+        'This room has a Confirmed or Pending Payment reservation that has not ended yet',
+      );
+    }
+
+    room.isActive = false;
+    await room.save();
+    return this.toRoomResponse(room);
+  }
+
+  /** HTL-06: the assigned moderator deletes a room that has never been reserved. */
+  async deleteRoom(
+    hotelId: string,
+    roomId: string,
+    user: AuthPayload,
+  ): Promise<void> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+    const room = await this.findRoomOrFail(hotel, roomId);
+
+    // Any booking record counts (whatever its status), so history is never left pointing at a missing room.
+    const everReserved = await this.bookingModel
+      .exists({ 'rooms.room': room._id })
+      .exec();
+    if (everReserved) {
+      throw new ConflictException(
+        'This room has been reserved before and cannot be deleted; deactivate it instead',
+      );
+    }
+
+    await this.availabilityModel.deleteMany({ room: room._id }).exec();
+    await this.roomModel.deleteOne({ _id: room._id }).exec();
+  }
+
+  private async findRoomOrFail(
+    hotel: HotelDocument,
+    roomId: string,
+  ): Promise<RoomDocument> {
+    if (!isValidObjectId(roomId)) {
+      throw new NotFoundException('Room not found');
+    }
+    const room = await this.roomModel
+      .findOne({ _id: roomId, hotel: hotel._id })
+      .exec();
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+    return room;
+  }
+
+  /** Reads YYYY-MM-DD as midnight UTC; returns null for anything that is not a real calendar day. */
+  private parseDay(value: string): Date | null {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return null;
+    }
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return Number.isNaN(date.getTime()) || this.formatDay(date) !== value
+      ? null
+      : date;
+  }
+
+  private formatDay(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private toAvailabilityResponse(
+    range: RoomAvailabilityDocument,
+  ): RoomAvailabilityResponseDto {
+    return {
+      id: range._id.toString(),
+      roomId: range.room.toString(),
+      hotelId: range.hotel.toString(),
+      type: range.type,
+      startDate: this.formatDay(range.startDate),
+      endDate: this.formatDay(range.endDate),
+    };
+  }
+
   private toRoomResponse(room: RoomDocument): RoomResponseDto {
     return {
       id: room._id.toString(),
@@ -299,6 +536,7 @@ await this.assertImagesAreUploads(dto.images);
       beds: room.beds,
       maxOccupancy: room.maxOccupancy,
       pricePerNight: room.pricePerNight,
+      currency: room.currency,
       isActive: room.isActive,
     };
   }
