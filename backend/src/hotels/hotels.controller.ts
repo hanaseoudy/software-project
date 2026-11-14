@@ -1,6 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -14,6 +17,7 @@ import {
   ApiCookieAuth,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -30,6 +34,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { CreateRoomAvailabilityDto } from './dto/create-room-availability.dto';
+import { CreateRoomBlockDto } from './dto/create-room-block.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
 import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dto';
@@ -237,6 +242,92 @@ export class HotelsController {
   ): Promise<RoomAvailabilityResponseDto> {
     // RolesGuard guarantees req.user is set on this route.
     return this.hotelsService.addRoomBookableRange(id, roomId, dto, req.user!);
+  }
+
+  @Post(':id/rooms/:roomId/blocks')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Block a date range for a room (HTL-06)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Both days are included. Rejected if the dates overlap a Confirmed or Pending Payment reservation.',
+  })
+  @ApiCreatedResponse({
+    description: 'Blocked range created',
+    type: RoomAvailabilityResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: { endDate: ['End date must be on or after the start date'] },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel or room not found' })
+  @ApiConflictResponse({
+    description: 'The dates overlap a Confirmed or Pending Payment reservation',
+  })
+  blockRoomDates(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Body() dto: CreateRoomBlockDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomAvailabilityResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.blockRoomDates(id, roomId, dto, req.user!);
+  }
+
+  @Patch(':id/rooms/:roomId/deactivate')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Deactivate a room (HTL-06)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Deactivated rooms are excluded from search. Rejected while the room has a Confirmed or Pending Payment reservation that has not ended yet.',
+  })
+  @ApiOkResponse({ description: 'Room deactivated', type: RoomResponseDto })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel or room not found' })
+  @ApiConflictResponse({
+    description:
+      'The room has a Confirmed or Pending Payment reservation that has not ended yet',
+  })
+  deactivateRoom(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.deactivateRoom(id, roomId, req.user!);
+  }
+
+  @Delete(':id/rooms/:roomId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Delete a room (HTL-06)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Allowed only for rooms that have never been reserved; otherwise deactivate the room instead.',
+  })
+  @ApiNoContentResponse({ description: 'Room deleted' })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel or room not found' })
+  @ApiConflictResponse({ description: 'The room has been reserved before' })
+  deleteRoom(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<void> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.deleteRoom(id, roomId, req.user!);
   }
 
   @Put(':id/policies')

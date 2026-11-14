@@ -29,7 +29,6 @@ the new password shows mustChangePassword false, and 401 when logged out.
 Swagger shows the endpoint and its responses.
 ================================================
 
-================================================
 Date: 2026-11-13
 Student: Nour Hossam
 Tool: Claude
@@ -57,7 +56,6 @@ Verification:
 Tested in Postman: GET profile 200, full update 200, invalid phone and
 currency 400 with nothing saved (checked with GET), email/role only 400,
 and 401 when logged out. Swagger shows both endpoints.
-================================================
 
 ================================================
 Date: 2026-11-14
@@ -86,4 +84,21 @@ passed locally. Tested in Postman: reset 200, old password 401, login with
 the temporary password shows mustChangePassword true, moderator caller 403,
 admin target 403, unknown user 404, weak password 400. Swagger shows the
 endpoint and its responses.
+Related Requirement: ACC-08 (TASK-15) review fixes, ACC-13, ACC-07a
+
+Prompt (summary of the conversation):
+The team leader asked in the PR review to enforce mustChangePassword on the
+backend with an @AllowPendingPasswordChange() decorator, return 403 on normal
+protected routes until the password is changed, allow /auth/me and
+/auth/change-password, and give @IsString and @IsNotEmpty different messages.
+
+How the output was used:
+Added the decorator (SetMetadata), made JwtAuthGuard read mustChangePassword
+and the decorator through Reflector, marked the two auth routes, and split the
+validation messages. Updated the guard unit tests for the new constructor.
+
+Verification:
+27 auth and guard tests pass; lint and build pass. Postman: moderator with a
+temporary password gets 403 on GET /posts/mine, can change the password, and
+then gets 200.
 ================================================
