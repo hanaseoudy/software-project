@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Airline, AirlineSchema } from './schemas/airline.schema';
+import { Airline, AirlineSchema } from '../airlines/schemas/airline.schema';
 import { Airport, AirportSchema } from '../airports/schemas/airport.schema';
 import { Flight, FlightSchema } from './schemas/flight.schema';
 import {

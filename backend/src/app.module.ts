@@ -8,13 +8,15 @@ import { BlogModule } from './blog/blog.module';
 import { HotelBookingsModule } from './hotel-bookings/hotel-bookings.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { UsersModule } from './users/users.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { ItinerariesModule } from './itineraries/itineraries.module';
 import { AirlinesModule } from './airlines/airlines.module';
-import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
-import { RolesGuard } from './common/guards/roles.guard';
 import { FlightsModule } from './flights/flights.module';
+import { AdminModule } from './admin/admin.module';
+import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 
 @Module({
   imports: [
@@ -30,7 +32,7 @@ import { FlightsModule } from './flights/flights.module';
         if (!uri) {
           throw new Error('MongoDB URI is missing check env file');
         }
-        console.log('uri loaded...');
+        warnIfDatabaseMissing(uri, (message) => console.warn(message));
 
         return {
           uri,
@@ -48,10 +50,13 @@ import { FlightsModule } from './flights/flights.module';
     HotelBookingsModule,
     HotelsModule,
     UsersModule,
+    NotificationsModule,
     AuthModule,
     UploadsModule,
     AirlinesModule,
     FlightsModule,
+    AdminModule,
+    ItinerariesModule,
   ],
 
   controllers: [AppController],

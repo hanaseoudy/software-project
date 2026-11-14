@@ -3,9 +3,10 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, isValidObjectId } from 'mongoose';
 import { AuthPayload } from '../common/guards/jwt-auth.guard';
 import { Airline, AirlineDocument } from './schemas/airline.schema';
 import {
@@ -27,6 +28,12 @@ export class AirlinesService {
     private readonly uploads: UploadsService,
   ) {}
 
+  private validateObjectId(id: string) {
+    if (!isValidObjectId(id)) {
+      throw new BadRequestException(`Invalid airline ID: ${id}`);
+    }
+  }
+
   async create(dto: CreateAirlineDto) {
     try {
       return await this.airlineModel.create(dto);
@@ -42,12 +49,14 @@ export class AirlinesService {
   }
 
   async findOne(id: string) {
+    this.validateObjectId(id);
     const airline = await this.airlineModel.findById(id);
     if (!airline) throw new NotFoundException('Airline not found');
     return airline;
   }
 
   private async assertOwnsAirline(airlineId: string, userId: string) {
+    this.validateObjectId(airlineId);
     const assignment = await this.assignmentModel.findOne({
       moderatorId: userId,
       providerType: ProviderType.AIRLINE,

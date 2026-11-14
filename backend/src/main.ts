@@ -1,9 +1,9 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
-import { ACCESS_COOKIE } from './auth/auth.cookies';
+import { createSwaggerConfig } from './common/swagger.config';
 import { validationExceptionFactory } from './common/validation/validation-exception.factory';
 
 async function bootstrap() {
@@ -18,11 +18,7 @@ async function bootstrap() {
     }),
   );
 
-  const config = new DocumentBuilder()
-    .setTitle('Travel Booking API')
-    .setVersion('1.0')
-    .addCookieAuth(ACCESS_COOKIE)
-    .build();
+  const config = createSwaggerConfig();
   SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, config));
 
   await app.listen(process.env.PORT ?? 3000);
