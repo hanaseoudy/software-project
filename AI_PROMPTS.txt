@@ -221,6 +221,67 @@ build, unit tests and E2E tests passed locally.
 
 ================================================
 
+
+================================================
+Date: 2026-11-08
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: HTL-18 (TASK-58)
+
+Prompt (summary of the conversation):
+Help me implement HTL-18: hold all selected rooms together for 10 minutes as
+one PENDING_PAYMENT reservation, reject the whole request if any room overlaps
+a confirmed reservation, an unexpired hold or a blocked range, release unpaid
+holds when they expire, and validate that check-out is after check-in and
+check-in is not in the past.
+
+How the output was used:
+Used the generated HoldHotelBookingDto, RoomLock schema, HotelBookingsService
+and HotelBookingsController after reviewing them against HTL-18 and HTL-16.
+The service runs the overlap checks and the booking insert inside one MongoDB
+transaction, and updates a per-room lock document inside it so two concurrent
+holds on the same room cannot both succeed. An expired hold is ignored by the
+overlap check (holdExpiresAt <= now). The per-room adults rule was changed to
+"at least one adult in the whole reservation" to match HTL-16. Swagger
+documents the 201, 400, 404 and 409 responses.
+
+Verification:
+TypeScript type-check (tsc --noEmit) passed. Tested POST /api/hotel-bookings
+locally against MongoDB Atlas with a test hotel and 2 rooms: in Swagger 201
+(PENDING_PAYMENT, totalPrice 600), 409 on the same dates again, and 400 when
+check-out is before check-in; in Postman 201 and 409. A temporary fixed user id
+was used for local testing only and was not committed. (The auth guard and the
+expiry cron job were added afterwards, see the next entry.)
+================================================
+Date: 2026-11-13
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: HTL-18 (TASK-58) - review fixes on PR #42
+
+Prompt (summary of the conversation):
+The team leader reviewed PR #42 and asked for 4 fixes: (1) every request
+returned 401, so add JwtAuthGuard, import AuthModule and use req.user.sub;
+(2) make sure every night of the stay is inside an available range; (3) reject
+invalid dates such as 2027-02-30 and timestamps with time zones, accepting only
+real YYYY-MM-DD dates; (4) implement hold expiry so expired holds become EXPIRED.
+
+How the output was used:
+Merged develop into the branch. Controller now uses @UseGuards(JwtAuthGuard)
+and req.user.sub; HotelBookingsModule imports AuthModule. Added a pure helper
+isStayFullyAvailable (assumes the end date of an available range is inclusive)
+used inside the transaction together with the existing blocked check. Added a
+pure parseCalendarDate helper and an @IsCalendarDate DTO decorator (the service
+re-checks the dates). Added HotelHoldExpiryService (@Cron every minute marks
+PENDING_PAYMENT holds with holdExpiresAt <= now as EXPIRED), ScheduleModule in
+AppModule and the @nestjs/schedule dependency.
+
+Verification:
+Unit tests for the two helpers pass (11 tests, jest). tsc --noEmit and oxlint
+show no errors in the changed files (tsc still reports errors in the existing
+hotels.service.spec.ts, not part of this PR). Not yet tested against MongoDB
+Atlas: the guarded endpoint, the availability check and the cron job must be
+tested locally after a real login.
+================================================
 ================================================
 
 
@@ -566,7 +627,6 @@ reviewer's feedback, the controller and the AuthModule import were removed, so
 the PR only contains the schema, enum and reusable NotificationsService.
 Postman screenshots are attached to the PR as verification only.
 ================================================
-================================================
 Date: 2026-11-13
 Student: Nour Hossam
 Tool: Claude
@@ -650,8 +710,6 @@ The actual compiled backend entry point started and served /api and Swagger with
 four airline operations. Flight endpoints do not exist in this checkout; no flight
 controller or AppModule registration was added. No production data was changed.
 ================================================
-
-================================================
 Date: 2026-11-13
 Student: Hana Seoudy
 Tool: OpenAI Codex
@@ -674,7 +732,6 @@ the same 58 existing hotel/blog tests failed. All 11 E2E tests passed against a
 disposable local MongoDB. No production database records were modified.
 ================================================
 
-================================================
 Date: 2026-11-14
 Student: Hana Seoudy
 Tool: OpenAI Codex
