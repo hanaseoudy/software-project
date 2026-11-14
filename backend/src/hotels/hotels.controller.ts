@@ -249,7 +249,7 @@ export class HotelsController {
   @ApiOperation({
     summary: 'Block a date range for a room (HTL-06)',
     description:
-      'Hotel moderator only, and only for the hotel they are assigned to. Both days are included. Rejected if the dates overlap a Confirmed or Pending Payment reservation, or another blocked range of the same room.',
+      'Hotel moderator only, and only for the hotel they are assigned to. Both days are included. Rejected if the dates overlap a Confirmed or Pending Payment reservation.',
   })
   @ApiCreatedResponse({
     description: 'Blocked range created',
@@ -268,8 +268,7 @@ export class HotelsController {
   })
   @ApiNotFoundResponse({ description: 'Hotel or room not found' })
   @ApiConflictResponse({
-    description:
-      'The dates overlap a Confirmed or Pending Payment reservation, or an existing blocked range',
+    description: 'The dates overlap a Confirmed or Pending Payment reservation',
   })
   blockRoomDates(
     @Param('id') id: string,

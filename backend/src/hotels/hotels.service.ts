@@ -45,11 +45,20 @@ import {
   RoomAvailabilityDocument,
 } from './schemas/room-availability.schema';
 
-/** HTL-06: reservations that stop a room from being blocked, deactivated or deleted. */
-const ACTIVE_RESERVATION_STATUSES = [
-  HotelBookingStatus.CONFIRMED,
-  HotelBookingStatus.PENDING_PAYMENT,
-];
+/**
+ * HTL-06: Confirmed reservations and Pending Payment reservations still inside
+ * their hold stop a room from being blocked or deactivated (an expired hold is
+ * released, GEN-11 / HTL-18).
+ */
+const activeReservation = (now: Date) => ({
+  $or: [
+    { status: HotelBookingStatus.CONFIRMED },
+    {
+      status: HotelBookingStatus.PENDING_PAYMENT,
+      holdExpiresAt: { $gt: now },
+    },
+  ],
+});
 
 @Injectable()
 export class HotelsService {
@@ -400,7 +409,7 @@ await this.assertImagesAreUploads(dto.images);
     const reserved = await this.bookingModel
       .exists({
         'rooms.room': room._id,
-        status: { $in: ACTIVE_RESERVATION_STATUSES },
+        ...activeReservation(new Date()),
         checkIn: { $lte: end },
         checkOut: { $gt: start },
       })
@@ -408,20 +417,6 @@ await this.assertImagesAreUploads(dto.images);
     if (reserved) {
       throw new ConflictException(
         'These dates overlap a Confirmed or Pending Payment reservation for this room',
-      );
-    }
-
-    const overlappingBlock = await this.availabilityModel
-      .findOne({
-        room: room._id,
-        type: AvailabilityType.BLOCKED,
-        startDate: { $lte: end },
-        endDate: { $gte: start },
-      })
-      .exec();
-    if (overlappingBlock) {
-      throw new ConflictException(
-        `These dates overlap an existing blocked range (${this.formatDay(overlappingBlock.startDate)} to ${this.formatDay(overlappingBlock.endDate)})`,
       );
     }
 
@@ -458,7 +453,7 @@ await this.assertImagesAreUploads(dto.images);
     const reserved = await this.bookingModel
       .exists({
         'rooms.room': room._id,
-        status: { $in: ACTIVE_RESERVATION_STATUSES },
+        ...activeReservation(now),
         checkOut: { $gt: today },
       })
       .exec();

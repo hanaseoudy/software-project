@@ -883,12 +883,18 @@ describe('HotelsService', () => {
         );
       });
 
-      it('looks for Confirmed or Pending Payment stays that overlap the blocked days', async () => {
+      it('looks for Confirmed stays and unexpired Pending Payment holds that overlap the blocked days', async () => {
         const { room } = setup();
         await call();
         expect(bookingModel.exists).toHaveBeenCalledWith({
           'rooms.room': room._id,
-          status: { $in: ['CONFIRMED', 'PENDING_PAYMENT'] },
+          $or: [
+            { status: 'CONFIRMED' },
+            {
+              status: 'PENDING_PAYMENT',
+              holdExpiresAt: { $gt: expect.any(Date) },
+            },
+          ],
           checkIn: { $lte: new Date('2026-12-15T00:00:00.000Z') },
           checkOut: { $gt: new Date('2026-12-10T00:00:00.000Z') },
         });
@@ -902,35 +908,6 @@ describe('HotelsService', () => {
 
         expect(error).toBeInstanceOf(ConflictException);
         expect((error as ConflictException).message).toContain('reservation');
-        expect(availabilityModel.create).not.toHaveBeenCalled();
-      });
-
-      it('checks overlap with both days included, for blocked ranges of this room only', async () => {
-        const { room } = setup();
-        await call();
-        expect(availabilityModel.findOne).toHaveBeenCalledWith({
-          room: room._id,
-          type: 'blocked',
-          startDate: { $lte: new Date('2026-12-15T00:00:00.000Z') },
-          endDate: { $gte: new Date('2026-12-10T00:00:00.000Z') },
-        });
-      });
-
-      it('returns 409 and does not save when another block overlaps', async () => {
-        setup();
-        availabilityModel.findOne.mockReturnValue(
-          execResult({
-            startDate: new Date('2026-12-14T00:00:00.000Z'),
-            endDate: new Date('2026-12-20T00:00:00.000Z'),
-          }),
-        );
-
-        const error = await call().catch((e: unknown) => e);
-
-        expect(error).toBeInstanceOf(ConflictException);
-        expect((error as ConflictException).message).toContain(
-          '2026-12-14 to 2026-12-20',
-        );
         expect(availabilityModel.create).not.toHaveBeenCalled();
       });
 
@@ -980,16 +957,22 @@ describe('HotelsService', () => {
         );
       });
 
-      it('looks for Confirmed or Pending Payment stays that have not ended yet', async () => {
+      it('looks for Confirmed stays and unexpired Pending Payment holds that have not ended yet', async () => {
         const { room } = setup();
         await call();
         const filter = bookingModel.exists.mock.calls[0][0] as {
           'rooms.room': unknown;
-          status: unknown;
+          $or: unknown;
           checkOut: { $gt: Date };
         };
         expect(filter['rooms.room']).toBe(room._id);
-        expect(filter.status).toEqual({ $in: ['CONFIRMED', 'PENDING_PAYMENT'] });
+        expect(filter.$or).toEqual([
+          { status: 'CONFIRMED' },
+          {
+            status: 'PENDING_PAYMENT',
+            holdExpiresAt: { $gt: expect.any(Date) },
+          },
+        ]);
         const today = new Date();
         today.setUTCHours(0, 0, 0, 0);
         expect(filter.checkOut.$gt.getTime()).toBe(today.getTime());
