@@ -27,8 +27,7 @@ describe('AccessControlService (ACC-11)', () => {
   let ownFlightCount: number;
   const assignmentModel = { findOne: jest.fn() };
   const flightModel = { countDocuments: jest.fn(), distinct: jest.fn() };
-  const connection = { collection: jest.fn(() => flightModel) };
-  const service = new AccessControlService(assignmentModel as any, connection as any);
+  const service = new AccessControlService(assignmentModel as any, flightModel as any);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -37,8 +36,8 @@ describe('AccessControlService (ACC-11)', () => {
     assignmentModel.findOne.mockImplementation((filter: { providerType: ProviderType }) => ({
       lean: () => execResult(assignment && assignment.providerType === filter.providerType ? assignment : null),
     }));
-    flightModel.countDocuments.mockImplementation(() => Promise.resolve(ownFlightCount));
-    flightModel.distinct.mockImplementation(() => Promise.resolve([flightId]));
+    flightModel.countDocuments.mockImplementation(() => execResult(ownFlightCount));
+    flightModel.distinct.mockImplementation(() => execResult([flightId]));
   });
 
   describe('hotel bookings', () => {
@@ -90,7 +89,6 @@ describe('AccessControlService (ACC-11)', () => {
       assignment = { providerId: airlineId, providerType: ProviderType.AIRLINE };
       ownFlightCount = 1;
       await expect(service.assertCanViewFlightBooking(moderator, booking)).resolves.toBeUndefined();
-      expect(connection.collection).toHaveBeenCalledWith('flights');
       expect(flightModel.countDocuments).toHaveBeenCalledWith({ _id: { $in: [flightId] }, airline: airlineId });
     });
 

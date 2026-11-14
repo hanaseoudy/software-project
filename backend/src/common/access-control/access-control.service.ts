@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Connection, Model, Types, isValidObjectId } from 'mongoose';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types, isValidObjectId } from 'mongoose';
 import type { AuthPayload } from '../guards/jwt-auth.guard';
 import { UserRole } from '../../users/schemas/user.schema';
 import {
@@ -8,6 +8,7 @@ import {
   ModeratorAssignmentDocument,
   ProviderType,
 } from '../../users/schemas/moderatorassignment.schema';
+import { Flight, FlightDocument } from '../../flights/schemas/flight.schema';
 import { ItineraryVisibility } from '../../itineraries/schemas/itinerary.schema';
 
 type IdLike = Types.ObjectId | string | { _id: Types.ObjectId | string };
@@ -45,8 +46,8 @@ export class AccessControlService {
   constructor(
     @InjectModel(ModeratorAssignment.name)
     private readonly assignmentModel: Model<ModeratorAssignmentDocument>,
-    @InjectConnection()
-    private readonly connection: Connection,
+    @InjectModel(Flight.name)
+    private readonly flightModel: Model<FlightDocument>,
   ) {}
 
   async assertCanViewHotelBooking(user: AuthPayload, booking: HotelBookingAccess): Promise<void> {
@@ -75,10 +76,12 @@ export class AccessControlService {
         (id): id is string => id !== null && isValidObjectId(id),
       );
       if (airlineId && flightIds.length > 0) {
-        const ownFlights = await this.flights().countDocuments({
-          _id: { $in: flightIds.map((id) => new Types.ObjectId(id)) },
-          airline: airlineId,
-        });
+        const ownFlights = await this.flightModel
+          .countDocuments({
+            _id: { $in: flightIds.map((id) => new Types.ObjectId(id)) },
+            airline: airlineId,
+          })
+          .exec();
         if (ownFlights > 0) {
           return;
         }
@@ -119,15 +122,11 @@ export class AccessControlService {
       if (!airlineId) {
         return NO_MATCH;
       }
-      const flightIds = await this.flights().distinct('_id', { airline: airlineId });
+      const flightIds = await this.flightModel.distinct('_id', { airline: airlineId }).exec();
       return { $or: [{ outboundFlight: { $in: flightIds } }, { returnFlight: { $in: flightIds } }] };
     }
 
     return isValidObjectId(user.sub) ? { user: new Types.ObjectId(user.sub) } : NO_MATCH;
-  }
-
-  private flights() {
-    return this.connection.collection('flights');
   }
 
   private async assignedProviderId(user: AuthPayload, providerType: ProviderType): Promise<Types.ObjectId | null> {
