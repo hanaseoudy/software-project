@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BlogController } from './blog.controller';
+import { CommentsController } from './comments.controller';
 import { BlogService } from './blog.service';
 import { TagsController } from './tags.controller';
 import { Post, PostSchema } from './schemas/post.schema';
@@ -18,7 +19,7 @@ import { AuthModule } from '../auth/auth.module';
     ]),
     AuthModule,
   ],
-  controllers: [BlogController, TagsController],
+  controllers: [BlogController, TagsController, CommentsController],
   providers: [BlogService],
 })
 export class BlogModule {}
