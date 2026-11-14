@@ -777,3 +777,36 @@ FlightsService.addCabin, and POST /api/flights/:id/cabins in
 FlightsController, and verified the endpoint in Postman. Reviewed and
 adjusted every snippet before committing.
 ================================================
+
+================================================
+Date: 2026-11-14
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-22 (TASK-39)
+
+Prompt (summary of the conversation):
+Help me implement FLT-22 using our existing Flight (with Cabin seat counters) and
+FlightBooking schemas: atomically hold the requested seats only if enough remain,
+create a PENDING_PAYMENT booking held for 10 minutes, expire it automatically
+if payment does not happen, and never allow concurrent requests to book more
+seats than available. Guide me step by step in NestJS + MongoDB.
+
+How the output was used:
+Used the generated HoldFlightBookingDto, FlightBookingsService, FlightBookingsController,
+FlightBookingsModule and FlightHoldExpiryService after reviewing them against FLT-22.
+The seat check (totalSeats - bookedSeats - heldSeats >= requested seats) and the
+heldSeats increment happen in one atomic updateOne, so concurrent requests cannot
+oversell. Infants do not take a seat; for round trips the first leg is released if
+the second leg fails. The booking is created as PENDING_PAYMENT with
+holdExpiresAt = now + 10 minutes, and a @Cron job (every minute) marks expired
+holds as EXPIRED and releases their seats. After the leader's review the endpoint uses
+JwtAuthGuard (userId from the JWT payload), ApiCookieAuth and AuthModule; round trips
+are rejected unless the return flight is a different flight on the reverse route that
+departs after the outbound arrives; future passenger birth dates are rejected.
+
+Verification:
+Tested POST /api/flight-bookings/hold in Postman against a test flight with 2
+economy seats: 201 with PENDING_PAYMENT on the first hold, 409 when the seats
+were exhausted. Tested 401 without login, round-trip and future-birth-date 400 errors, validation errors (400) and the documented responses in
+Swagger. The TypeScript build compiles with no errors.
+================================================
