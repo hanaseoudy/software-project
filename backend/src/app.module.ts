@@ -12,10 +12,10 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
-import { warnIfDatabaseMissing } from './common/config/mongodb.config';
+import { ItinerariesModule } from './itineraries/itineraries.module';
 import { AirlinesModule } from './airlines/airlines.module';
-import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
-import { RolesGuard } from './common/guards/roles.guard';
+import { AdminModule } from './admin/admin.module';
+import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 import { FlightsModule } from './flights/flights.module';
 
 @Module({
@@ -54,6 +54,8 @@ import { FlightsModule } from './flights/flights.module';
     AuthModule,
     UploadsModule,
     AirlinesModule,
+    AdminModule,
+    ItinerariesModule,
     FlightsModule,
   ],
 
