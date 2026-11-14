@@ -883,18 +883,12 @@ describe('HotelsService', () => {
         );
       });
 
-      it('looks for Confirmed stays and unexpired Pending Payment holds that overlap the blocked days', async () => {
+      it('looks for Confirmed or Pending Payment stays that overlap the blocked days', async () => {
         const { room } = setup();
         await call();
         expect(bookingModel.exists).toHaveBeenCalledWith({
           'rooms.room': room._id,
-          $or: [
-            { status: 'CONFIRMED' },
-            {
-              status: 'PENDING_PAYMENT',
-              holdExpiresAt: { $gt: expect.any(Date) },
-            },
-          ],
+          status: { $in: ['CONFIRMED', 'PENDING_PAYMENT'] },
           checkIn: { $lte: new Date('2026-12-15T00:00:00.000Z') },
           checkOut: { $gt: new Date('2026-12-10T00:00:00.000Z') },
         });
@@ -957,22 +951,16 @@ describe('HotelsService', () => {
         );
       });
 
-      it('looks for Confirmed stays and unexpired Pending Payment holds that have not ended yet', async () => {
+      it('looks for Confirmed or Pending Payment stays that have not ended yet', async () => {
         const { room } = setup();
         await call();
         const filter = bookingModel.exists.mock.calls[0][0] as {
           'rooms.room': unknown;
-          $or: unknown;
+          status: unknown;
           checkOut: { $gt: Date };
         };
         expect(filter['rooms.room']).toBe(room._id);
-        expect(filter.$or).toEqual([
-          { status: 'CONFIRMED' },
-          {
-            status: 'PENDING_PAYMENT',
-            holdExpiresAt: { $gt: expect.any(Date) },
-          },
-        ]);
+        expect(filter.status).toEqual({ $in: ['CONFIRMED', 'PENDING_PAYMENT'] });
         const today = new Date();
         today.setUTCHours(0, 0, 0, 0);
         expect(filter.checkOut.$gt.getTime()).toBe(today.getTime());

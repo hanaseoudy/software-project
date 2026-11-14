@@ -45,20 +45,11 @@ import {
   RoomAvailabilityDocument,
 } from './schemas/room-availability.schema';
 
-/**
- * HTL-06: Confirmed reservations and Pending Payment reservations still inside
- * their hold stop a room from being blocked or deactivated (an expired hold is
- * released, GEN-11 / HTL-18).
- */
-const activeReservation = (now: Date) => ({
-  $or: [
-    { status: HotelBookingStatus.CONFIRMED },
-    {
-      status: HotelBookingStatus.PENDING_PAYMENT,
-      holdExpiresAt: { $gt: now },
-    },
-  ],
-});
+/** HTL-06: Confirmed and Pending Payment reservations stop a room from being blocked or deactivated. */
+const ACTIVE_RESERVATION_STATUSES = [
+  HotelBookingStatus.CONFIRMED,
+  HotelBookingStatus.PENDING_PAYMENT,
+];
 
 @Injectable()
 export class HotelsService {
@@ -409,7 +400,7 @@ await this.assertImagesAreUploads(dto.images);
     const reserved = await this.bookingModel
       .exists({
         'rooms.room': room._id,
-        ...activeReservation(new Date()),
+        status: { $in: ACTIVE_RESERVATION_STATUSES },
         checkIn: { $lte: end },
         checkOut: { $gt: start },
       })
@@ -453,7 +444,7 @@ await this.assertImagesAreUploads(dto.images);
     const reserved = await this.bookingModel
       .exists({
         'rooms.room': room._id,
-        ...activeReservation(now),
+        status: { $in: ACTIVE_RESERVATION_STATUSES },
         checkOut: { $gt: today },
       })
       .exec();
