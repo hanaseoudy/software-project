@@ -656,6 +656,29 @@ Tested in Postman: 201 created, 409 email taken, 404 airline not found,
 non-admin. Swagger shows the endpoint and all responses.
 ================================================
 
+Student: Sara Gomaa
+Tool: Claude
+Related Requirement: FLT-03
+Prompt:
+Asked to guide me through FLT-03 (airline moderator creates a flight) by
+questioning me and correcting my answers. Topics: where a new flight's
+airline comes from (POST /api/flights has no airline id in the URL), which
+fields the moderator sends versus which the system calculates, how to
+identify airports (IATA code lookup), and how to accept times entered in
+each airport's local time and store them in UTC.
+How the output was used:
+- Learned that the airline must come from the logged-in moderator's
+  ModeratorAssignment, never from the request body, and wrote the lookup
+  (403 if the moderator has no assigned airline).
+- Registered the ModeratorAssignment model in FlightsModule and injected it
+  into FlightsService.
+- Designed CreateFlightDto: moderator sends flightNumber, departure/arrival
+  airport IATA codes and local date-times (format YYYY-MM-DDTHH:mm, no
+  timezone); airline, status, cabins, departureLocalDate and
+  durationMinutes are filled in by the system.
+- Used the suggested regex for the local time format and reviewed it
+  before use.
+================================================
 Date: 2026-11-13
 Student: Hana Seoudy
 Tool: OpenAI Codex
@@ -735,3 +758,22 @@ ownership, validation, Swagger routes, concurrent duplicate comment deletion,
 post cleanup, and transaction rollback after simulated database failures.
 Jest was run with Node's --experimental-vm-modules option.
 No production database records were used. No commit or push was performed.
+================================================
+
+================================================
+Date: 2026-11-13
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-04
+Prompt:
+Asked to guide me step by step through FLT-04 (cabin categories and
+baggage allowance per flight): choosing between embedded subdocuments
+and a separate collection based on CabinSchema, DTO validation rules,
+duplicate cabin class checks, moderator ownership verification,
+AuthModule import troubleshooting, and Swagger error responses.
+How the output was used:
+Used the explanations and code examples to implement AddCabinDto,
+FlightsService.addCabin, and POST /api/flights/:id/cabins in
+FlightsController, and verified the endpoint in Postman. Reviewed and
+adjusted every snippet before committing.
+================================================
