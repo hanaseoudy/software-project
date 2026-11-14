@@ -221,6 +221,67 @@ build, unit tests and E2E tests passed locally.
 
 ================================================
 
+
+================================================
+Date: 2026-11-08
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: HTL-18 (TASK-58)
+
+Prompt (summary of the conversation):
+Help me implement HTL-18: hold all selected rooms together for 10 minutes as
+one PENDING_PAYMENT reservation, reject the whole request if any room overlaps
+a confirmed reservation, an unexpired hold or a blocked range, release unpaid
+holds when they expire, and validate that check-out is after check-in and
+check-in is not in the past.
+
+How the output was used:
+Used the generated HoldHotelBookingDto, RoomLock schema, HotelBookingsService
+and HotelBookingsController after reviewing them against HTL-18 and HTL-16.
+The service runs the overlap checks and the booking insert inside one MongoDB
+transaction, and updates a per-room lock document inside it so two concurrent
+holds on the same room cannot both succeed. An expired hold is ignored by the
+overlap check (holdExpiresAt <= now). The per-room adults rule was changed to
+"at least one adult in the whole reservation" to match HTL-16. Swagger
+documents the 201, 400, 404 and 409 responses.
+
+Verification:
+TypeScript type-check (tsc --noEmit) passed. Tested POST /api/hotel-bookings
+locally against MongoDB Atlas with a test hotel and 2 rooms: in Swagger 201
+(PENDING_PAYMENT, totalPrice 600), 409 on the same dates again, and 400 when
+check-out is before check-in; in Postman 201 and 409. A temporary fixed user id
+was used for local testing only and was not committed. (The auth guard and the
+expiry cron job were added afterwards, see the next entry.)
+================================================
+Date: 2026-11-13
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: HTL-18 (TASK-58) - review fixes on PR #42
+
+Prompt (summary of the conversation):
+The team leader reviewed PR #42 and asked for 4 fixes: (1) every request
+returned 401, so add JwtAuthGuard, import AuthModule and use req.user.sub;
+(2) make sure every night of the stay is inside an available range; (3) reject
+invalid dates such as 2027-02-30 and timestamps with time zones, accepting only
+real YYYY-MM-DD dates; (4) implement hold expiry so expired holds become EXPIRED.
+
+How the output was used:
+Merged develop into the branch. Controller now uses @UseGuards(JwtAuthGuard)
+and req.user.sub; HotelBookingsModule imports AuthModule. Added a pure helper
+isStayFullyAvailable (assumes the end date of an available range is inclusive)
+used inside the transaction together with the existing blocked check. Added a
+pure parseCalendarDate helper and an @IsCalendarDate DTO decorator (the service
+re-checks the dates). Added HotelHoldExpiryService (@Cron every minute marks
+PENDING_PAYMENT holds with holdExpiresAt <= now as EXPIRED), ScheduleModule in
+AppModule and the @nestjs/schedule dependency.
+
+Verification:
+Unit tests for the two helpers pass (11 tests, jest). tsc --noEmit and oxlint
+show no errors in the changed files (tsc still reports errors in the existing
+hotels.service.spec.ts, not part of this PR). Not yet tested against MongoDB
+Atlas: the guarded endpoint, the availability check and the cron job must be
+tested locally after a real login.
+================================================
 ================================================
 
 
@@ -565,4 +626,187 @@ Used the explanation to temporarily add a controller and test the service
 reviewer's feedback, the controller and the AuthModule import were removed, so
 the PR only contains the schema, enum and reusable NotificationsService.
 Postman screenshots are attached to the PR as verification only.
+================================================
+Date: 2026-11-13
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-13 (TASK-20)
+
+Prompt (summary of the conversation):
+Help me implement ACC-13: an admin creates a hotel or airline moderator
+account (name, email, role) linked to exactly one hotel or airline, with a
+temporary password set by the admin; the moderator must change the password
+on first login. Follow the API contract endpoint POST /api/admin/moderators.
+
+How the output was used:
+Used the generated AdminModule, AdminController, AdminService and
+CreateModeratorDto after reviewing them against ACC-13. The admin-only
+endpoint checks the hotel or airline exists (404), rejects a registered email
+(409, same format as register), creates the user with role moderator and
+mustChangePassword true (password hashed with bcrypt), and saves one
+ModeratorAssignment; if the assignment fails, the new user is deleted. The
+existing login response already returns mustChangePassword and providerType.
+AdminModule was added to app.module.ts.
+
+Verification:
+Added 8 unit tests (hotel and airline moderators, missing provider, taken
+email, duplicate key, rollback); all pass. Lint and build passed locally.
+Tested in Postman: 201 created, 409 email taken, 404 airline not found,
+400 validation, moderator login with mustChangePassword true, and 403 for a
+non-admin. Swagger shows the endpoint and all responses.
+================================================
+
+Student: Sara Gomaa
+Tool: Claude
+Related Requirement: FLT-03
+Prompt:
+Asked to guide me through FLT-03 (airline moderator creates a flight) by
+questioning me and correcting my answers. Topics: where a new flight's
+airline comes from (POST /api/flights has no airline id in the URL), which
+fields the moderator sends versus which the system calculates, how to
+identify airports (IATA code lookup), and how to accept times entered in
+each airport's local time and store them in UTC.
+How the output was used:
+- Learned that the airline must come from the logged-in moderator's
+  ModeratorAssignment, never from the request body, and wrote the lookup
+  (403 if the moderator has no assigned airline).
+- Registered the ModeratorAssignment model in FlightsModule and injected it
+  into FlightsService.
+- Designed CreateFlightDto: moderator sends flightNumber, departure/arrival
+  airport IATA codes and local date-times (format YYYY-MM-DDTHH:mm, no
+  timezone); airline, status, cabins, departureLocalDate and
+  durationMinutes are filled in by the system.
+- Used the suggested regex for the local time format and reviewed it
+  before use.
+================================================
+Date: 2026-11-13
+Student: Hana Seoudy
+Tool: OpenAI Codex
+Related Requirement: FLT-01, FLT-03, PAY-04 (GEN-08 compatibility)
+Prompt (summary):
+Consolidate the duplicate Airline schemas in airlines/schemas/airline.schema.ts.
+Analyze every dependency first, preserve USD baggage currency, update all imports,
+and remove the Flights copy without changing unrelated functionality, the branch,
+or existing work. Verify build, lint, tests, startup, Swagger, and currency validation.
+The proposed six-file change was reviewed and explicitly approved before edits.
+How the output was used:
+Added the existing PLATFORM_CURRENCY baggage field to the Airlines schema, updated
+FlightsModule and the flight CabinClass import, and deleted the duplicate schema.
+Added six schema regression tests. Model/collection names, indexes, other validators,
+authentication, controllers, services, DTOs, and module registration were preserved.
+Verification performed:
+Build passed. Lint passed with the same three pre-existing unused-import warnings.
+The default Jest command has a pre-existing NestJS ESM loading failure. Using
+node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand, the baseline
+had 118 passing and 58 failing tests; after consolidation, 124 passed and the same
+58 failed in hotels.service.spec.ts and blog.service.spec.ts (existing mock/provider
+setup issues). All six new schema tests passed. The E2E suite passed all 11 tests
+before and after, using the same VM-module option and a disposable local MongoDB.
+The compiled schema matched the previous Flights schema's fields, options, and indexes.
+Additional disposable-database checks verified joint AppModule/FlightsModule startup,
+airline creation/editing/logo upload, duplicate rejection, JWT and ownership checks,
+USD create/update validation, all four cabin classes, and Airline population from flights.
+The actual compiled backend entry point started and served /api and Swagger with all
+four airline operations. Flight endpoints do not exist in this checkout; no flight
+controller or AppModule registration was added. No production data was changed.
+================================================
+Date: 2026-11-13
+Student: Hana Seoudy
+Tool: OpenAI Codex
+Related Requirement: FLT-03, FLT-04
+Prompt (summary):
+Investigate the reported Cabin.cabinClass schema initialization error without edits.
+Check enum imports, compiled and isolated loading, similar properties, and the
+smallest safe fix. Apply the proposed fix only after explicit approval.
+How the output was used:
+Reproduced the runtime error under isolated transpilation: imported enum metadata
+was Object, while the normal build inferred String and loaded successfully.
+After approval, added type: String to the existing Cabin.cabinClass @Prop options.
+The enum, required validator, stored representation, and other behavior are unchanged.
+Verification performed:
+Build passed. Lint passed with the same three existing unused-import warnings.
+Both compiled and transpile-only schema loading passed. All four cabin classes
+validated; invalid, missing, and null values were rejected in both modes.
+With Jest's --experimental-vm-modules runtime option, 124 unit tests passed and
+the same 58 existing hotel/blog tests failed. All 11 E2E tests passed against a
+disposable local MongoDB. No production database records were modified.
+================================================
+
+Date: 2026-11-14
+Student: Hana Seoudy
+Tool: OpenAI Codex
+Related Requirement: BLG-04, BLG-07 (dependencies BLG-01, BLG-05; BLG-08 compatibility)
+Prompt:
+Switch to a new branch called feature/BLG-04-BLG-07 from latest develop and
+implement these requirements; install a PDF reader if needed. After reviewing
+the proposed implementation and file list, the user explicitly approved it.
+How the output was used:
+Read the mandatory CSV and project PDF (including Section 11). Created the branch
+from origin/develop ca8a763, preserving local work and retaining both sides of
+an append-only prompt-log conflict. Extended PATCH /api/posts/:id for title,
+content, status and tags, and added author-only DELETE /api/posts/:id.
+Added author-only PATCH and DELETE /api/comments/:id, reusing BLG-05 text rules.
+Added DTOs, Swagger documentation, ownership checks and database transactions
+for post/dependent-record deletion and comment deletion/count updates.
+Existing schemas and unrelated teammate code were preserved.
+Verification performed:
+Build passed. Lint passed with three existing airline unused-import warnings.
+18 new unit tests passed. Full unit suite: 150 passed, 58 failed in existing
+hotels.service.spec.ts and blog.service.spec.ts mock/provider setup.
+All 12 E2E tests passed against a disposable local MongoDB replica set, including
+ownership, validation, Swagger routes, concurrent duplicate comment deletion,
+post cleanup, and transaction rollback after simulated database failures.
+Jest was run with Node's --experimental-vm-modules option.
+No production database records were used. No commit or push was performed.
+================================================
+
+================================================
+Date: 2026-11-13
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-04
+Prompt:
+Asked to guide me step by step through FLT-04 (cabin categories and
+baggage allowance per flight): choosing between embedded subdocuments
+and a separate collection based on CabinSchema, DTO validation rules,
+duplicate cabin class checks, moderator ownership verification,
+AuthModule import troubleshooting, and Swagger error responses.
+How the output was used:
+Used the explanations and code examples to implement AddCabinDto,
+FlightsService.addCabin, and POST /api/flights/:id/cabins in
+FlightsController, and verified the endpoint in Postman. Reviewed and
+adjusted every snippet before committing.
+================================================
+
+================================================
+Date: 2026-11-14
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-22 (TASK-39)
+
+Prompt (summary of the conversation):
+Help me implement FLT-22 using our existing Flight (with Cabin seat counters) and
+FlightBooking schemas: atomically hold the requested seats only if enough remain,
+create a PENDING_PAYMENT booking held for 10 minutes, expire it automatically
+if payment does not happen, and never allow concurrent requests to book more
+seats than available. Guide me step by step in NestJS + MongoDB.
+
+How the output was used:
+Used the generated HoldFlightBookingDto, FlightBookingsService, FlightBookingsController,
+FlightBookingsModule and FlightHoldExpiryService after reviewing them against FLT-22.
+The seat check (totalSeats - bookedSeats - heldSeats >= requested seats) and the
+heldSeats increment happen in one atomic updateOne, so concurrent requests cannot
+oversell. Infants do not take a seat; for round trips the first leg is released if
+the second leg fails. The booking is created as PENDING_PAYMENT with
+holdExpiresAt = now + 10 minutes, and a @Cron job (every minute) marks expired
+holds as EXPIRED and releases their seats. After the leader's review the endpoint uses
+JwtAuthGuard (userId from the JWT payload), ApiCookieAuth and AuthModule; round trips
+are rejected unless the return flight is a different flight on the reverse route that
+departs after the outbound arrives; future passenger birth dates are rejected.
+
+Verification:
+Tested POST /api/flight-bookings/hold in Postman against a test flight with 2
+economy seats: 201 with PENDING_PAYMENT on the first hold, 409 when the seats
+were exhausted. Tested 401 without login, round-trip and future-birth-date 400 errors, validation errors (400) and the documented responses in
+Swagger. The TypeScript build compiles with no errors.
 ================================================
