@@ -595,3 +595,88 @@ Tested in Postman: 201 created, 409 email taken, 404 airline not found,
 400 validation, moderator login with mustChangePassword true, and 403 for a
 non-admin. Swagger shows the endpoint and all responses.
 ================================================
+
+================================================
+Date: 2026-11-13
+Student: Hana Seoudy
+Tool: OpenAI Codex
+Related Requirement: FLT-01, FLT-03, PAY-04 (GEN-08 compatibility)
+Prompt (summary):
+Consolidate the duplicate Airline schemas in airlines/schemas/airline.schema.ts.
+Analyze every dependency first, preserve USD baggage currency, update all imports,
+and remove the Flights copy without changing unrelated functionality, the branch,
+or existing work. Verify build, lint, tests, startup, Swagger, and currency validation.
+The proposed six-file change was reviewed and explicitly approved before edits.
+How the output was used:
+Added the existing PLATFORM_CURRENCY baggage field to the Airlines schema, updated
+FlightsModule and the flight CabinClass import, and deleted the duplicate schema.
+Added six schema regression tests. Model/collection names, indexes, other validators,
+authentication, controllers, services, DTOs, and module registration were preserved.
+Verification performed:
+Build passed. Lint passed with the same three pre-existing unused-import warnings.
+The default Jest command has a pre-existing NestJS ESM loading failure. Using
+node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand, the baseline
+had 118 passing and 58 failing tests; after consolidation, 124 passed and the same
+58 failed in hotels.service.spec.ts and blog.service.spec.ts (existing mock/provider
+setup issues). All six new schema tests passed. The E2E suite passed all 11 tests
+before and after, using the same VM-module option and a disposable local MongoDB.
+The compiled schema matched the previous Flights schema's fields, options, and indexes.
+Additional disposable-database checks verified joint AppModule/FlightsModule startup,
+airline creation/editing/logo upload, duplicate rejection, JWT and ownership checks,
+USD create/update validation, all four cabin classes, and Airline population from flights.
+The actual compiled backend entry point started and served /api and Swagger with all
+four airline operations. Flight endpoints do not exist in this checkout; no flight
+controller or AppModule registration was added. No production data was changed.
+================================================
+
+================================================
+Date: 2026-11-13
+Student: Hana Seoudy
+Tool: OpenAI Codex
+Related Requirement: FLT-03, FLT-04
+Prompt (summary):
+Investigate the reported Cabin.cabinClass schema initialization error without edits.
+Check enum imports, compiled and isolated loading, similar properties, and the
+smallest safe fix. Apply the proposed fix only after explicit approval.
+How the output was used:
+Reproduced the runtime error under isolated transpilation: imported enum metadata
+was Object, while the normal build inferred String and loaded successfully.
+After approval, added type: String to the existing Cabin.cabinClass @Prop options.
+The enum, required validator, stored representation, and other behavior are unchanged.
+Verification performed:
+Build passed. Lint passed with the same three existing unused-import warnings.
+Both compiled and transpile-only schema loading passed. All four cabin classes
+validated; invalid, missing, and null values were rejected in both modes.
+With Jest's --experimental-vm-modules runtime option, 124 unit tests passed and
+the same 58 existing hotel/blog tests failed. All 11 E2E tests passed against a
+disposable local MongoDB. No production database records were modified.
+================================================
+
+================================================
+Date: 2026-11-14
+Student: Hana Seoudy
+Tool: OpenAI Codex
+Related Requirement: BLG-04, BLG-07 (dependencies BLG-01, BLG-05; BLG-08 compatibility)
+Prompt:
+Switch to a new branch called feature/BLG-04-BLG-07 from latest develop and
+implement these requirements; install a PDF reader if needed. After reviewing
+the proposed implementation and file list, the user explicitly approved it.
+How the output was used:
+Read the mandatory CSV and project PDF (including Section 11). Created the branch
+from origin/develop ca8a763, preserving local work and retaining both sides of
+an append-only prompt-log conflict. Extended PATCH /api/posts/:id for title,
+content, status and tags, and added author-only DELETE /api/posts/:id.
+Added author-only PATCH and DELETE /api/comments/:id, reusing BLG-05 text rules.
+Added DTOs, Swagger documentation, ownership checks and database transactions
+for post/dependent-record deletion and comment deletion/count updates.
+Existing schemas and unrelated teammate code were preserved.
+Verification performed:
+Build passed. Lint passed with three existing airline unused-import warnings.
+18 new unit tests passed. Full unit suite: 150 passed, 58 failed in existing
+hotels.service.spec.ts and blog.service.spec.ts mock/provider setup.
+All 12 E2E tests passed against a disposable local MongoDB replica set, including
+ownership, validation, Swagger routes, concurrent duplicate comment deletion,
+post cleanup, and transaction rollback after simulated database failures.
+Jest was run with Node's --experimental-vm-modules option.
+No production database records were used. No commit or push was performed.
+================================================
