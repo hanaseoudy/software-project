@@ -18,6 +18,7 @@ import { AirlinesModule } from './airlines/airlines.module';
 import { AdminModule } from './admin/admin.module';
 import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 import { FlightsModule } from './flights/flights.module';
+import { FlightBookingsModule } from './flight-bookings/flight-bookings.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { FlightsModule } from './flights/flights.module';
     AdminModule,
     ItinerariesModule,
     FlightsModule,
+    FlightBookingsModule,
   ],
 
   controllers: [AppController],
