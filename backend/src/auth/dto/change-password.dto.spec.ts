@@ -17,6 +17,15 @@ describe('ChangePasswordDto (ACC-08)', () => {
     expect(errors.currentPassword).toContain('Current password is required');
   });
 
+  it('gives one clear message for an empty or non-text current password', async () => {
+    expect((await errorsFor({ currentPassword: '', newPassword: 'NewPass123' })).currentPassword).toEqual([
+      'Current password is required',
+    ]);
+    expect((await errorsFor({ currentPassword: 12345678, newPassword: 'NewPass123' })).currentPassword).toEqual([
+      'Current password must be text',
+    ]);
+  });
+
   it('applies the password rules to the new password', async () => {
     expect((await errorsFor({ currentPassword: 'Temp1234', newPassword: 'abc' })).newPassword).toEqual(
       expect.arrayContaining([

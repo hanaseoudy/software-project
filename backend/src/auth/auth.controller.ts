@@ -13,6 +13,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { AllowPendingPasswordChange } from '../common/decorators/allow-pending-password-change.decorator';
 import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
 import { ACCESS_COOKIE, REFRESH_COOKIE } from './auth.cookies';
 import { AuthService } from './auth.service';
@@ -117,6 +118,7 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
+  @AllowPendingPasswordChange()
   @ApiCookieAuth(ACCESS_COOKIE)
   @ApiOperation({ summary: 'Get the currently logged-in user from the access_token cookie (ACC-19)' })
   @ApiOkResponse({ description: 'The current user', type: LoginResponseDto })
@@ -130,6 +132,7 @@ export class AuthController {
 
   @Patch('change-password')
   @UseGuards(JwtAuthGuard)
+  @AllowPendingPasswordChange()
   @ApiCookieAuth(ACCESS_COOKIE)
   @ApiOperation({
     summary: 'Change the password of the logged-in user (ACC-08)',
