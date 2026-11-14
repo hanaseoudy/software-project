@@ -61,8 +61,8 @@ describe('HotelsService', () => {
     deleteMany: jest.fn(),
   };
   const bookingModel = { exists: jest.fn() };
-  const cityModel = { exists: jest.fn() };
-  const countryModel = { exists: jest.fn() };
+  const cityModel = { exists: jest.fn(), findById: jest.fn() };
+  const countryModel = { exists: jest.fn(), findById: jest.fn() };
   const assignmentModel = { exists: jest.fn() };
   // GEN-08: only /api/uploads/hotel/<uuid>.jpg|png links count as uploaded photos
   const uploads = { storedFileExists: jest.fn() };
