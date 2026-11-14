@@ -14,6 +14,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { IsNotFutureDate } from './is-not-future-date.decorator';
 import { CabinClass } from '../schemas/flight-booking.schema';
 import { DocumentType, PassengerType } from '../schemas/passenger.schema';
 
@@ -46,6 +47,7 @@ export class PassengerDto {
 
   @ApiProperty({ example: '2002-05-20' })
   @IsDateString()
+  @IsNotFutureDate()
   dateOfBirth: string;
 
   @ApiProperty({ enum: DocumentType })

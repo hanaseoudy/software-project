@@ -1,27 +1,26 @@
-import {
-  Body,
-  Controller,
-  Post,
-  Req,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
+  ApiCookieAuth,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOperation,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
 import { HoldFlightBookingDto } from './dto/hold-flight-booking.dto';
 import { FlightBookingsService } from './flight-bookings.service';
 
 @ApiTags('Flight Bookings')
+@ApiCookieAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('flight-bookings')
 export class FlightBookingsController {
   constructor(private readonly flightBookingsService: FlightBookingsService) {}
 
-  // TODO(ACC-04): add the JWT auth guard here once the login PR is merged.
   @Post('hold')
   @ApiOperation({
     summary:
@@ -29,16 +28,10 @@ export class FlightBookingsController {
   })
   @ApiCreatedResponse({ description: 'Seats held, booking created' })
   @ApiBadRequestResponse({ description: 'Invalid passengers, trip type or flight' })
+  @ApiUnauthorizedResponse({ description: 'Not authenticated' })
   @ApiNotFoundResponse({ description: 'Flight not found' })
   @ApiConflictResponse({ description: 'Not enough seats available' })
-  hold(
-    @Req() req: { user?: { id?: string; userId?: string; sub?: string } },
-    @Body() dto: HoldFlightBookingDto,
-  ) {
-    const userId = req.user?.id ?? req.user?.userId ?? req.user?.sub;
-    if (!userId) {
-      throw new UnauthorizedException('Authentication required');
-    }
-    return this.flightBookingsService.createHold(userId, dto);
+  hold(@Req() req: AuthenticatedRequest, @Body() dto: HoldFlightBookingDto) {
+    return this.flightBookingsService.createHold(req.user!.sub, dto);
   }
 }

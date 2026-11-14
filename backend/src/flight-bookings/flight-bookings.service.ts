@@ -54,12 +54,11 @@ export class FlightBookingsService {
     }
 
     // Load flights to validate them and to calculate the price.
+    const flights: Array<Awaited<ReturnType<typeof this.loadFlight>>> = [];
     let totalPrice = 0;
     for (const flightId of legIds) {
-      const flight = await this.flightModel.findById(flightId).lean();
-      if (!flight) {
-        throw new NotFoundException(`Flight ${flightId} not found`);
-      }
+      const flight = await this.loadFlight(flightId);
+      flights.push(flight);
       if (flight.status !== FlightStatus.SCHEDULED || flight.departureTime <= new Date()) {
         throw new BadRequestException(`Flight ${flight.flightNumber} is not available for booking`);
       }
@@ -73,6 +72,10 @@ export class FlightBookingsService {
       }
       totalPrice +=
         cabin.price * seats + cabin.price * INFANT_FARE_RATIO * infants;
+    }
+
+    if (dto.tripType === 'ROUND_TRIP') {
+      this.validateRoundTrip(flights[0], flights[1]);
     }
 
     // Atomic holds. If a later step fails we release what we already took.
@@ -110,6 +113,42 @@ export class FlightBookingsService {
         await this.releaseSeats(flightId, dto.cabinClass, seats);
       }
       throw err;
+    }
+  }
+
+  private async loadFlight(flightId: string) {
+    const flight = await this.flightModel.findById(flightId).lean();
+    if (!flight) {
+      throw new NotFoundException(`Flight ${flightId} not found`);
+    }
+    return flight;
+  }
+
+  /**
+   * Return flight must be a different flight, fly the reverse route and
+   * depart after the outbound flight arrives.
+   */
+  private validateRoundTrip(
+    outbound: { _id: Types.ObjectId; departureAirport: Types.ObjectId; arrivalAirport: Types.ObjectId; arrivalTime: Date },
+    inbound: { _id: Types.ObjectId; departureAirport: Types.ObjectId; arrivalAirport: Types.ObjectId; departureTime: Date },
+  ) {
+    if (outbound._id.equals(inbound._id)) {
+      throw new BadRequestException(
+        'Return flight must be different from the outbound flight',
+      );
+    }
+    if (
+      !outbound.departureAirport.equals(inbound.arrivalAirport) ||
+      !outbound.arrivalAirport.equals(inbound.departureAirport)
+    ) {
+      throw new BadRequestException(
+        'Return flight must follow the reverse route of the outbound flight',
+      );
+    }
+    if (inbound.departureTime <= outbound.arrivalTime) {
+      throw new BadRequestException(
+        'Return flight must depart after the outbound flight arrives',
+      );
     }
   }
 
