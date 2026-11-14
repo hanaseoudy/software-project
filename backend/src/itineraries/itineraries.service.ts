@@ -1,6 +1,6 @@
-
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -68,9 +68,9 @@ private readonly cityModel: Model<CityDocument>,
     }
   }
 
-  private validateObjectId(id: string) {
+  private validateObjectId(id: string, label = 'itinerary') {
     if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid itinerary ID');
+      throw new BadRequestException(`Invalid ${label} ID`);
     }
   }
 
@@ -122,7 +122,10 @@ private readonly cityModel: Model<CityDocument>,
     const city = await this.cityModel.findOne({ cityId });
 
     if (!city) {
-      throw new BadRequestException('Invalid cityId');
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: { cityId: ['Invalid cityId'] },
+      });
     }
 
     return city;
@@ -197,8 +200,8 @@ private readonly cityModel: Model<CityDocument>,
       }
     }
 
-    throw new BadRequestException(
-      'Could not add itinerary day. Please retry.',
+    throw new ConflictException(
+      'Could not add itinerary day due to concurrent updates. Please retry.',
     );
   }
 
@@ -236,7 +239,7 @@ private readonly cityModel: Model<CityDocument>,
       itineraryId,
     );
 
-    this.validateObjectId(dayId);
+    this.validateObjectId(dayId, 'day');
 
     const day = await this.itineraryDayModel.findOne({
       _id: new Types.ObjectId(dayId),
