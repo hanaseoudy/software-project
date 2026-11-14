@@ -17,7 +17,7 @@ import { MyPostsPage } from './dto/my-post-response.dto';
 import { PostResponseDto } from './dto/post-response.dto';
 import { PublicAuthorDto, PublicPostDetailDto, PublicPostsPage } from './dto/public-post-response.dto';
 import { TagPostsPage, TagsPage } from './dto/tag-response.dto';
-import { UpdateTagsDto } from './dto/update-tags.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 import { commentTextError } from './comment-rules';
 import { Comment, CommentDocument } from './schemas/comment.schema';
 import { Like, LikeDocument } from './schemas/like.schema';
@@ -209,8 +209,8 @@ export class BlogService {
     return user && !user.deactivated ? { id: id.toString(), name: user.name } : { id: null, name: DELETED_USER };
   }
 
-  // BLG-08: the author edits the post's tags later. BLG-04 will extend this with the other fields.
-  async update(userId: string, postId: string, dto: UpdateTagsDto): Promise<PostResponseDto> {
+  // BLG-04, BLG-08: only the author can edit post content and tags.
+  async update(userId: string, postId: string, dto: UpdatePostDto): Promise<PostResponseDto> {
     if (!userId || !isValidObjectId(userId)) {
       throw new UnauthorizedException('Not authenticated');
     }
@@ -224,11 +224,74 @@ export class BlogService {
     if (!post.author.equals(userId)) {
       throw new ForbiddenException('You can only edit your own posts');
     }
+    if (dto.title !== undefined) post.title = dto.title;
+    if (dto.content !== undefined) post.content = dto.content;
+    if (dto.status !== undefined) post.status = dto.status;
     if (dto.tags !== undefined) {
       post.tags = normalizeTags(dto.tags);
     }
     const saved = await this.runDb('Could not update the post', () => post.save());
     return this.toResponse(saved);
+  }
+
+  // BLG-04: delete dependent records atomically with the author's post.
+  async deletePost(userId: string, postId: string): Promise<void> {
+    const author = this.toUserObjectId(userId);
+    const id = this.managementId(postId, 'Post');
+    await this.runDb('Could not delete the post', () =>
+      this.postModel.db.transaction(async (session) => {
+        const post = await this.postModel.findById(id).session(session).exec();
+        if (!post) throw new NotFoundException('Post not found');
+        if (!post.author.equals(author)) throw new ForbiddenException('You can only delete your own posts');
+        await this.postModel.deleteOne({ _id: id, author }, { session }).exec();
+        await this.commentModel.deleteMany({ post: id }, { session }).exec();
+        await this.likeModel.deleteMany({ post: id }, { session }).exec();
+      }),
+    );
+  }
+
+  // BLG-07: ownership belongs to the comment author, not the post author.
+  async updateComment(userId: string, commentId: string, text: unknown): Promise<CommentResponseDto> {
+    const author = this.toUserObjectId(userId);
+    const body = this.toCommentText(text);
+    const id = this.managementId(commentId, 'Comment');
+    const comment = await this.runDb('Could not load the comment', () => this.commentModel.findById(id).exec());
+    if (!comment) throw new NotFoundException('Comment not found');
+    if (!comment.author.equals(author)) throw new ForbiddenException('You can only edit your own comments');
+    const updated = await this.runDb('Could not update the comment', () =>
+      this.commentModel.findOneAndUpdate(
+        { _id: id, author }, { $set: { text: body } }, { new: true, runValidators: true },
+      ).exec(),
+    );
+    if (!updated) throw new NotFoundException('Comment not found');
+    return {
+      id: updated._id.toString(), postId: updated.post.toString(),
+      author: { id: updated.author.toString() }, text: updated.text,
+      createdAt: updated.get('createdAt') as Date,
+    };
+  }
+
+  // A transaction prevents duplicate deletes or failures from corrupting the count.
+  async deleteComment(userId: string, commentId: string): Promise<void> {
+    const author = this.toUserObjectId(userId);
+    const id = this.managementId(commentId, 'Comment');
+    await this.runDb('Could not delete the comment', () =>
+      this.commentModel.db.transaction(async (session) => {
+        const comment = await this.commentModel.findById(id).session(session).exec();
+        if (!comment) throw new NotFoundException('Comment not found');
+        if (!comment.author.equals(author)) throw new ForbiddenException('You can only delete your own comments');
+        await this.commentModel.deleteOne({ _id: id, author }, { session }).exec();
+        await this.postModel.updateOne(
+          { _id: comment.post, commentsCount: { $gt: 0 } },
+          { $inc: { commentsCount: -1 } }, { session },
+        ).exec();
+      }),
+    );
+  }
+
+  private managementId(id: string, entity: string): Types.ObjectId {
+    if (typeof id !== 'string' || !OBJECT_ID_PATTERN.test(id)) throw new NotFoundException(`${entity} not found`);
+    return new Types.ObjectId(id);
   }
 
   // BLG-08: clickable tag. Published, non-hidden posts with the tag, newest first, page size 10 (GEN-05).
