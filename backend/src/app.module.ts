@@ -18,7 +18,6 @@ import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 import { AirlinesModule } from './airlines/airlines.module';
 import { ReportsModule } from './reports/reports.module';
 import { AdminModule } from './admin/admin.module';
-import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 import { FlightsModule } from './flights/flights.module';
 import { FlightBookingsModule } from './flight-bookings/flight-bookings.module';
 
