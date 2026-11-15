@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model, Types } from 'mongoose';
+import { PLATFORM_CURRENCY } from '../common/constants/currency.constants';
 import type { AuthPayload } from '../common/guards/jwt-auth.guard';
 import { City } from '../reference-data/schemas/city.schema';
 import { Country } from '../reference-data/schemas/country.schema';
@@ -617,7 +618,7 @@ export class HotelsService {
     return country?.name ?? '';
   }
 
-  /** Both dates or none; check-out must be after check-in. */
+  /** Both dates or none; check-out must be after check-in and check-in cannot be in the past. */
   private parseStay(
     query: HotelDetailsQueryDto,
   ): { checkIn: Date; checkOut: Date } | null {
@@ -625,6 +626,10 @@ export class HotelsService {
       return null;
     }
     const errors: Record<string, string[]> = {};
+    const now = new Date();
+    const today = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
     const checkIn =
       query.checkIn === undefined ? null : this.parseDay(query.checkIn);
     const checkOut =
@@ -633,6 +638,8 @@ export class HotelsService {
       errors.checkIn = ['Check-in is required when check-out is sent'];
     } else if (!checkIn) {
       errors.checkIn = ['Check-in must be a real date in YYYY-MM-DD format'];
+    } else if (checkIn < today) {
+      errors.checkIn = ['Check-in cannot be in the past'];
     }
     if (query.checkOut === undefined) {
       errors.checkOut = ['Check-out is required when check-in is sent'];
@@ -775,6 +782,7 @@ export class HotelsService {
         beds: room.beds,
         maxOccupancy: room.maxOccupancy,
         pricePerNight: room.pricePerNight,
+        currency: PLATFORM_CURRENCY, // PAY-04: one platform currency (USD)
       }));
   }
 

@@ -1056,6 +1056,31 @@ describe('HotelsService', () => {
   });
 
   describe('getDetails', () => {
+    // Fix "today" (only Date is faked) so the hard-coded stay dates stay in the future.
+    beforeEach(() => {
+      jest.useFakeTimers({
+        now: new Date('2026-11-15T10:00:00.000Z'),
+        doNotFake: [
+          'hrtime',
+          'nextTick',
+          'performance',
+          'queueMicrotask',
+          'requestAnimationFrame',
+          'cancelAnimationFrame',
+          'requestIdleCallback',
+          'cancelIdleCallback',
+          'setImmediate',
+          'clearImmediate',
+          'setInterval',
+          'clearInterval',
+          'setTimeout',
+          'clearTimeout',
+        ],
+      });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
     const day = (d: string) => new Date(`${d}T00:00:00.000Z`);
     const hotelWithPolicy = () => {
       const doc = makeHotelDoc();
@@ -1216,13 +1241,47 @@ describe('HotelsService', () => {
       expect(Object.keys(response.errors)).toContain(field);
     });
 
+    it.each([
+      [{ checkIn: '2026-11-14', checkOut: '2026-11-16' }],
+      [{ checkIn: '2020-01-10', checkOut: '2020-01-14' }],
+    ])('rejects a check-in in the past %j with a 400', async (query) => {
+      hotelWithPolicy();
+      const error = await service
+        .getDetails(idOf(), query)
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(
+        (
+          (error as BadRequestException).getResponse() as {
+            errors: Record<string, string[]>;
+          }
+        ).errors.checkIn,
+      ).toEqual(['Check-in cannot be in the past']);
+      expect(roomModel.find).not.toHaveBeenCalled();
+    });
+
+    it('accepts a check-in today', async () => {
+      hotelWithPolicy();
+      withRooms([]);
+      await expect(
+        service.getDetails(idOf(), {
+          checkIn: '2026-11-15',
+          checkOut: '2026-11-16',
+        }),
+      ).resolves.toBeDefined();
+    });
+
     it('lists a room whose bookable range covers the stay', async () => {
       hotelWithPolicy();
       const a = room('A101');
       withRooms([a], [rangeOf(a, '2026-12-01', '2026-12-31')]);
       const result = await service.getDetails(idOf(), stay);
       expect(result.availableRooms).toEqual([
-        expect.objectContaining({ roomNumber: 'A101', pricePerNight: 1500 }),
+        expect.objectContaining({
+          roomNumber: 'A101',
+          pricePerNight: 1500,
+          currency: 'USD',
+        }),
       ]);
     });
 

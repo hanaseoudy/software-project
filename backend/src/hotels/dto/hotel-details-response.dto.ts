@@ -39,6 +39,9 @@ export class AvailableRoomDto {
 
   @ApiProperty({ example: 1500 })
   pricePerNight!: number;
+
+  @ApiProperty({ example: 'USD', description: 'Platform currency (PAY-04)' })
+  currency!: string;
 }
 
 /** HTL-02: everything shown on the hotel details page. */
