@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -13,14 +14,19 @@ import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ItinerariesModule } from './itineraries/itineraries.module';
-import { AirlinesModule } from './airlines/airlines.module';
 import { warnIfDatabaseMissing } from './common/config/mongodb.config';
+import { AirlinesModule } from './airlines/airlines.module';
+import { ReportsModule } from './reports/reports.module';
+import { AdminModule } from './admin/admin.module';
+import { FlightsModule } from './flights/flights.module';
+import { FlightBookingsModule } from './flight-bookings/flight-bookings.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ScheduleModule.forRoot(),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
 
@@ -53,6 +59,11 @@ import { warnIfDatabaseMissing } from './common/config/mongodb.config';
     UploadsModule,
     AirlinesModule,
     ItinerariesModule,
+    AdminModule,
+    ItinerariesModule,
+    ReportsModule,
+    FlightsModule,
+    FlightBookingsModule,
   ],
 
   controllers: [AppController],

@@ -29,7 +29,6 @@ the new password shows mustChangePassword false, and 401 when logged out.
 Swagger shows the endpoint and its responses.
 ================================================
 
-================================================
 Date: 2026-11-13
 Student: Nour Hossam
 Tool: Claude
@@ -57,4 +56,48 @@ Verification:
 Tested in Postman: GET profile 200, full update 200, invalid phone and
 currency 400 with nothing saved (checked with GET), email/role only 400,
 and 401 when logged out. Swagger shows both endpoints.
+================================================
+Date: 2026-11-14
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-07a (TASK-14)
+
+Prompt (summary of the conversation):
+Help me implement ACC-07a: an admin resets a user's or moderator's password
+to a temporary password, and the account must set a new password that meets
+the password rules at its next login. Follow the API contract endpoint
+POST /api/admin/users/:id/reset-password and reuse the ACC-13 admin module.
+
+How the output was used:
+Used the generated ResetPasswordDto, AdminService.resetPassword and the
+controller route after reviewing them against ACC-07a. The admin-only
+endpoint validates the id (400), returns 404 for a missing account, refuses
+to reset an admin account (403), applies the password rules to the temporary
+password, saves the bcrypt hash, sets mustChangePassword to true, clears any
+ACC-05 lockout, and revokes all of the account's sessions. The account then
+changes the password with PATCH /api/auth/change-password (ACC-08).
+
+Verification:
+Added 9 unit tests (service and DTO); all 17 admin tests pass. Lint and build
+passed locally. Tested in Postman: reset 200, old password 401, login with
+the temporary password shows mustChangePassword true, moderator caller 403,
+admin target 403, unknown user 404, weak password 400. Swagger shows the
+endpoint and its responses.
+Related Requirement: ACC-08 (TASK-15) review fixes, ACC-13, ACC-07a
+
+Prompt (summary of the conversation):
+The team leader asked in the PR review to enforce mustChangePassword on the
+backend with an @AllowPendingPasswordChange() decorator, return 403 on normal
+protected routes until the password is changed, allow /auth/me and
+/auth/change-password, and give @IsString and @IsNotEmpty different messages.
+
+How the output was used:
+Added the decorator (SetMetadata), made JwtAuthGuard read mustChangePassword
+and the decorator through Reflector, marked the two auth routes, and split the
+validation messages. Updated the guard unit tests for the new constructor.
+
+Verification:
+27 auth and guard tests pass; lint and build pass. Postman: moderator with a
+temporary password gets 403 on GET /posts/mine, can change the password, and
+then gets 200.
 ================================================
