@@ -14,6 +14,7 @@ import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ItinerariesModule } from './itineraries/itineraries.module';
+import { warnIfDatabaseMissing } from './common/config/mongodb.config';
 import { AirlinesModule } from './airlines/airlines.module';
 import { ReportsModule } from './reports/reports.module';
 import { AdminModule } from './admin/admin.module';
@@ -58,6 +59,7 @@ import { FlightBookingsModule } from './flight-bookings/flight-bookings.module';
     AuthModule,
     UploadsModule,
     AirlinesModule,
+    ItinerariesModule,
     AdminModule,
     ItinerariesModule,
     ReportsModule,
