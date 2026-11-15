@@ -1,0 +1,104 @@
+AI usage log - Nour Hossam (Accounts & Admin)
+
+================================================
+Date: 2026-11-13
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-08 (TASK-15), ACC-13
+
+Prompt (summary of the conversation):
+Help me implement ACC-08: a logged-in user changes their password by entering
+the current password and a new one that meets the password rules. Follow the
+API contract endpoint PATCH /api/auth/change-password. It should also clear
+mustChangePassword so moderators created by ACC-13 can finish first login.
+
+How the output was used:
+Used the generated ChangePasswordDto, AuthService.changePassword and the
+controller route after reviewing them against ACC-08. The endpoint requires
+login (JwtAuthGuard), checks the current password (400 if wrong), rejects a
+new password equal to the current one (400), applies the register password
+rules, saves the new bcrypt hash, sets mustChangePassword to false, and logs
+out the user's other sessions while keeping the current one. Errors use the
+same "Validation failed" format as register.
+
+Verification:
+Added 9 unit tests (service and DTO); all 13 auth tests pass. Lint and build
+passed locally. Tested in Postman with the ACC-13 moderator: wrong current
+password 400, same password 400, weak password 400, success 200, login with
+the new password shows mustChangePassword false, and 401 when logged out.
+Swagger shows the endpoint and its responses.
+================================================
+
+Date: 2026-11-13
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-09 (TASK-16)
+
+Prompt (summary of the conversation):
+Help me implement ACC-09: any logged-in user edits their name, phone number
+and preferred currency, saving only if all fields pass validation. Follow the
+API contract endpoints GET /api/users/me and PATCH /api/users/me.
+
+How the output was used:
+Used the generated UpdateProfileDto, UsersService and UsersController after
+reviewing them against ACC-09. Both routes require login and always use the
+id from the login cookie. PATCH changes only the fields sent; the phone
+number is cleaned (spaces and dashes removed) and must be 7-15 digits, null
+removes it; the preferred currency must be in the supported list (EGP, USD,
+EUR, GBP, SAR, AED, JPY), which is a display setting for itinerary budgets
+(ITN-18), while bookings and payments stay in USD (PAY-04). If any field is
+invalid the whole request is rejected and nothing is saved. Email and role
+are stripped and cannot be changed. The scaffold users spec files were
+replaced with real tests.
+
+Verification:
+16 unit tests pass (service, controller, DTO). Lint and build passed locally.
+Tested in Postman: GET profile 200, full update 200, invalid phone and
+currency 400 with nothing saved (checked with GET), email/role only 400,
+and 401 when logged out. Swagger shows both endpoints.
+
+================================================
+Date: 2026-11-14
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-07a (TASK-14)
+
+Prompt (summary of the conversation):
+Help me implement ACC-07a: an admin resets a user's or moderator's password
+to a temporary password, and the account must set a new password that meets
+the password rules at its next login. Follow the API contract endpoint
+POST /api/admin/users/:id/reset-password and reuse the ACC-13 admin module.
+
+How the output was used:
+Used the generated ResetPasswordDto, AdminService.resetPassword and the
+controller route after reviewing them against ACC-07a. The admin-only
+endpoint validates the id (400), returns 404 for a missing account, refuses
+to reset an admin account (403), applies the password rules to the temporary
+password, saves the bcrypt hash, sets mustChangePassword to true, clears any
+ACC-05 lockout, and revokes all of the account's sessions. The account then
+changes the password with PATCH /api/auth/change-password (ACC-08).
+
+Verification:
+Added 9 unit tests (service and DTO); all 17 admin tests pass. Lint and build
+passed locally. Tested in Postman: reset 200, old password 401, login with
+the temporary password shows mustChangePassword true, moderator caller 403,
+admin target 403, unknown user 404, weak password 400. Swagger shows the
+endpoint and its responses.
+Related Requirement: ACC-08 (TASK-15) review fixes, ACC-13, ACC-07a
+
+Prompt (summary of the conversation):
+The team leader asked in the PR review to enforce mustChangePassword on the
+backend with an @AllowPendingPasswordChange() decorator, return 403 on normal
+protected routes until the password is changed, allow /auth/me and
+/auth/change-password, and give @IsString and @IsNotEmpty different messages.
+
+How the output was used:
+Added the decorator (SetMetadata), made JwtAuthGuard read mustChangePassword
+and the decorator through Reflector, marked the two auth routes, and split the
+validation messages. Updated the guard unit tests for the new constructor.
+
+Verification:
+27 auth and guard tests pass; lint and build pass. Postman: moderator with a
+temporary password gets 403 on GET /posts/mine, can change the password, and
+then gets 200.
+================================================

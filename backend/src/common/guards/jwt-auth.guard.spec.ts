@@ -1,4 +1,5 @@
 import { ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Model } from 'mongoose';
@@ -10,9 +11,10 @@ describe('JwtAuthGuard', () => {
   const jwt = { verifyAsync: jest.fn() };
   const sessions = { findOneAndUpdate: jest.fn(), updateOne: jest.fn() };
   const users = { findById: jest.fn() };
-  const guard = new JwtAuthGuard(jwt as unknown as JwtService, new ConfigService({ JWT_ACCESS_SECRET: 'test' }), sessions as unknown as Model<SessionDocument>, users as unknown as Model<UserDocument>);
+  const reflector = { getAllAndOverride: jest.fn() };
+  const guard = new JwtAuthGuard(jwt as unknown as JwtService, new ConfigService({ JWT_ACCESS_SECRET: 'test' }), sessions as unknown as Model<SessionDocument>, users as unknown as Model<UserDocument>, reflector as unknown as Reflector);
   const req: { cookies: Record<string, string>; user?: { role: string } } = { cookies: {} };
-  const context = { switchToHttp: () => ({ getRequest: () => req }) } as ExecutionContext;
+  const context = { switchToHttp: () => ({ getRequest: () => req }), getHandler: () => 'handler', getClass: () => 'controller' } as unknown as ExecutionContext;
   beforeEach(() => {
     jest.resetAllMocks();
     req.cookies = { access_token: 'token' };
@@ -39,5 +41,22 @@ describe('JwtAuthGuard', () => {
     users.findById.mockReturnValue({ select: () => ({ lean: async () => ({ status, role: UserRole.USER }) }) });
     await expect(guard.canActivate(context)).rejects.toMatchObject({ status: 401 });
     expect(sessions.updateOne).toHaveBeenCalledWith({ _id: 'session' }, { $set: { revokedAt: expect.any(Date) } });
+  });
+
+  describe('temporary password (ACC-13, ACC-07a)', () => {
+    beforeEach(() => {
+      users.findById.mockReturnValue({ select: () => ({ lean: async () => ({ status: AccountStatus.ACTIVE, role: UserRole.MODERATOR, mustChangePassword: true }) }) });
+    });
+    it('blocks normal routes with 403 until the password is changed', async () => {
+      await expect(guard.canActivate(context)).rejects.toMatchObject({ status: 403, message: 'You must change your temporary password before continuing' });
+      expect(req.user).toBeUndefined();
+      expect(sessions.updateOne).not.toHaveBeenCalled();
+    });
+    it('allows routes marked with @AllowPendingPasswordChange()', async () => {
+      reflector.getAllAndOverride.mockReturnValue(true);
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(reflector.getAllAndOverride).toHaveBeenCalledWith('allowPendingPasswordChange', ['handler', 'controller']);
+      expect(req.user?.role).toBe(UserRole.MODERATOR);
+    });
   });
 });

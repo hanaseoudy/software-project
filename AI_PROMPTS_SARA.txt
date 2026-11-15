@@ -57,7 +57,6 @@ FlightsController, and verified the endpoint in Postman. Reviewed and
 adjusted every snippet before committing.
 ================================================
 
-================================================
 Date: 2026-11-13
 Student: Sara Gomaa
 Tool: Gemini
@@ -74,4 +73,3 @@ Used the guidance and snippets to create SetBaggagePolicyDto, add
 setBaggagePolicy to AirlinesService, expose the protected route in
 AirlinesController, and test the policy updates. Reviewed and adjusted
 every snippet before committing.
-================================================

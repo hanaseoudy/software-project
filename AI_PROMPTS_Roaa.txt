@@ -1,0 +1,20 @@
+Date: 2026-11-14
+Student: Roaa Mahmoud
+Tool: Claude (Claude Code on claude.ai)
+Related Requirement: HTL-06 (Jira TASK-49)
+Prompt:
+Let's work on my tasks in sprint 2. (Then, after Claude listed the Sprint 2
+tasks and proposed an approach for HTL-06: "so you can start in this even
+though it depends on HTL-03 and HTL-04".)
+How the output was used:
+Claude read the Jira ticket and the existing hotels code and proposed three
+endpoints for HTL-06: block a date range for a room, deactivate a room, and
+delete a room that has never been reserved. It then wrote the DTO, service
+methods, controller routes, module registration and unit tests on the feature
+branch. The overlap checks against Confirmed and Pending Payment reservations
+read the existing HotelBooking schema. Claude also added the missing findById
+mocks that made hotels.service.spec.ts fail on develop. I reviewed the changes
+PR #101 is reviewed before merging.
+Verification performed:
+Hotel unit tests (164), lint and build passed under Node 24.
+================================================
