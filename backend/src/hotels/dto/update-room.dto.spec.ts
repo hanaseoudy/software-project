@@ -29,4 +29,15 @@ describe('UpdateRoomDto', () => {
   it.each([0, -5, 10.123, '100'])('rejects pricePerNight = %p', async (v) => {
     expect(await failing({ pricePerNight: v })).toEqual(['pricePerNight']);
   });
+
+  it.each(['beds', 'maxOccupancy', 'pricePerNight'])(
+    'rejects null for %s with a validation error',
+    async (field) => {
+      expect(await failing({ [field]: null })).toEqual([field]);
+    },
+  );
+
+  it('accepts an empty body (the service rejects it as "send at least one")', async () => {
+    expect(await failing({})).toEqual([]);
+  });
 });
