@@ -56,7 +56,6 @@ Verification:
 Tested in Postman: GET profile 200, full update 200, invalid phone and
 currency 400 with nothing saved (checked with GET), email/role only 400,
 and 401 when logged out. Swagger shows both endpoints.
-
 ================================================
 Date: 2026-11-14
 Student: Nour Hossam
