@@ -55,12 +55,82 @@ describe('Backend regressions against disposable MongoDB', () => {
       }
     }
   });
+  it('enforces post/comment ownership, validates edits and cleans up deletions (BLG-04, BLG-07)', async () => {
+    const owner = await register();
+    const visitor = await register();
+    const ownerCookie = cookies(await login(owner.email));
+    const visitorCookie = cookies(await login(visitor.email));
+    const server = app.getHttpServer();
+    const created = await request(server).post('/api/posts').set('Cookie', ownerCookie)
+      .send({ title: 'Before', content: 'Body', status: 'published', tags: ['egypt'] }).expect(201);
+    const postId = created.body.id;
+    await request(server).patch(`/api/posts/${postId}`).send({ title: 'After' }).expect(401);
+    await request(server).patch(`/api/posts/${postId}`).set('Cookie', visitorCookie).send({ title: 'After' }).expect(403);
+    await request(server).delete(`/api/posts/${postId}`).set('Cookie', visitorCookie).expect(403);
+    for (const invalid of [{ title: ' ' }, { content: null }, { status: null }, { tags: null }]) {
+      await request(server).patch(`/api/posts/${postId}`).set('Cookie', ownerCookie).send(invalid).expect(400);
+    }
+    const edited = await request(server).patch(`/api/posts/${postId}`).set('Cookie', ownerCookie)
+      .send({ title: 'After', content: 'Edited body' }).expect(200);
+    expect(edited.body).toMatchObject({ title: 'After', content: 'Edited body', tags: ['egypt'], status: 'published' });
+    const commented = await request(server).post(`/api/posts/${postId}/comments`).set('Cookie', visitorCookie)
+      .send({ text: 'Original' }).expect(201);
+    const commentId = commented.body.id;
+    await request(server).patch(`/api/comments/${commentId}`).send({ text: 'Edit' }).expect(401);
+    await request(server).delete(`/api/comments/${commentId}`).expect(401);
+    await request(server).patch(`/api/comments/${commentId}`).set('Cookie', ownerCookie).send({ text: 'Edit' }).expect(403);
+    await request(server).delete(`/api/comments/${commentId}`).set('Cookie', ownerCookie).expect(403);
+    for (const invalid of [{ text: ' ' }, { text: 'x'.repeat(501) }, { text: null }, { text: 'Edit', author: owner.id }]) {
+      await request(server).patch(`/api/comments/${commentId}`).set('Cookie', visitorCookie).send(invalid).expect(400);
+    }
+    const updated = await request(server).patch(`/api/comments/${commentId}`).set('Cookie', visitorCookie)
+      .send({ text: ' Edited ' }).expect(200);
+    expect(updated.body).toMatchObject({ text: 'Edited', createdAt: commented.body.createdAt, author: { id: visitor.id } });
+    const countFailure = jest.spyOn(db.model('Post'), 'updateOne').mockImplementationOnce(() => ({
+      exec: () => Promise.reject(new Error('Simulated counter failure')),
+    }) as any);
+    try {
+      await request(server).delete(`/api/comments/${commentId}`).set('Cookie', visitorCookie).expect(500);
+    } finally {
+      countFailure.mockRestore();
+    }
+    expect(await db.model('Comment').findById(commentId)).not.toBeNull();
+    expect((await db.model('Post').findById(postId)).commentsCount).toBe(1);
+    const deletions = await Promise.all([0, 1].map(() => request(server).delete(`/api/comments/${commentId}`).set('Cookie', visitorCookie)));
+    expect(deletions.map(res => res.status).sort()).toEqual([204, 404]);
+    expect((await db.model('Post').findById(postId)).commentsCount).toBe(0);
+    await request(server).post(`/api/posts/${postId}/comments`).set('Cookie', visitorCookie).send({ text: 'Another' }).expect(201);
+    await request(server).post(`/api/posts/${postId}/like`).set('Cookie', visitorCookie).expect(201);
+    const cleanupFailure = jest.spyOn(db.model('Like'), 'deleteMany').mockImplementationOnce(() => ({
+      exec: () => Promise.reject(new Error('Simulated cleanup failure')),
+    }) as any);
+    try {
+      await request(server).delete(`/api/posts/${postId}`).set('Cookie', ownerCookie).expect(500);
+    } finally {
+      cleanupFailure.mockRestore();
+    }
+    expect(await db.model('Post').findById(postId)).not.toBeNull();
+    expect(await db.model('Comment').countDocuments({ post: postId })).toBe(1);
+    expect(await db.model('Like').countDocuments({ post: postId })).toBe(1);
+    await request(server).delete(`/api/posts/${postId}`).set('Cookie', ownerCookie).expect(204);
+    expect(await db.model('Comment').countDocuments({ post: postId })).toBe(0);
+    expect(await db.model('Like').countDocuments({ post: postId })).toBe(0);
+    await request(server).get(`/api/posts/${postId}`).expect(404);
+    await request(server).delete(`/api/posts/${postId}`).set('Cookie', ownerCookie).expect(404);
+    const draft = await request(server).post('/api/posts').set('Cookie', ownerCookie).send({ title: 'Draft', content: 'Body' }).expect(201);
+    await request(server).patch(`/api/posts/${draft.body.id}`).set('Cookie', ownerCookie).send({ status: 'published' }).expect(200);
+    await request(server).delete(`/api/posts/${draft.body.id}`).set('Cookie', ownerCookie).expect(204);
+  }, 30000);
   it('serves the application with the production API prefix', async () => {
     await request(app.getHttpServer()).get('/api').expect(200).expect('Hello World!');
   });
   it('registers every Swagger cookie security scheme referenced by operations', () => {
     const document = SwaggerModule.createDocument(app, createSwaggerConfig());
     const schemes = document.components?.securitySchemes ?? {};
+    expect(document.paths['/api/posts/{id}'].patch).toBeDefined();
+    expect(document.paths['/api/posts/{id}'].delete).toBeDefined();
+    expect(document.paths['/api/comments/{id}'].patch).toBeDefined();
+    expect(document.paths['/api/comments/{id}'].delete).toBeDefined();
     expect(schemes.access_token).toMatchObject({ type: 'apiKey', in: 'cookie', name: 'access_token' });
     expect(schemes.refresh_token).toMatchObject({ type: 'apiKey', in: 'cookie', name: 'refresh_token' });
     for (const item of Object.values(document.paths)) {
