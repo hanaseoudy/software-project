@@ -41,6 +41,25 @@ Hotel unit tests, lint and build passed under Node 24.
 Date: 2026-11-16
 Student: Roaa Mahmoud
 Tool: Claude (Claude Code on claude.ai)
+Related Requirement: HTL-15 (Jira TASK-55)
+Prompt:
+Yes, start HTL-15. I want it exactly as the requirement says, with nothing
+wrong in it. Then give me the steps to do in VS Code, Postman and Swagger.
+How the output was used:
+Claude read HTL-15 in the requirements file and the API contract in the project
+PDF (GET /api/hotels/:id/rooms/available) and built a public endpoint on a new
+branch from the latest develop. It lists the active rooms of a hotel that are
+free for the whole searched stay, with type, beds, maximum occupancy, price per
+night, currency and the total stay price (nights x price per night). A room is
+free when it is not blocked, has no Confirmed reservation or unexpired hold,
+and the whole stay falls inside its bookable ranges, using the same
+stay-availability and calendar-date helpers as HTL-11 and HTL-18. Results are
+paginated 10 per page (GEN-05). It wrote the query and response DTOs, a
+separate HotelRoomAvailabilityService and controller, the module registration
+and unit tests. I will review the changes before opening the pull request.
+Verification performed:
+Hotel unit tests (254), lint and build passed under Node 24.
+================================================
 Related Requirement: HTL-08 (Jira TASK-50)
 Prompt:
 Is there anything else we can do in sprint 2? (Then, after Claude named HTL-08:
