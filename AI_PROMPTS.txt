@@ -532,7 +532,26 @@ Lint, build and all unit tests passed under Node 24 (140 tests). Postman checks 
 with the temporary fake-login test kit (not committed).
 ================================================
 
-================================================
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-02 (TASK-45)
+Prompt (summary of the conversation):
+I asked AI to finish the last Sprint 1 Hotels ticket, HTL-02: a hotel details page showing the
+profile, photos, amenities, check-in/check-out times, cancellation policy, average rating and
+reviews, and the available rooms when dates are provided. The branch is stacked on HTL-05
+because the available-rooms part needs rooms (HTL-03), bookable ranges (HTL-04) and the
+declared dependency HTL-01.
+
+How the output was used:
+AI added a public GET /api/hotels/:id with optional checkIn and checkOut query dates. Reviews
+show the 10 most recent visible ones with the reviewer's first name and last initial. When both
+dates are sent, a room is listed only if its bookable ranges cover every night, it is not
+blocked, and no confirmed booking or live hold overlaps the stay. Inactive hotels return 404.
+Invalid or half-given dates return 400 with field errors. I reviewed the code and tests and
+tested it in Postman.
+Verification performed:
+Lint, build and all unit tests passed under Node 24 (165 tests). Postman checks done locally.
 Date: 2026-11-10
 Student: Sara Gomaa
 Tool: Claude
@@ -544,7 +563,6 @@ validation, ownership checks, error codes, logo upload.
 How the output was used:
 Used the explanations and corrections to write the DTOs, service and
 controller myself. Reviewed and adjusted every snippet before committing.
-===============================================
 
 Date: 2026-11-08
 Student: Nour Hossam
@@ -569,9 +587,7 @@ Added unit tests for RolesGuard covering no required roles, allowed and
 rejected roles, missing user, controller-level roles and method-level
 overrides. Lint, build, all unit tests (26) and E2E tests passed locally.
 
-================================================
 
-================================================
 
 Date: 2026-11-09
 Student: Mariam Haithem
