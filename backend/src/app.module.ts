@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { PoliciesModule } from './policies/policies.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -48,6 +49,7 @@ import { FlightBookingsModule } from './flight-bookings/flight-bookings.module';
         };
       },
     }),
+    PoliciesModule,
     AirportsModule,
     PaymentsModule,
     BlogModule,

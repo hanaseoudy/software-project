@@ -60,6 +60,7 @@ existing policiesAcceptedAt field on both booking types, and
 assertAccepted() is exposed so PAY-01 can block payment until the
 policies are accepted. Added @nestjs/swagger, installed and ran
 npm run build to verify the code compiles.
+================================================
 Date: 2026-11-07
 Student: Hana Seoudy
 Tool: Codex
@@ -508,6 +509,28 @@ from the existing develop lockfile are not installed locally. E2E tests
 could not start because @nestjs/jwt is missing. Dependency installation
 was declined. No database was connected to or changed; existing stored
 reference values have not been audited or migrated.
+================================================
+
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-05 (TASK-48)
+Prompt (summary of the conversation):
+I asked AI to continue with the next Hotels ticket, HTL-05: a hotel moderator edits a room's
+beds, occupancy and price; price changes must not affect existing reservations; availability
+cannot be removed for dates with confirmed reservations. The branch is stacked on HTL-04
+because the ticket depends on HTL-03 (rooms) and HTL-04 (bookable ranges).
+
+How the output was used:
+AI added PATCH /api/hotels/:id/rooms/:roomId (beds, maxOccupancy, pricePerNight, at least one)
+and DELETE /api/hotels/:id/rooms/:roomId/availability/:rangeId, both for the assigned
+moderator only. A booking already stores its own price per night, so a new room price only
+affects future bookings. Removing a range returns 409 when a CONFIRMED hotel booking for that
+room overlaps it. I reviewed the code and tests and tested it in Postman.
+Verification performed:
+Lint, build and all unit tests passed under Node 24 (140 tests). Postman checks done locally
+with the temporary fake-login test kit (not committed).
+================================================
 
 ================================================
 Date: 2026-11-10
@@ -610,7 +633,23 @@ tier rules and error format are the same as HTL-10. The two shorter routes are k
 routes for one part only. I reviewed the code and the new tests.
 Verification performed:
 Lint, build and all hotel unit tests passed under Node 24.
-================================================
+
+Date: 2026-11-11
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-05 (TASK-48) - contract endpoint PATCH /api/hotels/:id/rooms/:roomId/availability
+Prompt (summary of the conversation):
+After the team leader said the API contract endpoints must exist, I asked AI to add the contract endpoint
+for room availability that was still missing in the HTL-05 branch, and to explain why we keep our extra
+DELETE route.
+
+How the output was used:
+AI added PATCH /api/hotels/:id/rooms/:roomId/availability (assigned moderator only). Body: rangeId plus
+startDate and/or endDate. The new dates must not overlap another bookable range (409) and days taken out
+of the range must not have a confirmed reservation (409). The DELETE route for removing a whole range is
+kept as a documented extra route. I reviewed the code and the new tests.
+Verification performed:
+Lint, build and all hotel unit tests passed under Node 24.
 
 Date: 2026-11-12
 Student: Kenzy
@@ -626,8 +665,6 @@ Used the explanation to temporarily add a controller and test the service
 reviewer's feedback, the controller and the AuthModule import were removed, so
 the PR only contains the schema, enum and reusable NotificationsService.
 Postman screenshots are attached to the PR as verification only.
-================================================
-================================================
 Date: 2026-11-13
 Student: Nour Hossam
 Tool: Claude
@@ -653,7 +690,6 @@ Verification:
 Added 20 unit tests covering owners, admins, hotel and airline moderators,
 other users, public/private itineraries and list filters; all pass. Lint and
 build passed locally.
-================================================
 Date: 2026-11-13
 Student: Nour Hossam
 Tool: Claude
@@ -681,7 +717,6 @@ email, duplicate key, rollback); all pass. Lint and build passed locally.
 Tested in Postman: 201 created, 409 email taken, 404 airline not found,
 400 validation, moderator login with mustChangePassword true, and 403 for a
 non-admin. Swagger shows the endpoint and all responses.
-================================================
 
 Student: Sara Gomaa
 Tool: Claude
@@ -705,7 +740,6 @@ How the output was used:
   durationMinutes are filled in by the system.
 - Used the suggested regex for the local time format and reviewed it
   before use.
-================================================
 Date: 2026-11-13
 Student: Hana Seoudy
 Tool: OpenAI Codex
@@ -736,7 +770,6 @@ USD create/update validation, all four cabin classes, and Airline population fro
 The actual compiled backend entry point started and served /api and Swagger with all
 four airline operations. Flight endpoints do not exist in this checkout; no flight
 controller or AppModule registration was added. No production data was changed.
-================================================
 Date: 2026-11-13
 Student: Hana Seoudy
 Tool: OpenAI Codex
@@ -757,7 +790,6 @@ validated; invalid, missing, and null values were rejected in both modes.
 With Jest's --experimental-vm-modules runtime option, 124 unit tests passed and
 the same 58 existing hotel/blog tests failed. All 11 E2E tests passed against a
 disposable local MongoDB. No production database records were modified.
-================================================
 
 Date: 2026-11-14
 Student: Hana Seoudy
@@ -785,9 +817,7 @@ ownership, validation, Swagger routes, concurrent duplicate comment deletion,
 post cleanup, and transaction rollback after simulated database failures.
 Jest was run with Node's --experimental-vm-modules option.
 No production database records were used. No commit or push was performed.
-================================================
 
-================================================
 Date: 2026-11-13
 Student: Sara Gomaa
 Tool: Gemini
@@ -803,9 +833,7 @@ Used the explanations and code examples to implement AddCabinDto,
 FlightsService.addCabin, and POST /api/flights/:id/cabins in
 FlightsController, and verified the endpoint in Postman. Reviewed and
 adjusted every snippet before committing.
-================================================
 
-================================================
 Date: 2026-11-14
 Student: Mariam Mashoud
 Tool: Claude
@@ -836,4 +864,3 @@ Tested POST /api/flight-bookings/hold in Postman against a test flight with 2
 economy seats: 201 with PENDING_PAYMENT on the first hold, 409 when the seats
 were exhausted. Tested 401 without login, round-trip and future-birth-date 400 errors, validation errors (400) and the documented responses in
 Swagger. The TypeScript build compiles with no errors.
-================================================
