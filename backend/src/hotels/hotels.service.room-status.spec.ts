@@ -1,3 +1,4 @@
+
 import {
   BadRequestException,
   ForbiddenException,
@@ -7,6 +8,8 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { HotelBooking } from '../hotel-bookings/schemas/hotel-booking.schema';
+import { Review } from '../hotel-bookings/schemas/review.schema';
+import { User } from '../users/schemas/user.schema';
 import { City } from '../reference-data/schemas/city.schema';
 import { Country } from '../reference-data/schemas/country.schema';
 import { UploadsService } from '../uploads/uploads.service';
@@ -17,7 +20,7 @@ import { HotelsService } from './hotels.service';
 import { Hotel } from './schemas/hotel.schema';
 import { RoomAvailability } from './schemas/room-availability.schema';
 import { Room } from './schemas/room.schema';
-
+ 
 const execResult = <T>(value: T) => ({ exec: () => Promise.resolve(value) });
 // find() -> sort()/skip()/limit()/select()/lean() -> exec(), all returning the same value
 const found = (value: unknown) => {
@@ -28,10 +31,10 @@ const found = (value: unknown) => {
   chain.exec = () => Promise.resolve(value);
   return chain;
 };
-
+ 
 const NOW = new Date('2026-11-15T10:00:00.000Z');
 const day = (value: string) => new Date(`${value}T00:00:00.000Z`);
-
+ 
 describe('HotelsService.getRoomStatuses (HTL-08)', () => {
   let service: HotelsService;
   const hotelModel = { findById: jest.fn() };
@@ -39,14 +42,14 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
   const availabilityModel = { find: jest.fn() };
   const bookingModel = { find: jest.fn() };
   const assignmentModel = { exists: jest.fn() };
-
+ 
   const hotelId = new Types.ObjectId();
   const moderator = {
     sub: new Types.ObjectId().toString(),
     sid: 's1',
     role: UserRole.MODERATOR,
   };
-
+ 
   const query = (over: Partial<RoomStatusQueryDto> = {}) =>
     ({
       startDate: '2026-12-01',
@@ -54,7 +57,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
       page: 1,
       ...over,
     }) as RoomStatusQueryDto;
-
+ 
   const makeRoom = (roomNumber = 'A101', isActive = true) => ({
     _id: new Types.ObjectId(),
     roomNumber,
@@ -81,7 +84,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
     rooms: [{ room: roomId }],
     ...over,
   });
-
+ 
   const setup = (data: {
     rooms?: ReturnType<typeof makeRoom>[];
     total?: number;
@@ -102,7 +105,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
   };
   const run = (q = query()) =>
     service.getRoomStatuses(hotelId.toString(), q, moderator, NOW);
-
+ 
   beforeEach(async () => {
     jest.resetAllMocks();
     const moduleRef = await Test.createTestingModule({
@@ -121,26 +124,28 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
           provide: getModelToken(ModeratorAssignment.name),
           useValue: assignmentModel,
         },
+        { provide: getModelToken(Review.name), useValue: {} },
+        { provide: getModelToken(User.name), useValue: {} },
         { provide: UploadsService, useValue: {} },
       ],
     }).compile();
     service = moduleRef.get(HotelsService);
   });
-
+ 
   describe('access and validation', () => {
     it('returns 404 when the hotel does not exist', async () => {
       setup({});
       hotelModel.findById.mockReturnValue(execResult(null));
       await expect(run()).rejects.toBeInstanceOf(NotFoundException);
     });
-
+ 
     it('returns 403 when the moderator is not assigned to the hotel', async () => {
       setup({});
       assignmentModel.exists.mockReturnValue(execResult(null));
       await expect(run()).rejects.toBeInstanceOf(ForbiddenException);
       expect(roomModel.find).not.toHaveBeenCalled();
     });
-
+ 
     const errorsOf = async (q: RoomStatusQueryDto) => {
       setup({});
       const error = await run(q).catch((e: unknown) => e);
@@ -151,28 +156,28 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
         }
       ).errors;
     };
-
+ 
     it('rejects a start date that is not a real date', async () => {
       const errors = await errorsOf(query({ startDate: '2026-02-30' }));
       expect(errors.startDate).toEqual([
         'Start date must be a real date in YYYY-MM-DD format',
       ]);
     });
-
+ 
     it('rejects an end date that is not a real date', async () => {
       const errors = await errorsOf(query({ endDate: '2026-13-01' }));
       expect(errors.endDate).toEqual([
         'End date must be a real date in YYYY-MM-DD format',
       ]);
     });
-
+ 
     it('rejects an end date before the start date', async () => {
       const errors = await errorsOf(query({ endDate: '2026-11-30' }));
       expect(errors.endDate).toEqual([
         'End date must be on or after the start date',
       ]);
     });
-
+ 
     it('accepts a single day and dates in the past', async () => {
       setup({});
       await expect(
@@ -180,7 +185,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
       ).resolves.toMatchObject({ total: 0 });
     });
   });
-
+ 
   describe('room statuses', () => {
     it('returns an empty page when the hotel has no rooms', async () => {
       setup({ rooms: [] });
@@ -194,7 +199,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
       expect(availabilityModel.find).not.toHaveBeenCalled();
       expect(bookingModel.find).not.toHaveBeenCalled();
     });
-
+ 
     it('shows Available, Blocked and Booked (with the reference) for a room', async () => {
       const room = makeRoom('A101');
       setup({
@@ -244,7 +249,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
         },
       ]);
     });
-
+ 
     it('uses the reservation id when the booking has no reference yet', async () => {
       const room = makeRoom();
       const hold = booking(room._id, '2026-12-10', '2026-12-12', {
@@ -265,7 +270,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
         reservationStatus: 'PENDING_PAYMENT',
       });
     });
-
+ 
     it('shows each room with only its own ranges and reservations', async () => {
       const a = makeRoom('A101');
       const b = makeRoom('A102');
@@ -287,7 +292,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
         'BOOKED',
       ]);
     });
-
+ 
     it('lists a reservation of several rooms on each of its rooms', async () => {
       const a = makeRoom('A101');
       const b = makeRoom('A102');
@@ -310,14 +315,14 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
         ]);
       }
     });
-
+ 
     it('gives a room with nothing in the days an empty period list', async () => {
       const room = makeRoom();
       setup({ rooms: [room] });
       const result = await run();
       expect(result.items[0].periods).toEqual([]);
     });
-
+ 
     it('also lists a room that is not active, with its flag', async () => {
       const room = makeRoom('A101', false);
       setup({ rooms: [room] });
@@ -325,7 +330,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
       expect(result.items[0].isActive).toBe(false);
     });
   });
-
+ 
   describe('what is asked from the database', () => {
     it('asks for the rooms of this hotel only, sorted by room number', async () => {
       setup({});
@@ -335,7 +340,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
       });
       expect(roomModel.find).toHaveBeenCalledWith({ hotel: hotelId });
     });
-
+ 
     it('asks for ranges and blocks that touch the chosen days', async () => {
       setup({ rooms: [makeRoom()] });
       await run();
@@ -346,7 +351,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
         }),
       );
     });
-
+ 
     it('asks for Confirmed reservations and unexpired holds that touch the days', async () => {
       setup({ rooms: [makeRoom()] });
       await run();
@@ -363,7 +368,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
       );
     });
   });
-
+ 
   describe('pagination (GEN-05)', () => {
     it('asks for 10 rooms and skips the earlier pages', async () => {
       setup({ rooms: [makeRoom()], total: 25 });
@@ -381,7 +386,7 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
         totalPages: 3,
       });
     });
-
+ 
     it('returns an empty page after the last page but keeps the total', async () => {
       setup({ rooms: [], total: 12 });
       const result = await run(query({ page: 5 }));
@@ -395,3 +400,4 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
     });
   });
 });
+ 
