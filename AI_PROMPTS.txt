@@ -1205,3 +1205,29 @@ changed.
 Verification:
 tsc passes (only the existing hotels.service.spec errors on develop remain).
 Expected: registered user 201, moderator/admin 403, no login 401.
+
+Date: 2026-11-17
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-01 (TASK-64) - Stripe test payments and verified payment outcomes
+Prompt (summary of the conversation):
+The old PAY-01 branch was built on an older develop. I asked AI to rebuild it from the latest develop,
+check the declared dependencies (FLT-21, HTL-16, FLT-22, HTL-18) and use their code so PAY-01 matches
+the requirement exactly, without depending on unmerged work. PAY-01 was paused until FLT-21 was merged,
+then updated to use it.
+
+How the output was used:
+AI checked the dependencies: FLT-22 and HTL-18 are merged and create the Pending Payment bookings PAY-01
+pays for; HTL-16's rules are in develop (inside the HTL-18 hotel hold) and give the hotel total; FLT-21
+(booking summary) and FLT-19 (baggage fees) are merged. PAY-01 uses Stripe PaymentIntents (clientSecret
+for Stripe Elements, card data never reaches the backend), one payment per booking, booking confirmed
+only after a signature-verified Stripe webhook with a matching amount, retry after failure until the
+hold expires, the PaymentIntent cancelled when the hold expires (every minute, like the FLT-22/HTL-18
+jobs), and only Stripe ID, amount, currency and status stored. It uses the PAY-04 currency constant and
+the Payment schema's bookingModel, and lets HTL-17 / FLT-23 register their own confirmation step. Before
+creating or retrying a PaymentIntent it calls the merged PAY-02 PoliciesService.assertAccepted(), so
+payment is blocked until the policies are accepted (project description 6.4). The flight amount is
+calculated exactly like the FLT-21 summary total (seat fares + FLT-19 baggage fees, each rounded to
+cents), and a unit test checks it against FLT-21's buildBookingSummary(). I reviewed the code.
+Verification performed:
+VERIFICATION_PLACEHOLDER
