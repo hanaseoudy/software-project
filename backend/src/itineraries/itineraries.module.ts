@@ -39,6 +39,9 @@ import {
   CitySchema,
 } from '../reference-data/schemas/city.schema';
 
+import { Currency, CurrencySchema } from '../reference-data/schemas/currency.schema';
+import { TransportCostsController } from './transport-costs.controller';
+import { TransportCostsService } from './transport-costs.service';
 import { ItinerariesController } from './itineraries.controller';
 import { ItinerariesService } from './itineraries.service';
 
@@ -46,6 +49,7 @@ import { ItinerariesService } from './itineraries.service';
   imports: [
     AuthModule,
     MongooseModule.forFeature([
+      { name: Currency.name, schema: CurrencySchema },
       {
         name: Itinerary.name,
         schema: ItinerarySchema,
@@ -76,7 +80,7 @@ import { ItinerariesService } from './itineraries.service';
       },
     ]),
   ],
-  controllers: [ItinerariesController],
-  providers: [ItinerariesService],
+  controllers: [ItinerariesController, TransportCostsController],
+  providers: [ItinerariesService, TransportCostsService],
 })
 export class ItinerariesModule {}
