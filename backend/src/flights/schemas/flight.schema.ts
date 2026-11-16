@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
-import { CabinClass } from './airline.schema';
+import { CabinClass } from '../../airlines/schemas/airline.schema';
 import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants';
 
 export type FlightDocument = HydratedDocument<Flight>;
@@ -14,7 +14,7 @@ export enum FlightStatus {
 // One "section" of the plane. Needs an _id so PATCH /flights/:id/cabins/:cabinId works.
 @Schema()
 export class Cabin {
-  @Prop({ required: true, enum: CabinClass })
+  @Prop({ type: String, required: true, enum: CabinClass })
   cabinClass: CabinClass;
 
   @Prop({ required: true, min: 1 })
@@ -42,7 +42,12 @@ export const CabinSchema = SchemaFactory.createForClass(Cabin);
 
 @Schema({ timestamps: true })
 export class Flight {
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Airline', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Airline',
+    required: true,
+    index: true,
+  })
   airline: Types.ObjectId;
 
   @Prop({ required: true, uppercase: true, trim: true })
@@ -76,11 +81,18 @@ export class Flight {
 
 export const FlightSchema = SchemaFactory.createForClass(Flight);
 
-FlightSchema.index({ departureAirport: 1, arrivalAirport: 1, departureLocalDate: 1 });
-FlightSchema.index({ airline: 1, flightNumber: 1, departureLocalDate: 1 }, { unique: true });
+FlightSchema.index({
+  departureAirport: 1,
+  arrivalAirport: 1,
+  departureLocalDate: 1,
+});
+FlightSchema.index(
+  { airline: 1, flightNumber: 1, departureLocalDate: 1 },
+  { unique: true },
+);
 
 FlightSchema.pre('validate', function () {
-  if (this.departureAirport.equals(this.arrivalAirport)) {
+  if (this.departureAirport?.equals(this.arrivalAirport)) {
     throw new Error('Departure and arrival airports must be different');
   }
   if (this.arrivalTime <= this.departureTime) {

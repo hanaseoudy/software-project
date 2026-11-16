@@ -5,6 +5,8 @@ import {
   calculateBaggageFees,
   calculateBookingTotal,
   calculatePassengerBaggageFee,
+  assertFreeBagsWithinAllowance,
+  calculateLegBaggageFees,
 } from './baggage-fees';
 
 const policy: BaggagePolicyInfo = {
@@ -79,5 +81,74 @@ describe('baggage fees (FLT-19)', () => {
 
   it('rejects negative totals', () => {
     expect(() => calculateBookingTotal(-1, 0)).toThrow(BaggageRuleError);
+  });
+});
+
+describe('assertFreeBagsWithinAllowance', () => {
+  const cabin = { freeBags: 1, maxBagWeightKg: 23 };
+
+  it('accepts free bags within the cabin allowance', () => {
+    expect(() => assertFreeBagsWithinAllowance([23], cabin)).not.toThrow();
+    expect(() => assertFreeBagsWithinAllowance([], cabin)).not.toThrow();
+  });
+
+  it('rejects more free bags than the cabin allows', () => {
+    expect(() => assertFreeBagsWithinAllowance([10, 10], cabin)).toThrow(BaggageRuleError);
+  });
+
+  it('rejects a free bag heavier than the cabin maximum', () => {
+    expect(() => assertFreeBagsWithinAllowance([24], cabin)).toThrow(BaggageRuleError);
+  });
+
+  it('rejects a bag with no weight', () => {
+    expect(() => assertFreeBagsWithinAllowance([0], cabin)).toThrow(BaggageRuleError);
+  });
+});
+
+describe('calculateLegBaggageFees', () => {
+  const cabin = { freeBags: 1, maxBagWeightKg: 23 };
+  const policy = { extraBagPrice: 30, maxExtraBagsPerPassenger: 2 };
+
+  it('charges the airline price for every extra bag and nothing for free bags', () => {
+    const result = calculateLegBaggageFees(
+      [
+        { baggage: [{ weightKg: 20 }, { weightKg: 15, isExtra: true }, { weightKg: 10, isExtra: true }] },
+        { baggage: [{ weightKg: 22 }] },
+        {},
+      ],
+      cabin,
+      policy,
+    );
+
+    expect(result.perPassenger.map((p) => p.extraBags)).toEqual([2, 0, 0]);
+    expect(result.total).toBe(60);
+  });
+
+  it('rejects more extra bags than the airline policy allows', () => {
+    expect(() =>
+      calculateLegBaggageFees(
+        [{ baggage: [{ weightKg: 5, isExtra: true }, { weightKg: 5, isExtra: true }, { weightKg: 5, isExtra: true }] }],
+        cabin,
+        policy,
+      ),
+    ).toThrow(BaggageRuleError);
+  });
+
+  it('rejects an extra bag heavier than the cabin maximum', () => {
+    expect(() =>
+      calculateLegBaggageFees([{ baggage: [{ weightKg: 30, isExtra: true }] }], cabin, policy),
+    ).toThrow(BaggageRuleError);
+  });
+
+  it('rejects more free bags than the cabin allows (they must be marked extra)', () => {
+    expect(() =>
+      calculateLegBaggageFees([{ baggage: [{ weightKg: 10 }, { weightKg: 10 }] }], cabin, policy),
+    ).toThrow(BaggageRuleError);
+  });
+
+  it('allows no extra bags when the airline has no baggage policy', () => {
+    expect(() =>
+      calculateLegBaggageFees([{ baggage: [{ weightKg: 5, isExtra: true }] }], cabin, undefined),
+    ).toThrow(BaggageRuleError);
   });
 });

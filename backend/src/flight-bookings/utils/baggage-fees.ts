@@ -79,3 +79,76 @@ export function calculateBookingTotal(
   }
   return round2(fareTotal + baggageTotal);
 }
+
+// ---- Booking integration (used by createHold) ----
+
+export interface CabinBaggageAllowance {
+  freeBags: number; // free bags per passenger in this cabin (FLT-04)
+  maxBagWeightKg: number; // max weight per bag, also for extra bags (FLT-08)
+}
+
+export interface PassengerBagInput {
+  weightKg: number;
+  isExtra?: boolean;
+}
+
+export interface PassengerBagsInput {
+  baggage?: PassengerBagInput[];
+}
+
+export interface AirlineBaggagePolicy {
+  extraBagPrice?: number;
+  maxExtraBagsPerPassenger?: number;
+}
+
+/** Free bags must fit the cabin's allowance (count and weight per bag). */
+export function assertFreeBagsWithinAllowance(
+  freeBagWeightsKg: number[],
+  cabin: CabinBaggageAllowance,
+): void {
+  if (freeBagWeightsKg.length > cabin.freeBags) {
+    throw new BaggageRuleError(
+      `A passenger can take at most ${cabin.freeBags} free bag(s) in this cabin; additional bags must be marked as extra`,
+    );
+  }
+  for (const weight of freeBagWeightsKg) {
+    if (!Number.isFinite(weight) || weight <= 0) {
+      throw new BaggageRuleError('Each bag must have a weight greater than 0');
+    }
+    if (weight > cabin.maxBagWeightKg) {
+      throw new BaggageRuleError(
+        `A bag cannot weigh more than ${cabin.maxBagWeightKg} kg`,
+      );
+    }
+  }
+}
+
+/**
+ * Validates every passenger's bags for one flight leg and returns the extra
+ * baggage fees. Free bags are checked against the cabin allowance (FLT-04);
+ * extra bags against the airline's baggage policy (FLT-08).
+ */
+export function calculateLegBaggageFees(
+  passengers: PassengerBagsInput[],
+  cabin: CabinBaggageAllowance,
+  airlinePolicy: AirlineBaggagePolicy | undefined,
+): { perPassenger: PassengerBaggageFee[]; total: number } {
+  const policy: BaggagePolicyInfo = {
+    extraBagPrice: airlinePolicy?.extraBagPrice ?? 0,
+    maxExtraBagsPerPassenger: airlinePolicy?.maxExtraBagsPerPassenger ?? 0,
+    maxBagWeightKg: cabin.maxBagWeightKg,
+  };
+
+  const extraBags: PassengerBaggage[] = passengers.map((p) => {
+    const bags = p.baggage ?? [];
+    assertFreeBagsWithinAllowance(
+      bags.filter((b) => !b.isExtra).map((b) => b.weightKg),
+      cabin,
+    );
+    return {
+      extraBagWeightsKg: bags.filter((b) => b.isExtra).map((b) => b.weightKg),
+    };
+  });
+
+  return calculateBaggageFees(extraBags, policy);
+}
