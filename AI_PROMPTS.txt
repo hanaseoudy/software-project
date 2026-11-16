@@ -891,4 +891,29 @@ charge the user twice. I reviewed the code and the tests.
 Verification:
 npx jest src/flight-bookings: 2 suites, 22 tests passed. tsc and oxlint report no errors in the
 flight-bookings files. Postman screenshots of the hold endpoint are attached to the PR.
+Date: 2026-11-16
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-21 (TASK-38)
+
+Prompt (summary of the conversation):
+Help me implement FLT-21: show a booking summary (flight, passengers, baggage,
+total) before payment, for a flight booking created by FLT-22 (hold). It
+depends on FLT-19 (passenger details and baggage fees).
+
+How the output was used:
+Used the generated GET /api/flight-bookings/:id/summary endpoint (JwtAuthGuard,
+only the booking's owner can read it; 404 otherwise, 400 for an invalid id).
+FlightBookingsService.getSummary loads the booking, its outbound and optional
+return flight with airline and airport details, and a pure helper
+buildBookingSummary builds the response: flights (one segment per leg),
+passengers with their baggage, extra bag count and fees, and pricing where
+total = seat fares + baggage fees (the same amount PAY-01 charges). It also
+returns holdExpiresAt and canPay (pending booking whose hold has not ended).
+Baggage fees come from the booking's baggageFees field, which FLT-19 will fill
+when it is connected to the hold endpoint.
+
+Verification:
+6 jest tests for buildBookingSummary pass; tsc --noEmit and oxlint show no
+errors in the changed files. Postman screenshots are attached to the PR.
 ================================================
