@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { Airline } from '../airlines/schemas/airline.schema';
+import { Airport } from '../airports/schemas/airport.schema';
 import { Flight, FlightStatus } from '../flights/schemas/flight.schema';
 import { HoldFlightBookingDto } from './dto/hold-flight-booking.dto';
 import {
@@ -13,6 +15,8 @@ import {
   FlightBookingStatus,
 } from './schemas/flight-booking.schema';
 import { PassengerType } from './schemas/passenger.schema';
+import { buildBookingSummary } from './utils/booking-summary';
+import type { SummaryFlight } from './utils/booking-summary';
 
 export const HOLD_DURATION_MS = 10 * 60 * 1000; // FLT-22: 10-minute hold
 const INFANT_FARE_RATIO = 0.1; // infants pay 10% (see Cabin.price comment)
@@ -23,7 +27,79 @@ export class FlightBookingsService {
     @InjectModel(Flight.name) private readonly flightModel: Model<Flight>,
     @InjectModel(FlightBooking.name)
     private readonly bookingModel: Model<FlightBooking>,
+    @InjectModel(Airport.name) private readonly airportModel: Model<Airport>,
+    @InjectModel(Airline.name) private readonly airlineModel: Model<Airline>,
   ) {}
+
+  /**
+   * FLT-21: booking summary shown before payment (flight, passengers, baggage,
+   * total). Only the owner of the booking can read it.
+   */
+  async getSummary(userId: string, bookingId: string) {
+    if (!Types.ObjectId.isValid(bookingId)) {
+      throw new BadRequestException('Invalid booking ID');
+    }
+    const booking = await this.bookingModel
+      .findOne({
+        _id: new Types.ObjectId(bookingId),
+        user: new Types.ObjectId(userId),
+      })
+      .lean();
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    const outbound = await this.loadSummaryFlight(booking.outboundFlight);
+    const inbound = booking.returnFlight
+      ? await this.loadSummaryFlight(booking.returnFlight)
+      : undefined;
+
+    return buildBookingSummary(
+      {
+        id: String(booking._id),
+        status: booking.status,
+        tripType: booking.tripType,
+        cabinClass: booking.cabinClass,
+        currency: booking.currency,
+        totalPrice: booking.totalPrice,
+        baggageFees: booking.baggageFees,
+        holdExpiresAt: booking.holdExpiresAt,
+        passengers: booking.passengers,
+      },
+      outbound,
+      inbound,
+    );
+  }
+
+  private async loadSummaryFlight(flightId: Types.ObjectId): Promise<SummaryFlight> {
+    const flight = await this.flightModel.findById(flightId).lean();
+    if (!flight) {
+      throw new NotFoundException('Flight of this booking no longer exists');
+    }
+    const [airline, departure, arrival] = await Promise.all([
+      this.airlineModel.findById(flight.airline).lean(),
+      this.airportModel.findById(flight.departureAirport).lean(),
+      this.airportModel.findById(flight.arrivalAirport).lean(),
+    ]);
+    if (!departure || !arrival) {
+      throw new NotFoundException('Airport of this booking no longer exists');
+    }
+    const toAirport = (a: Airport) => ({
+      iataCode: a.iataCode,
+      name: a.name,
+      city: a.city,
+      timezone: a.timezone,
+    });
+    return {
+      flightNumber: flight.flightNumber,
+      airlineName: airline?.name ?? '',
+      departureAirport: toAirport(departure),
+      arrivalAirport: toAirport(arrival),
+      departureTime: flight.departureTime,
+      arrivalTime: flight.arrivalTime,
+      durationMinutes: flight.durationMinutes,
+    };
+  }
 
   /**
    * FLT-22: reserve seats atomically and create a PENDING_PAYMENT booking
