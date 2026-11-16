@@ -21,6 +21,7 @@ describe('HotelsController', () => {
     blockRoomDates: jest.fn(),
     deactivateRoom: jest.fn(),
     deleteRoom: jest.fn(),
+    getRoomStatuses: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -202,5 +203,17 @@ describe('HotelsController', () => {
     await controller.deleteRoom('h1', 'r1', { user } as never);
 
     expect(service.deleteRoom).toHaveBeenCalledWith('h1', 'r1', user);
+  });
+
+  it('getRoomStatuses passes the hotel id, the dates and the authenticated user (HTL-08)', async () => {
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
+    const query = { startDate: '2026-12-01', endDate: '2026-12-31', page: 1 };
+    const page = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 };
+    service.getRoomStatuses.mockResolvedValue(page);
+
+    await expect(
+      controller.getRoomStatuses('h1', query, { user } as never),
+    ).resolves.toEqual(page);
+    expect(service.getRoomStatuses).toHaveBeenCalledWith('h1', query, user);
   });
 });
