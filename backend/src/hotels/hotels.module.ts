@@ -36,6 +36,7 @@ import { HotelsService } from './hotels.service';
       { name: City.name, schema: CitySchema },
       { name: Country.name, schema: CountrySchema },
       { name: ModeratorAssignment.name, schema: ModeratorAssignmentSchema },
+      { name: HotelBooking.name, schema: HotelBookingSchema },
     ]),
     AuthModule, // JwtAuthGuard
     UploadsModule, // UploadsService.isStoredUrl for hotel photos (GEN-08)
