@@ -17,7 +17,7 @@ import {
 } from '../hotel-bookings/schemas/hotel-booking.schema';
 
 // Statuses in which a booking is still waiting for payment (PAY-02 only applies here)
-const PAYABLE_FLIGHT = [FlightBookingStatus.HELD, FlightBookingStatus.PENDING_PAYMENT];
+const PAYABLE_FLIGHT = [FlightBookingStatus.PENDING_PAYMENT];
 const PAYABLE_HOTEL = [HotelBookingStatus.PENDING_PAYMENT];
 
 @Injectable()
@@ -104,37 +104,42 @@ export class PoliciesService {
 
   // POST /api/bookings/:type/:id/accept-policies
   async acceptPolicies(type: BookingType, id: string, userId: string) {
-    const booking = await this.loadOwned(type, id, userId);
-
     const payable = type === BookingType.FLIGHT ? PAYABLE_FLIGHT : PAYABLE_HOTEL;
-    if (!(payable as string[]).includes(booking.status)) {
-      throw new BadRequestException('This booking is not awaiting payment');
-    }
-    if (booking.holdExpiresAt && new Date(booking.holdExpiresAt) < new Date()) {
-      throw new BadRequestException('The hold on this booking has expired');
-    }
-    // Already accepted: keep the original timestamp
+    const validate = (booking: any) => {
+      if (!(payable as string[]).includes(booking.status)) {
+        throw new BadRequestException('This booking is not awaiting payment');
+      }
+      if (!booking.holdExpiresAt || !(new Date(booking.holdExpiresAt).getTime() > Date.now())) {
+        throw new BadRequestException('The hold on this booking has expired or is missing');
+      }
+    };
+
+    const booking = await this.loadOwned(type, id, userId);
+    validate(booking);
     if (booking.policiesAcceptedAt) {
       return { bookingId: id, accepted: true, acceptedAt: booking.policiesAcceptedAt };
     }
 
-    const acceptedAt = new Date();
-    const result = await this.modelFor(type).updateOne(
+    const now = new Date();
+    await this.modelFor(type).updateOne(
       {
         _id: id,
         user: userId,
         status: { $in: payable },
-        policiesAcceptedAt: { $exists: false },
+        holdExpiresAt: { $gt: now },
+        $expr: { $gt: ['$holdExpiresAt', '$$NOW'] },
+        policiesAcceptedAt: null,
       },
-      { $set: { policiesAcceptedAt: acceptedAt } },
+      { $set: { policiesAcceptedAt: now } },
     );
 
-    if (result.modifiedCount === 0) {
-      // someone (e.g. a double click) accepted a moment ago: return the stored value
-      const fresh: any = await this.modelFor(type).findById(id).select('policiesAcceptedAt').lean();
-      return { bookingId: id, accepted: true, acceptedAt: fresh?.policiesAcceptedAt ?? acceptedAt };
+    // Always read the persisted value; a failed match may mean expiry or a concurrent acceptance.
+    const fresh = await this.loadOwned(type, id, userId);
+    validate(fresh);
+    if (!fresh.policiesAcceptedAt) {
+      throw new BadRequestException('Policy acceptance was not saved');
     }
-    return { bookingId: id, accepted: true, acceptedAt };
+    return { bookingId: id, accepted: true, acceptedAt: fresh.policiesAcceptedAt };
   }
 
   /**

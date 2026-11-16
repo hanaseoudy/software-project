@@ -5,11 +5,10 @@ import {
   ParseEnumPipe,
   Post,
   Req,
-  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { JwtAuthGuard, type AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
 import { BookingType } from '../payments/enums/payment.enums';
 import { PoliciesService } from './policies.service';
 
@@ -19,23 +18,15 @@ import { PoliciesService } from './policies.service';
 export class PoliciesController {
   constructor(private readonly policiesService: PoliciesService) {}
 
-  // TODO (when the auth module exists): add the JWT auth guard + registered-user role guard
-  // to this controller. Until then, requests without req.user get 401.
-  private getUserId(req: any): string {
-  const id = req.user?.sub ?? req.user?.userId ?? req.user?.id ?? req.user?._id;
-    if (!id) throw new UnauthorizedException('Authentication required');
-    return String(id);
-  }
-
   @Get(':type/:id/policies')
   @ApiOperation({ summary: 'PAY-02: show the provider policies for a booking' })
   @ApiParam({ name: 'type', enum: BookingType })
   getPolicies(
     @Param('type', new ParseEnumPipe(BookingType)) type: BookingType,
     @Param('id') id: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.policiesService.getPolicies(type, id, this.getUserId(req));
+    return this.policiesService.getPolicies(type, id, req.user!.sub);
   }
 
   @Post(':type/:id/accept-policies')
@@ -44,8 +35,8 @@ export class PoliciesController {
   acceptPolicies(
     @Param('type', new ParseEnumPipe(BookingType)) type: BookingType,
     @Param('id') id: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.policiesService.acceptPolicies(type, id, this.getUserId(req));
+    return this.policiesService.acceptPolicies(type, id, req.user!.sub);
   }
 }
