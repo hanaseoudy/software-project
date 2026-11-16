@@ -130,3 +130,75 @@ Testing used a disposable local MongoDB replica set. The shared MongoDB Atlas da
 ITN-07 was committed as 95a42aa and pushed to feature/ITN-07-day-deletion-recalculation for pull request review.
 
 ================================================
+
+Date: 2026-11-17
+Student: Seif Allam
+Tool: ChatGPT (OpenAI) and OpenAI Codex
+Related Requirement: ITN-10, ITN-05
+
+Prompt (summary of the conversation):
+Help me implement ITN-10 (Itinerary Activity Management) in our NestJS and Mongoose backend, including adding, editing and deleting activities belonging to itinerary days.
+
+Review the existing Activity schema, implement JWT authentication and ownership checks, validate activity names, descriptions, optional times, costs and supported currencies, and document the API endpoints through Swagger.
+
+Ensure PATCH requests support partial updates and clearing optional values without modifying omitted fields. Investigate compatibility with ITN-07 day deletion and MongoDB concurrency handling.
+
+How the output was used:
+Used ChatGPT to review the proposed architecture, validation rules, Git strategy and concurrency considerations.
+
+Used Codex to create the activity controller, service, DTOs and tests in a dedicated ITN-10 worktree, independent of unmerged ITN-07 code.
+
+Implemented:
+
+- POST /api/itineraries/:id/days/:dayId/activities
+- PATCH /api/activities/:id
+- DELETE /api/activities/:id
+
+Added ownership validation, field-level error handling, time and monetary validation, optional-field clearing, clean response DTOs, Swagger documentation and coordinated MongoDB transactions.
+
+Verification:
+Build and lint passed, with five existing lint warnings.
+41 focused unit tests passed.
+45 isolated API integration tests passed.
+30 ITN-07 concurrency compatibility trials passed.
+Broader unit suite: 609 passed, with three pre-existing BlogService failures.
+Shared MongoDB Atlas was not modified.
+
+================================================
+
+Date: 2026-11-17
+Student: Seif Allam
+Tool: ChatGPT (OpenAI) and OpenAI Codex
+Related Requirement: ITN-16, ITN-05
+
+Prompt (summary of the conversation):
+Help me implement ITN-16 (Intercity Transport-Cost Entries) in our NestJS and Mongoose backend.
+
+Implement endpoints for creating, editing and deleting transport-cost entries with transport mode, origin city, destination city, amount, currency and associated itinerary day.
+
+Validate supported city identifiers and currencies against the seeded reference data, enforce JWT authentication and itinerary ownership, and support moving transport costs between days of the same itinerary.
+
+Investigate MongoDB transaction safety, concurrent deletion of itinerary days, and compatibility with ITN-07 without importing unmerged feature code.
+
+How the output was used:
+Used ChatGPT to review the implementation plan, validation rules, day-reassignment policy and Git isolation strategy.
+
+Used Codex to implement the transport-cost controller, service, DTOs, Swagger documentation and automated tests in a separate ITN-16 worktree.
+
+Implemented:
+
+- POST /api/itineraries/:id/transport-costs
+- PATCH /api/transport-costs/:id
+- DELETE /api/transport-costs/:id
+
+Added authorization, field-level validation, supported transport-mode and currency checks, same-itinerary day reassignment, clean response DTOs and bounded MongoDB transaction retries.
+
+Verification:
+Build and lint passed, with five existing lint warnings.
+52 focused unit tests passed.
+51 isolated integration tests passed.
+50 ITN-07 concurrency compatibility trials passed.
+Broader unit suite: 621 passed, with three pre-existing BlogService failures.
+Shared MongoDB Atlas was not modified.
+
+================================================
