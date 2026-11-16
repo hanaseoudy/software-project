@@ -1,9 +1,25 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Min } from 'class-validator';
+import { IsOptional, ValidateBy } from 'class-validator';
 
 // GEN-05: every list uses a fixed page size of 10
 export const PAGE_SIZE = 10;
+
+// GEN-02: one clear field-level message per invalid page value.
+// Above MAX_SAFE_INTEGER numbers are no longer exact integers and the database skip would overflow.
+const IsPageNumber = () =>
+  ValidateBy({
+    name: 'isPageNumber',
+    validator: {
+      validate: (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 1,
+      defaultMessage: (args) => {
+        const value = args?.value;
+        if (!Number.isInteger(value)) return 'Page must be a whole number';
+        if ((value as number) < 1) return 'Page must be at least 1';
+        return 'Page is too large';
+      },
+    },
+  });
 
 export class PaginationQueryDto {
   @ApiPropertyOptional({
@@ -13,8 +29,7 @@ export class PaginationQueryDto {
   })
   @IsOptional()
   @Type(() => Number)
-  @IsInt()
-  @Min(1)
+  @IsPageNumber()
   page?: number = 1;
 }
 
