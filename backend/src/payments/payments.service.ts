@@ -54,6 +54,18 @@ interface PayableBooking {
   holdExpiresAt?: Date;
 }
 
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+/**
+ * Amount charged for a booking. Same calculation as the FLT-21 booking summary
+ * (pricing.total = seat fares + FLT-19 baggage fees, each rounded to cents), so the
+ * user is charged exactly the total shown before payment. Hotel bookings have no
+ * baggage fees, so their amount is the HTL-16 reservation total.
+ */
+export function bookingAmount(totalPrice: number, baggageFees = 0): number {
+  return round2(round2(totalPrice) + round2(baggageFees));
+}
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -284,8 +296,8 @@ export class PaymentsService {
         bookingType,
         bookingId: booking._id,
         bookingModel: this.bookingModelName(bookingType),
-        // FLT-21: the total includes baggage; hotel bookings have no baggage.
-        amount: Math.round((booking.totalPrice + (booking.baggageFees ?? 0)) * 100) / 100,
+        // FLT-21: charge exactly the summary total; hotel bookings have no baggage.
+        amount: bookingAmount(booking.totalPrice, booking.baggageFees),
         currency: PLATFORM_CURRENCY,
         status: PaymentStatus.PENDING,
         expiresAt: booking.holdExpiresAt,

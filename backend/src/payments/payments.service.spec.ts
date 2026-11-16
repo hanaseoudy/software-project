@@ -7,7 +7,8 @@ import {
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { BookingType, PaymentStatus } from './enums/payment.enums';
-import { PaymentsService } from './payments.service';
+import { buildBookingSummary } from '../flight-bookings/utils/booking-summary';
+import { bookingAmount, PaymentsService } from './payments.service';
 
 const userId = new Types.ObjectId().toString();
 const bookingId = new Types.ObjectId();
@@ -384,6 +385,53 @@ describe('PaymentsService (PAY-01)', () => {
 
       expect(await service.cancelExpiredPayments()).toBe(0);
       expect(stripe.paymentIntents.cancel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('bookingAmount (FLT-21 total)', () => {
+    const flight = {
+      flightNumber: 'MS777',
+      airlineName: 'EgyptAir',
+      departureAirport: { iataCode: 'CAI', name: 'Cairo', city: 'Cairo', timezone: 'Africa/Cairo' },
+      arrivalAirport: { iataCode: 'DXB', name: 'Dubai', city: 'Dubai', timezone: 'Asia/Dubai' },
+      departureTime: new Date('2026-12-05T08:00:00Z'),
+      arrivalTime: new Date('2026-12-05T11:00:00Z'),
+      durationMinutes: 180,
+    };
+    const summaryTotal = (totalPrice: number, baggageFees?: number) =>
+      buildBookingSummary(
+        {
+          id: 'b1',
+          status: 'PENDING_PAYMENT',
+          tripType: 'ONE_WAY',
+          cabinClass: 'ECONOMY',
+          currency: 'USD',
+          totalPrice,
+          baggageFees,
+          passengers: [],
+        },
+        flight,
+        undefined,
+      ).pricing.total;
+
+    it.each([
+      [100.5, 20],
+      [199.99, 0],
+      [0.105, 0.105],
+      [333.335, 49.995],
+      [120, undefined],
+    ])('charges exactly the FLT-21 summary total (fares %p + baggage %p)', (fares, bags) => {
+      expect(bookingAmount(fares, bags)).toBe(summaryTotal(fares, bags));
+    });
+
+    it('creates the PaymentIntent for the FLT-21 summary total including baggage fees', async () => {
+      const { service, stripe, paymentModel } = setup();
+      await service.create(userId, dto);
+      const expected = summaryTotal(100.5, 20);
+      expect(paymentModel.create).toHaveBeenCalledWith(expect.objectContaining({ amount: expected }));
+      expect(stripe.paymentIntents.create).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: Math.round(expected * 100) }),
+      );
     });
   });
 });

@@ -1230,4 +1230,8 @@ payment is blocked until the policies are accepted (project description 6.4). Th
 calculated exactly like the FLT-21 summary total (seat fares + FLT-19 baggage fees, each rounded to
 cents), and a unit test checks it against FLT-21's buildBookingSummary(). I reviewed the code.
 Verification performed:
-VERIFICATION_PLACEHOLDER
+Backend build and lint passed; 34 payment unit tests passed (including 6 that compare the charged
+amount with FLT-21's buildBookingSummary total); full backend suite 603/606 (the 3 failures are in
+blog.service.spec.ts and also fail on develop without these changes). Started the backend: the 4 payment
+routes from the project description are mapped, POST /api/payments returns 401 without login, and the
+webhook returns 503 when no Stripe test keys are configured.

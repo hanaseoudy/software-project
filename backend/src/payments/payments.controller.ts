@@ -47,7 +47,7 @@ export class PaymentsController {
   @ApiOperation({
     summary: 'Start paying for a Pending Payment booking (PAY-01)',
     description:
-      'Registered user only, own booking only. The booking must be Pending Payment, within its hold (FLT-22 / HTL-18), with the provider policies accepted (PAY-02). Returns a Stripe clientSecret for Stripe Elements; the booking is confirmed only by the Stripe webhook.',
+      'Registered user only, own booking only. The booking must be Pending Payment, within its hold (FLT-22 / HTL-18), with the provider policies accepted (PAY-02). The amount is taken from the booking, never from the request: for flights it is the FLT-21 summary total (seat fares + baggage fees), for hotels the reservation total; always in USD (PAY-04). Returns a Stripe clientSecret for Stripe Elements; the booking is confirmed only by the Stripe webhook.',
   })
   @ApiCreatedResponse({ type: PaymentSessionResponseDto })
   @ApiBadRequestResponse({ description: 'Validation failed' })
