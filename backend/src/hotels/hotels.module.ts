@@ -21,6 +21,8 @@ import {
 } from '../hotel-bookings/schemas/hotel-booking.schema';
 import { AuthModule } from '../auth/auth.module';
 import { UploadsModule } from '../uploads/uploads.module';
+import { HotelSearchController } from './hotel-search.controller';
+import { HotelSearchService } from './hotel-search.service';
 import { HotelsController } from './hotels.controller';
 import { HotelsService } from './hotels.service';
 
@@ -30,6 +32,7 @@ import { HotelsService } from './hotels.service';
       { name: Hotel.name, schema: HotelSchema },
       { name: Room.name, schema: RoomSchema },
       { name: RoomAvailability.name, schema: RoomAvailabilitySchema },
+      { name: HotelBooking.name, schema: HotelBookingSchema }, // HTL-06: reservation checks
       { name: City.name, schema: CitySchema },
       { name: Country.name, schema: CountrySchema },
       { name: ModeratorAssignment.name, schema: ModeratorAssignmentSchema },
@@ -38,8 +41,9 @@ import { HotelsService } from './hotels.service';
     AuthModule, // JwtAuthGuard
     UploadsModule, // UploadsService.isStoredUrl for hotel photos (GEN-08)
   ],
-  controllers: [HotelsController],
-  providers: [HotelsService],
+  // HotelSearchController first: "/hotels/search" must not be matched by "/hotels/:id" (HTL-02)
+  controllers: [HotelSearchController, HotelsController],
+  providers: [HotelsService, HotelSearchService],
   exports: [MongooseModule, HotelsService],
 })
 export class HotelsModule {}

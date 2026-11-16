@@ -18,6 +18,8 @@ import { Hotel } from './schemas/hotel.schema';
 import { Room } from './schemas/room.schema';
 import { RoomAvailability } from './schemas/room-availability.schema';
 
+const referenceResult = (value: unknown) => ({ select: () => ({ lean: async () => value }) });
+
 const execResult = <T>(value: T) => ({ exec: () => Promise.resolve(value) });
 
 const makeHotelDoc = () => {
@@ -51,14 +53,19 @@ describe('HotelsService', () => {
     exists: jest.fn(),
     create: jest.fn(),
     findOne: jest.fn(),
+    deleteOne: jest.fn(),
   };
-  const availabilityModel = { findOne: jest.fn(), create: jest.fn() };
-  const cityModel = { exists: jest.fn() };
-  const countryModel = { exists: jest.fn() };
-  const assignmentModel = { exists: jest.fn() };
+  const availabilityModel = {
+    findOne: jest.fn(),
+    create: jest.fn(),
+    deleteMany: jest.fn(),
+  };
   const bookingModel = { exists: jest.fn() };
+  const cityModel = { exists: jest.fn(), findById: jest.fn() };
+  const countryModel = { exists: jest.fn(), findById: jest.fn() };
+  const assignmentModel = { exists: jest.fn() };
   // GEN-08: only /api/uploads/hotel/<uuid>.jpg|png links count as uploaded photos
-  const uploads = { isStoredUrl: jest.fn() };
+  const uploads = { storedFileExists: jest.fn() };
 
   const moderator = {
     sub: new Types.ObjectId().toString(),
@@ -74,7 +81,9 @@ describe('HotelsService', () => {
 
   beforeEach(async () => {
     jest.resetAllMocks();
-    uploads.isStoredUrl.mockImplementation((_category: string, url: string) =>
+    cityModel.findById.mockReturnValue(referenceResult({ countryCode: 'EG' }));
+    countryModel.findById.mockReturnValue(referenceResult({ code: 'EG' }));
+    uploads.storedFileExists.mockImplementation((_category: string, url: string) =>
       url.startsWith('/api/uploads/hotel/'),
     );
     const moduleRef = await Test.createTestingModule({
@@ -86,13 +95,13 @@ describe('HotelsService', () => {
           provide: getModelToken(RoomAvailability.name),
           useValue: availabilityModel,
         },
+        { provide: getModelToken(HotelBooking.name), useValue: bookingModel },
         { provide: getModelToken(City.name), useValue: cityModel },
         { provide: getModelToken(Country.name), useValue: countryModel },
         {
           provide: getModelToken(ModeratorAssignment.name),
           useValue: assignmentModel,
         },
-        { provide: getModelToken(HotelBooking.name), useValue: bookingModel },
         { provide: UploadsService, useValue: uploads },
       ],
     }).compile();
@@ -101,8 +110,8 @@ describe('HotelsService', () => {
 
   describe('create', () => {
     it('creates a hotel when city and country exist', async () => {
-      cityModel.exists.mockResolvedValue({ _id: 'c' });
-      countryModel.exists.mockResolvedValue({ _id: 'k' });
+      cityModel.findById.mockReturnValue(referenceResult({ countryCode: 'EG' }));
+      countryModel.findById.mockReturnValue(referenceResult({ code: 'EG' }));
       hotelModel.create.mockResolvedValue(makeHotelDoc());
 
       const result = await service.create(createDto);
@@ -115,8 +124,8 @@ describe('HotelsService', () => {
     });
 
     it('rejects an unknown city with a field-level error', async () => {
-      cityModel.exists.mockResolvedValue(null);
-      countryModel.exists.mockResolvedValue({ _id: 'k' });
+      cityModel.findById.mockReturnValue(referenceResult(null));
+      countryModel.findById.mockReturnValue(referenceResult({ code: 'EG' }));
 
       await expect(service.create(createDto)).rejects.toMatchObject({
         response: { errors: { city: ['City does not exist'] } },
@@ -125,8 +134,8 @@ describe('HotelsService', () => {
     });
 
     it('rejects photos that are outside links', async () => {
-      cityModel.exists.mockResolvedValue({ _id: 'c' });
-      countryModel.exists.mockResolvedValue({ _id: 'k' });
+      cityModel.findById.mockReturnValue(referenceResult({ countryCode: 'EG' }));
+      countryModel.findById.mockReturnValue(referenceResult({ code: 'EG' }));
 
       const error = await service
         .create({ ...createDto, images: ['https://example.com/a.jpg'] })
@@ -140,8 +149,8 @@ describe('HotelsService', () => {
     });
 
     it('accepts photos uploaded through the platform', async () => {
-      cityModel.exists.mockResolvedValue({ _id: 'c' });
-      countryModel.exists.mockResolvedValue({ _id: 'k' });
+      cityModel.findById.mockReturnValue(referenceResult({ countryCode: 'EG' }));
+      countryModel.findById.mockReturnValue(referenceResult({ code: 'EG' }));
       hotelModel.create.mockResolvedValue(makeHotelDoc());
 
       await service.create({
@@ -153,8 +162,8 @@ describe('HotelsService', () => {
     });
 
     it('rejects an unknown country', async () => {
-      cityModel.exists.mockResolvedValue({ _id: 'c' });
-      countryModel.exists.mockResolvedValue(null);
+      cityModel.findById.mockReturnValue(referenceResult({ countryCode: 'EG' }));
+      countryModel.findById.mockReturnValue(referenceResult(null));
 
       await expect(service.create(createDto)).rejects.toBeInstanceOf(
         BadRequestException,
@@ -263,7 +272,7 @@ describe('HotelsService', () => {
       const doc = makeHotelDoc();
       hotelModel.findById.mockReturnValue(execResult(doc));
       assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
-      cityModel.exists.mockResolvedValue(null);
+      cityModel.findById.mockReturnValue(referenceResult(null));
 
       await expect(
         service.update(
@@ -772,6 +781,8 @@ describe('HotelsService', () => {
     );
   });
 
+  // ---------- HTL-05 (from feature/HTL-05) ----------
+
   describe('updateRoom', () => {
     const idOf = () => new Types.ObjectId().toString();
     const setup = () => {
@@ -1035,6 +1046,252 @@ describe('HotelsService', () => {
       expect(found.deleteOne).toHaveBeenCalled();
       expect(result.startDate).toBe('2026-12-01');
       expect(result.endDate).toBe('2026-12-31');
+    });
+  });
+
+  // ---------- HTL-06 (from develop) ----------
+
+  describe('HTL-06 room blocking, deactivation and deletion', () => {
+    const idOf = () => new Types.ObjectId().toString();
+    const setup = (roomOverrides: Record<string, unknown> = {}) => {
+      const hotel = makeHotelDoc();
+      const room: Record<string, unknown> = {
+        _id: new Types.ObjectId(),
+        hotel: hotel._id,
+        roomNumber: 'A101',
+        type: 'Double',
+        beds: 2,
+        maxOccupancy: 3,
+        pricePerNight: 100,
+        currency: 'USD',
+        isActive: true,
+        ...roomOverrides,
+      };
+      room.save = jest.fn().mockResolvedValue(room);
+      hotelModel.findById.mockReturnValue(execResult(hotel));
+      assignmentModel.exists.mockReturnValue(execResult({ _id: 'a' }));
+      roomModel.findOne.mockReturnValue(execResult(room));
+      bookingModel.exists.mockReturnValue(execResult(null));
+      availabilityModel.findOne.mockReturnValue(execResult(null));
+      availabilityModel.create.mockImplementation(
+        (data: Record<string, unknown>) =>
+          Promise.resolve({ _id: new Types.ObjectId(), ...data }),
+      );
+      availabilityModel.deleteMany.mockReturnValue(execResult({}));
+      roomModel.deleteOne.mockReturnValue(execResult({}));
+      return { hotel, room };
+    };
+
+    const sharedGuards = (call: () => Promise<unknown>) => {
+      it('returns 404 when the hotel does not exist', async () => {
+        setup();
+        hotelModel.findById.mockReturnValue(execResult(null));
+        await expect(call()).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+      it('returns 403 when the moderator is not assigned to the hotel', async () => {
+        setup();
+        assignmentModel.exists.mockReturnValue(execResult(null));
+        await expect(call()).rejects.toBeInstanceOf(ForbiddenException);
+        expect(bookingModel.exists).not.toHaveBeenCalled();
+      });
+
+      it('returns 404 when the room is not in this hotel', async () => {
+        setup();
+        roomModel.findOne.mockReturnValue(execResult(null));
+        await expect(call()).rejects.toBeInstanceOf(NotFoundException);
+      });
+    };
+
+    describe('blockRoomDates', () => {
+      const dto = {
+        startDate: '2026-12-10',
+        endDate: '2026-12-15',
+        reason: 'Maintenance',
+      };
+      const call = (body: { startDate: string; endDate: string; reason?: string } = dto) =>
+        service.blockRoomDates(idOf(), idOf(), body, moderator);
+
+      sharedGuards(() => call());
+
+      it('returns 404 for a malformed room id', async () => {
+        setup();
+        await expect(
+          service.blockRoomDates(idOf(), 'not-an-id', dto, moderator),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+      it('creates a blocked range and returns plain dates', async () => {
+        const { hotel, room } = setup();
+
+        const result = await call();
+
+        expect(availabilityModel.create).toHaveBeenCalledWith({
+          room: room._id,
+          hotel: hotel._id,
+          type: 'blocked',
+          startDate: new Date('2026-12-10T00:00:00.000Z'),
+          endDate: new Date('2026-12-15T00:00:00.000Z'),
+          reason: 'Maintenance',
+        });
+        expect(result).toEqual(
+          expect.objectContaining({
+            roomId: String(room._id),
+            hotelId: String(hotel._id),
+            type: 'blocked',
+            startDate: '2026-12-10',
+            endDate: '2026-12-15',
+          }),
+        );
+      });
+
+      it('saves an empty reason when none is given', async () => {
+        setup();
+        await call({ startDate: '2026-12-10', endDate: '2026-12-10' });
+        expect(availabilityModel.create).toHaveBeenCalledWith(
+          expect.objectContaining({ reason: '' }),
+        );
+      });
+
+      it('looks for Confirmed or Pending Payment stays that overlap the blocked days', async () => {
+        const { room } = setup();
+        await call();
+        expect(bookingModel.exists).toHaveBeenCalledWith({
+          'rooms.room': room._id,
+          status: { $in: ['CONFIRMED', 'PENDING_PAYMENT'] },
+          checkIn: { $lte: new Date('2026-12-15T00:00:00.000Z') },
+          checkOut: { $gt: new Date('2026-12-10T00:00:00.000Z') },
+        });
+      });
+
+      it('returns 409 and does not save when a reservation overlaps', async () => {
+        setup();
+        bookingModel.exists.mockReturnValue(execResult({ _id: 'booking' }));
+
+        const error = await call().catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(ConflictException);
+        expect((error as ConflictException).message).toContain('reservation');
+        expect(availabilityModel.create).not.toHaveBeenCalled();
+      });
+
+      it('rejects an end date before the start date', async () => {
+        setup();
+        const error = await call({
+          startDate: '2026-12-15',
+          endDate: '2026-12-10',
+        }).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(
+          (
+            (error as BadRequestException).getResponse() as {
+              errors: Record<string, string[]>;
+            }
+          ).errors,
+        ).toHaveProperty('endDate');
+        expect(bookingModel.exists).not.toHaveBeenCalled();
+        expect(availabilityModel.create).not.toHaveBeenCalled();
+      });
+
+      it('rejects a date that is not a real day', async () => {
+        setup();
+        const error = await call({
+          startDate: '2026-02-30',
+          endDate: '2026-03-02',
+        }).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(availabilityModel.create).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('deactivateRoom', () => {
+      const call = () => service.deactivateRoom(idOf(), idOf(), moderator);
+
+      sharedGuards(call);
+
+      it('deactivates the room when nothing is reserved', async () => {
+        const { room } = setup();
+
+        const result = await call();
+
+        expect(room.isActive).toBe(false);
+        expect(room.save).toHaveBeenCalled();
+        expect(result).toEqual(
+          expect.objectContaining({ id: String(room._id), isActive: false }),
+        );
+      });
+
+      it('looks for Confirmed or Pending Payment stays that have not ended yet', async () => {
+        const { room } = setup();
+        await call();
+        const filter = bookingModel.exists.mock.calls[0][0] as {
+          'rooms.room': unknown;
+          status: unknown;
+          checkOut: { $gt: Date };
+        };
+        expect(filter['rooms.room']).toBe(room._id);
+        expect(filter.status).toEqual({ $in: ['CONFIRMED', 'PENDING_PAYMENT'] });
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        expect(filter.checkOut.$gt.getTime()).toBe(today.getTime());
+      });
+
+      it('returns 409 and keeps the room active when a reservation has not ended', async () => {
+        const { room } = setup();
+        bookingModel.exists.mockReturnValue(execResult({ _id: 'booking' }));
+
+        await expect(call()).rejects.toBeInstanceOf(ConflictException);
+
+        expect(room.isActive).toBe(true);
+        expect(room.save).not.toHaveBeenCalled();
+      });
+
+      it('returns the room unchanged when it is already inactive', async () => {
+        const { room } = setup({ isActive: false });
+
+        const result = await call();
+
+        expect(result.isActive).toBe(false);
+        expect(bookingModel.exists).not.toHaveBeenCalled();
+        expect(room.save).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('deleteRoom', () => {
+      const call = () => service.deleteRoom(idOf(), idOf(), moderator);
+
+      sharedGuards(call);
+
+      it('returns 404 for a malformed room id', async () => {
+        setup();
+        await expect(
+          service.deleteRoom(idOf(), 'not-an-id', moderator),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+      it('deletes a room that was never reserved, with its availability ranges', async () => {
+        const { room } = setup();
+
+        await expect(call()).resolves.toBeUndefined();
+
+        expect(bookingModel.exists).toHaveBeenCalledWith({
+          'rooms.room': room._id,
+        });
+        expect(availabilityModel.deleteMany).toHaveBeenCalledWith({
+          room: room._id,
+        });
+        expect(roomModel.deleteOne).toHaveBeenCalledWith({ _id: room._id });
+      });
+
+      it('returns 409 and deletes nothing when the room has been reserved before', async () => {
+        setup();
+        bookingModel.exists.mockReturnValue(execResult({ _id: 'booking' }));
+
+        await expect(call()).rejects.toBeInstanceOf(ConflictException);
+
+        expect(availabilityModel.deleteMany).not.toHaveBeenCalled();
+        expect(roomModel.deleteOne).not.toHaveBeenCalled();
+      });
     });
   });
 });

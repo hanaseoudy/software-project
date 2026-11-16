@@ -18,6 +18,9 @@ describe('HotelsController', () => {
     updateRoom: jest.fn(),
     updateRoomBookableRange: jest.fn(),
     removeRoomBookableRange: jest.fn(),
+    blockRoomDates: jest.fn(),
+    deactivateRoom: jest.fn(),
+    deleteRoom: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -163,5 +166,41 @@ describe('HotelsController', () => {
       'a1',
       user,
     );
+  });
+
+  it('blockRoomDates passes the ids, body and the authenticated user', async () => {
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
+    const body = {
+      startDate: '2026-12-10',
+      endDate: '2026-12-15',
+      reason: 'Maintenance',
+    };
+    service.blockRoomDates.mockResolvedValue({ id: 'b1' });
+
+    await expect(
+      controller.blockRoomDates('h1', 'r1', body, { user } as never),
+    ).resolves.toEqual({ id: 'b1' });
+
+    expect(service.blockRoomDates).toHaveBeenCalledWith('h1', 'r1', body, user);
+  });
+
+  it('deactivateRoom passes the ids and the authenticated user', async () => {
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
+    service.deactivateRoom.mockResolvedValue({ id: 'r1', isActive: false });
+
+    await expect(
+      controller.deactivateRoom('h1', 'r1', { user } as never),
+    ).resolves.toEqual({ id: 'r1', isActive: false });
+
+    expect(service.deactivateRoom).toHaveBeenCalledWith('h1', 'r1', user);
+  });
+
+  it('deleteRoom passes the ids and the authenticated user', async () => {
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
+    service.deleteRoom.mockResolvedValue(undefined);
+
+    await controller.deleteRoom('h1', 'r1', { user } as never);
+
+    expect(service.deleteRoom).toHaveBeenCalledWith('h1', 'r1', user);
   });
 });

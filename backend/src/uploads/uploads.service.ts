@@ -28,7 +28,7 @@ export const MAX_IMAGE_PIXELS = 25_000_000;
 
 @Injectable()
 export class UploadsService {
-  private readonly root = process.env.UPLOADS_DIR ?? path.join(process.cwd(), 'uploads');
+  private readonly root = path.resolve(process.env.UPLOADS_DIR ?? 'uploads');
 
   /** Quick check of the first bytes of the file. */
   private detectType(buffer: Buffer): 'png' | 'jpg' | null {
@@ -152,6 +152,27 @@ export class UploadsService {
     const m = URL_PATTERN.exec(url);
     return !!m && m[1] === category;
   }
+
+
+async storedFileExists(
+  category: ImageCategory,
+  url: string,
+): Promise<boolean> {
+  const match = URL_PATTERN.exec(url);
+
+  if (!match || match[1] !== category) {
+    return false;
+  }
+
+  const filePath = path.join(this.root, category, match[2]);
+
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
   async deleteByUrl(url: string): Promise<void> {
     const match = URL_PATTERN.exec(url);
