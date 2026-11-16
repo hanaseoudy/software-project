@@ -46,6 +46,12 @@ import {
   RoomAvailabilityDocument,
 } from './schemas/room-availability.schema';
 
+/** HTL-06: Confirmed and Pending Payment reservations stop a room from being blocked or deactivated. */
+const ACTIVE_RESERVATION_STATUSES = [
+  HotelBookingStatus.CONFIRMED,
+  HotelBookingStatus.PENDING_PAYMENT,
+];
+
 @Injectable()
 export class HotelsService {
   constructor(
@@ -387,7 +393,7 @@ export class HotelsService {
 
   /**
    * HTL-05 (contract: PATCH /hotels/:id/rooms/:roomId/availability): change the dates
-   * of a bookable range. Days taken out of the range must not have a confirmed booking.
+   * of a bookable range. Days taken out of the range must not have a Confirmed or Pending Payment reservation.
    */
   async updateRoomBookableRange(
     hotelId: string,
@@ -474,9 +480,9 @@ export class HotelsService {
     }
     if (removed.length > 0) {
       // A booking stays until its check-out day (not included).
-      const confirmed = await this.bookingModel
+      const reserved = await this.bookingModel
         .exists({
-          status: HotelBookingStatus.CONFIRMED,
+          status: { $in: ACTIVE_RESERVATION_STATUSES },
           'rooms.room': room._id,
           $or: removed.map((part) => ({
             checkIn: { $lt: new Date(part.to.getTime() + day) },
@@ -484,9 +490,9 @@ export class HotelsService {
           })),
         })
         .exec();
-      if (confirmed) {
+      if (reserved) {
         throw new ConflictException(
-          'These dates cannot be removed because the room has a confirmed reservation in them',
+          'These dates cannot be removed because the room has an active reservation (confirmed or pending payment) in them',
         );
       }
     }
@@ -498,8 +504,8 @@ export class HotelsService {
   }
 
   /**
-   * HTL-05: remove a bookable range. Not allowed while a confirmed booking
-   * for this room falls inside the range.
+   * HTL-05: remove a bookable range. Not allowed while a Confirmed or Pending Payment
+   * reservation for this room falls inside the range.
    */
   async removeRoomBookableRange(
     hotelId: string,
@@ -527,17 +533,17 @@ export class HotelsService {
 
     // The range includes its last day; a booking stays until its check-out day (not included).
     const lastNight = new Date(range.endDate.getTime() + 24 * 60 * 60 * 1000);
-    const confirmed = await this.bookingModel
+    const reserved = await this.bookingModel
       .exists({
-        status: HotelBookingStatus.CONFIRMED,
+        status: { $in: ACTIVE_RESERVATION_STATUSES },
         'rooms.room': room._id,
         checkIn: { $lt: lastNight },
         checkOut: { $gt: range.startDate },
       })
       .exec();
-    if (confirmed) {
+    if (reserved) {
       throw new ConflictException(
-        'This range cannot be removed because the room has a confirmed reservation in these dates',
+        'This range cannot be removed because the room has an active reservation (confirmed or pending payment) in these dates',
       );
     }
 

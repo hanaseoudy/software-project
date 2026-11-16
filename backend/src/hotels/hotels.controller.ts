@@ -277,7 +277,7 @@ export class HotelsController {
   @ApiOperation({
     summary: 'Remove a bookable date range from a room (HTL-05)',
     description:
-      'Extra route (not in the API contract): the contract only has PATCH for availability, which changes dates, and a PATCH cannot remove a whole range cleanly. DELETE removes one bookable range by its id. Hotel moderator only, and only for the hotel they are assigned to. Not allowed while the room has a confirmed reservation inside the range.',
+      'Extra route (not in the API contract): the contract only has PATCH for availability, which changes dates, and a PATCH cannot remove a whole range cleanly. DELETE removes one bookable range by its id. Hotel moderator only, and only for the hotel they are assigned to. Not allowed while the room has a Confirmed or Pending Payment reservation inside the range.',
   })
   @ApiOkResponse({
     description: 'The range that was removed',
@@ -289,7 +289,7 @@ export class HotelsController {
   })
   @ApiNotFoundResponse({ description: 'Hotel, room or range not found' })
   @ApiConflictResponse({
-    description: 'A confirmed reservation exists in the range',
+    description: 'A Confirmed or Pending Payment reservation exists in the range',
   })
   removeRoomBookableRange(
     @Param('id') id: string,
@@ -348,7 +348,7 @@ export class HotelsController {
   @ApiOperation({
     summary: 'Change the dates of a bookable range of a room (HTL-05)',
     description:
-      'This is the endpoint named in the official API contract (PATCH /api/hotels/:id/rooms/:roomId/availability). Hotel moderator only, and only for the hotel they are assigned to. Send the rangeId and the new startDate and/or endDate (both days included). The new dates must not overlap another bookable range, and days taken out of the range must not have a confirmed reservation. The DELETE route below removes a whole range.',
+      'This is the endpoint named in the official API contract (PATCH /api/hotels/:id/rooms/:roomId/availability). Hotel moderator only, and only for the hotel they are assigned to. Send the rangeId and the new startDate and/or endDate (both days included). The new dates must not overlap another bookable range, and days taken out of the range must not have a Confirmed or Pending Payment reservation. The DELETE route below removes a whole range.',
   })
   @ApiOkResponse({
     description: 'Range updated',
@@ -368,7 +368,7 @@ export class HotelsController {
   @ApiNotFoundResponse({ description: 'Hotel, room or range not found' })
   @ApiConflictResponse({
     description:
-      'The dates overlap another bookable range, or a confirmed reservation is in the removed days',
+      'The dates overlap another bookable range, or a Confirmed or Pending Payment reservation is in the removed days',
   })
   updateRoomBookableRange(
     @Param('id') id: string,

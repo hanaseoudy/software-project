@@ -930,7 +930,7 @@ describe('HotelsService', () => {
       expect(found.save).not.toHaveBeenCalled();
     });
 
-    it('returns 409 when a confirmed booking is in the removed days', async () => {
+    it('returns 409 when an active (confirmed or pending payment) reservation is in the removed days', async () => {
       const found = setup()!;
       bookingModel.exists.mockReturnValue(execResult({ _id: 'b' }));
       await expect(call({ endDate: '2026-12-20' })).rejects.toBeInstanceOf(
@@ -946,6 +946,7 @@ describe('HotelsService', () => {
       expect(result.endDate).toBe('2026-12-20');
       expect(bookingModel.exists).toHaveBeenCalledWith(
         expect.objectContaining({
+          status: { $in: ['CONFIRMED', 'PENDING_PAYMENT'] },
           $or: [
             {
               checkIn: { $lt: new Date('2027-01-01T00:00:00.000Z') },
@@ -1009,26 +1010,26 @@ describe('HotelsService', () => {
       await expect(call()).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('returns 409 and keeps the range when a confirmed booking is inside it', async () => {
+    it('returns 409 and keeps the range when an active reservation is inside it', async () => {
       const found = setup()!;
       bookingModel.exists.mockReturnValue(execResult({ _id: 'b' }));
       await expect(call()).rejects.toBeInstanceOf(ConflictException);
       expect(found.deleteOne).not.toHaveBeenCalled();
     });
 
-    it('only looks at confirmed bookings that overlap the range', async () => {
+    it('checks Confirmed and Pending Payment reservations that overlap the range', async () => {
       setup();
       await call();
       expect(bookingModel.exists).toHaveBeenCalledWith(
         expect.objectContaining({
-          status: 'CONFIRMED',
+          status: { $in: ['CONFIRMED', 'PENDING_PAYMENT'] },
           checkIn: { $lt: new Date('2027-01-01T00:00:00.000Z') },
           checkOut: { $gt: new Date('2026-12-01T00:00:00.000Z') },
         }),
       );
     });
 
-    it('removes the range when there is no confirmed booking', async () => {
+    it('removes the range when there is no active reservation', async () => {
       const found = setup()!;
       const result = await call();
       expect(found.deleteOne).toHaveBeenCalled();
