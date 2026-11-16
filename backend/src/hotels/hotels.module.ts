@@ -24,6 +24,8 @@ import { User, UserSchema } from '../users/schemas/user.schema';
 import { AuthModule } from '../auth/auth.module';
 import { UploadsModule } from '../uploads/uploads.module';
 import { HotelDetailsController } from './hotel-details.controller';
+import { HotelSearchController } from './hotel-search.controller';
+import { HotelSearchService } from './hotel-search.service';
 import { HotelsController } from './hotels.controller';
 import { HotelsService } from './hotels.service';
 
@@ -33,18 +35,22 @@ import { HotelsService } from './hotels.service';
       { name: Hotel.name, schema: HotelSchema },
       { name: Room.name, schema: RoomSchema },
       { name: RoomAvailability.name, schema: RoomAvailabilitySchema },
+      { name: HotelBooking.name, schema: HotelBookingSchema }, // HTL-06: reservation checks
       { name: City.name, schema: CitySchema },
       { name: Country.name, schema: CountrySchema },
       { name: ModeratorAssignment.name, schema: ModeratorAssignmentSchema },
-      { name: HotelBooking.name, schema: HotelBookingSchema },
       { name: Review.name, schema: ReviewSchema },
       { name: User.name, schema: UserSchema },
     ]),
     AuthModule, // JwtAuthGuard
     UploadsModule, // UploadsService.isStoredUrl for hotel photos (GEN-08)
   ],
-  controllers: [HotelsController, HotelDetailsController],
-  providers: [HotelsService],
+ controllers: [
+    HotelSearchController,
+    HotelsController,
+    HotelDetailsController,
+  ],
+  providers: [HotelsService, HotelSearchService],
   exports: [MongooseModule, HotelsService],
 })
 export class HotelsModule {}

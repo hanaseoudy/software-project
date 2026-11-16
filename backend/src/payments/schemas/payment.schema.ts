@@ -1,3 +1,4 @@
+import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 import { BookingType, PaymentStatus } from '../enums/payment.enums';
@@ -30,7 +31,14 @@ export class Payment {
   @Prop({ required: true, min: 0 })
   amount: number;
 
-  @Prop({ required: true, uppercase: true, default: 'USD' })
+  @Prop({
+    type: String,
+    required: true,
+    uppercase: true,
+    default: PLATFORM_CURRENCY,
+    enum: [PLATFORM_CURRENCY],
+    immutable: true,
+  })
   currency: string;
 
   @Prop({

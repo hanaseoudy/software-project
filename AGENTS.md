@@ -13,8 +13,8 @@ University Software Project I — Travel Planning and Booking Platform.
 ## 3. Sources of Truth
 Follow these sources in priority order:
 
-1. `docs/requirements/SP1_Reviewed_Requirements.xlsx`
-2. `docs/requirements/Project_Description.pdf`
+1. `docs\requirments\Final_ SP1_Reviewed_Requirements.xlsx - Mandatory.csv`
+2. `docs\requirments\software project.pdf`
 3. Jira issues and acceptance criteria
 4. Existing project code
 

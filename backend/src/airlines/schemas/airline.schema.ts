@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
+import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants';
 
 export type AirlineDocument = HydratedDocument<Airline>;
 
@@ -15,6 +16,9 @@ export enum CabinClass {
 export class BaggagePolicy {
   @Prop({ min: 0, default: 0 })
   extraBagPrice: number; // price per extra bag
+
+  @Prop({ required: true, default: PLATFORM_CURRENCY, enum: [PLATFORM_CURRENCY] })
+  currency: string; // PAY-04: always USD
 
   @Prop({ min: 0, default: 0 })
   maxExtraBagsPerPassenger: number;

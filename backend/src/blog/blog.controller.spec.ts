@@ -6,7 +6,7 @@ import { BlogService } from './blog.service';
 
 describe('BlogController', () => {
   let controller: BlogController;
-  const blogService = { create: jest.fn() };
+  const blogService = { create: jest.fn(), listMine: jest.fn() };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -27,5 +27,13 @@ describe('BlogController', () => {
     await controller.create(req, dto);
 
     expect(blogService.create).toHaveBeenCalledWith('user-1', dto);
+  });
+
+  it('lists posts for the logged-in user only (BLG-03)', async () => {
+    const req = { user: { sub: 'user-1', role: 'user' } } as AuthenticatedRequest;
+
+    await controller.listMine(req, { page: 3 });
+
+    expect(blogService.listMine).toHaveBeenCalledWith('user-1', 3);
   });
 });

@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Delete,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -15,6 +17,7 @@ import {
   ApiCookieAuth,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -31,6 +34,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { CreateRoomAvailabilityDto } from './dto/create-room-availability.dto';
+import { CreateRoomBlockDto } from './dto/create-room-block.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
 import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dto';
@@ -242,6 +246,8 @@ export class HotelsController {
     return this.hotelsService.addRoomBookableRange(id, roomId, dto, req.user!);
   }
 
+  // ---------- HTL-05 (from feature/HTL-05) ----------
+
   @Patch(':id/rooms/:roomId')
   @Roles(UserRole.MODERATOR)
   @ApiOperation({
@@ -277,7 +283,7 @@ export class HotelsController {
   @ApiOperation({
     summary: 'Remove a bookable date range from a room (HTL-05)',
     description:
-      'Extra route (not in the API contract): the contract only has PATCH for availability, which changes dates, and a PATCH cannot remove a whole range cleanly. DELETE removes one bookable range by its id. Hotel moderator only, and only for the hotel they are assigned to. Not allowed while the room has a confirmed reservation inside the range.',
+      'Extra route (not in the API contract): the contract only has PATCH for availability, which changes dates, and a PATCH cannot remove a whole range cleanly. DELETE removes one bookable range by its id. Hotel moderator only, and only for the hotel they are assigned to. Not allowed while the room has a Confirmed or Pending Payment reservation inside the range.',
   })
   @ApiOkResponse({
     description: 'The range that was removed',
@@ -289,7 +295,7 @@ export class HotelsController {
   })
   @ApiNotFoundResponse({ description: 'Hotel, room or range not found' })
   @ApiConflictResponse({
-    description: 'A confirmed reservation exists in the range',
+    description: 'A Confirmed or Pending Payment reservation exists in the range',
   })
   removeRoomBookableRange(
     @Param('id') id: string,
@@ -304,6 +310,94 @@ export class HotelsController {
       rangeId,
       req.user!,
     );
+  }
+
+  // ---------- HTL-06 (from develop) ----------
+
+  @Post(':id/rooms/:roomId/blocks')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Block a date range for a room (HTL-06)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Both days are included. Rejected if the dates overlap a Confirmed or Pending Payment reservation.',
+  })
+  @ApiCreatedResponse({
+    description: 'Blocked range created',
+    type: RoomAvailabilityResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: { endDate: ['End date must be on or after the start date'] },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel or room not found' })
+  @ApiConflictResponse({
+    description: 'The dates overlap a Confirmed or Pending Payment reservation',
+  })
+  blockRoomDates(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Body() dto: CreateRoomBlockDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomAvailabilityResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.blockRoomDates(id, roomId, dto, req.user!);
+  }
+
+  @Patch(':id/rooms/:roomId/deactivate')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Deactivate a room (HTL-06)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Deactivated rooms are excluded from search. Rejected while the room has a Confirmed or Pending Payment reservation that has not ended yet.',
+  })
+  @ApiOkResponse({ description: 'Room deactivated', type: RoomResponseDto })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel or room not found' })
+  @ApiConflictResponse({
+    description:
+      'The room has a Confirmed or Pending Payment reservation that has not ended yet',
+  })
+  deactivateRoom(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.deactivateRoom(id, roomId, req.user!);
+  }
+
+  @Delete(':id/rooms/:roomId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Delete a room (HTL-06)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Allowed only for rooms that have never been reserved; otherwise deactivate the room instead.',
+  })
+  @ApiNoContentResponse({ description: 'Room deleted' })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel or room not found' })
+  @ApiConflictResponse({ description: 'The room has been reserved before' })
+  deleteRoom(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<void> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.deleteRoom(id, roomId, req.user!);
   }
 
   @Put(':id/policies')
@@ -348,7 +442,7 @@ export class HotelsController {
   @ApiOperation({
     summary: 'Change the dates of a bookable range of a room (HTL-05)',
     description:
-      'This is the endpoint named in the official API contract (PATCH /api/hotels/:id/rooms/:roomId/availability). Hotel moderator only, and only for the hotel they are assigned to. Send the rangeId and the new startDate and/or endDate (both days included). The new dates must not overlap another bookable range, and days taken out of the range must not have a confirmed reservation. The DELETE route below removes a whole range.',
+      'This is the endpoint named in the official API contract (PATCH /api/hotels/:id/rooms/:roomId/availability). Hotel moderator only, and only for the hotel they are assigned to. Send the rangeId and the new startDate and/or endDate (both days included). The new dates must not overlap another bookable range, and days taken out of the range must not have a Confirmed or Pending Payment reservation. The DELETE route below removes a whole range.',
   })
   @ApiOkResponse({
     description: 'Range updated',
@@ -368,7 +462,7 @@ export class HotelsController {
   @ApiNotFoundResponse({ description: 'Hotel, room or range not found' })
   @ApiConflictResponse({
     description:
-      'The dates overlap another bookable range, or a confirmed reservation is in the removed days',
+      'The dates overlap another bookable range, or a Confirmed or Pending Payment reservation is in the removed days',
   })
   updateRoomBookableRange(
     @Param('id') id: string,
