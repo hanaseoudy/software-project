@@ -15,6 +15,7 @@ import {
   FlightBookingStatus,
 } from './schemas/flight-booking.schema';
 import { PassengerType } from './schemas/passenger.schema';
+import { BaggageRuleError, calculateLegBaggageFees } from './utils/baggage-fees';
 import { buildBookingSummary } from './utils/booking-summary';
 import type { SummaryFlight } from './utils/booking-summary';
 
@@ -132,6 +133,7 @@ export class FlightBookingsService {
     // Load flights to validate them and to calculate the price.
     const flights: Array<Awaited<ReturnType<typeof this.loadFlight>>> = [];
     let totalPrice = 0;
+    let baggageFees = 0;
     for (const flightId of legIds) {
       const flight = await this.loadFlight(flightId);
       flights.push(flight);
@@ -148,6 +150,24 @@ export class FlightBookingsService {
       }
       totalPrice +=
         cabin.price * seats + cabin.price * INFANT_FARE_RATIO * infants;
+
+      // FLT-19: free bags vs the cabin allowance (FLT-04), extra bags vs the
+      // airline's baggage policy (FLT-08). Each leg of a round trip is charged.
+      const airline = await this.airlineModel.findById(flight.airline).lean();
+      try {
+        baggageFees += calculateLegBaggageFees(
+          dto.passengers,
+          cabin,
+          airline?.baggagePolicy,
+        ).total;
+      } catch (error) {
+        if (error instanceof BaggageRuleError) {
+          throw new BadRequestException(
+            `Flight ${flight.flightNumber}: ${error.message}`,
+          );
+        }
+        throw error;
+      }
     }
 
     if (dto.tripType === 'ROUND_TRIP') {
@@ -181,6 +201,8 @@ export class FlightBookingsService {
           baggage: p.baggage ?? [],
         })),
         totalPrice: Math.round(totalPrice * 100) / 100,
+        // Kept apart from the seat fares: PAY-01 charges totalPrice + baggageFees.
+        baggageFees: Math.round(baggageFees * 100) / 100,
         status: FlightBookingStatus.PENDING_PAYMENT,
         holdExpiresAt: new Date(Date.now() + HOLD_DURATION_MS),
       });

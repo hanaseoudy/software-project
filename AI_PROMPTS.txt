@@ -865,6 +865,32 @@ economy seats: 201 with PENDING_PAYMENT on the first hold, 409 when the seats
 were exhausted. Tested 401 without login, round-trip and future-birth-date 400 errors, validation errors (400) and the documented responses in
 Swagger. The TypeScript build compiles with no errors.
 ================================================
+Date: 2026-11-13 (updated 2026-11-16)
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-19 (TASK-37) - passenger details and extra baggage
+
+Prompt (summary of the conversation):
+I asked how to implement FLT-19: the user enters each passenger's full name, date of birth and
+passport/ID number, optionally adds extra baggage per passenger up to the airline's maximum, and the
+baggage fee is added to the booking total. After FLT-22 was merged, the leader asked me to connect it to
+createHold(): use the airline baggage policy (FLT-08) and the cabin allowance (FLT-04) and add the fees.
+
+How the output was used:
+AI added PassengerDetailsDto (class-validator + Swagger), pure helpers in utils/baggage-fees.ts (policy
+check, per-passenger fee, total) and utils/birth-date.ts (strict YYYY-MM-DD, real day, not in the future),
+with jest specs. The helpers have no @nestjs imports because some existing suites on develop fail on an
+ES-module import error. For the leader's review I added calculateLegBaggageFees() and
+assertFreeBagsWithinAllowance() and called them from FlightBookingsService.createHold(): for each flight leg
+the free bags are checked against the cabin's freeBags and maxBagWeightKg, the extra bags against the
+airline's baggagePolicy (extraBagPrice, maxExtraBagsPerPassenger) and the cabin's max weight; a broken rule
+returns 400. The fees of all legs are saved in booking.baggageFees, kept apart from totalPrice (the seat
+fares) because PAY-01 already charges totalPrice + baggageFees, so adding them to totalPrice as well would
+charge the user twice. I reviewed the code and the tests.
+
+Verification:
+npx jest src/flight-bookings: 2 suites, 22 tests passed. tsc and oxlint report no errors in the
+flight-bookings files. Postman screenshots of the hold endpoint are attached to the PR.
 Date: 2026-11-16
 Student: Mariam Mashoud
 Tool: Claude
