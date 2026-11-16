@@ -2,12 +2,14 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
   Patch,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -39,6 +41,8 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
 import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dto';
 import { RoomResponseDto } from './dto/room-response.dto';
+import { RoomStatusQueryDto } from './dto/room-status-query.dto';
+import { RoomStatusPageDto } from './dto/room-status.dto';
 import {
   CancellationTiersResponseDto,
   UpdateCancellationTiersDto,
@@ -477,5 +481,39 @@ export class HotelsController {
       dto,
       req.user!,
     );
+  }
+
+  // ---------- HTL-08 ----------
+
+  @Get(':id/availability')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: "View each room's status for a date range (HTL-08)",
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Send the first and last day (both included). For every room of the hotel the response lists periods in date order with the status AVAILABLE (inside a bookable range), BOOKED (a Confirmed reservation or an unexpired Pending Payment hold, with its reservation reference) or BLOCKED. A reservation shows its nights, so the check-out day is not part of it. Days that are not in a bookable range, a block or a reservation have no period. Results are paginated, 10 rooms per page, sorted by room number.',
+  })
+  @ApiOkResponse({
+    description: 'One page of rooms with their status periods',
+    type: RoomStatusPageDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: { endDate: ['End date must be on or after the start date'] },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel not found' })
+  getRoomStatuses(
+    @Param('id') id: string,
+    @Query() query: RoomStatusQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomStatusPageDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.getRoomStatuses(id, query, req.user!);
   }
 }
