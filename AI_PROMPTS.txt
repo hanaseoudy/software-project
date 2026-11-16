@@ -888,5 +888,11 @@ HotelBookingsModule imports PaymentsModule and NotificationsModule and keeps the
 HTL-18 changes. Wrote unit tests for finalizeConfirmed and the hook.
 
 Verification:
-See the PR comment (jest results and type check on top of PAY-01).
+Wrote 8 jest tests for finalizeConfirmed and the hook registration (reference
+added and notification sent; filter matches only CONFIRMED without a reference;
+no notification when nothing matches; invalid id; retry on duplicate key;
+notification failure does not undo the confirmation; the hook ignores flight
+bookings). They pass, and tsc --noEmit and oxlint show no errors in the changed
+files, on a local merge of this branch with PAY-01 (#72), because PaymentsService
+is not in develop yet. The PR will compile on develop once #72 is merged.
 ================================================

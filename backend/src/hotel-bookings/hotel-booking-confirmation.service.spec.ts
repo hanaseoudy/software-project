@@ -3,6 +3,28 @@ import { BookingType } from '../payments/enums/payment.enums';
 import { HotelBookingConfirmationService } from './hotel-booking-confirmation.service';
 import { HotelBookingStatus } from './schemas/hotel-booking.schema';
 
+// The @nestjs/* packages are ES modules that jest cannot load here, and the
+// service only needs them for decorators and types, so they are stubbed.
+jest.mock('@nestjs/common', () => ({
+  Injectable: () => () => undefined,
+  Logger: class {
+    error() {}
+  },
+}));
+jest.mock('@nestjs/mongoose', () => ({
+  InjectModel: () => () => undefined,
+}));
+jest.mock('../notifications/notifications.service', () => ({
+  NotificationsService: class {},
+}));
+jest.mock('../payments/payments.service', () => ({
+  PaymentsService: class {},
+}));
+jest.mock('./schemas/hotel-booking.schema', () => ({
+  HotelBooking: { name: 'HotelBooking' },
+  HotelBookingStatus: { CONFIRMED: 'CONFIRMED', PENDING_PAYMENT: 'PENDING_PAYMENT' },
+}));
+
 const bookingId = new Types.ObjectId();
 
 function makeBooking(overrides: Record<string, unknown> = {}) {
