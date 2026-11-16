@@ -1,14 +1,10 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { NotificationType } from '../notifications/enums/notification.enums';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BookingType } from '../payments/enums/payment.enums';
+import { PaymentsService } from '../payments/payments.service';
 import {
   HotelBooking,
   HotelBookingDocument,
@@ -27,74 +23,60 @@ function isDuplicateKeyError(error: unknown): boolean {
 }
 
 /**
- * HTL-17: after a SUCCESSFUL, already-verified payment, confirm the whole
- * reservation (all its rooms), give it a unique booking reference and send an
- * in-app notification. The payment module (PAY-01) is expected to call
- * confirmAfterPayment() once it has verified the payment outcome.
+ * HTL-17: PAY-01 confirms the hotel reservation (status CONFIRMED) when the
+ * payment webhook arrives and then calls the booking-confirmed hook. This
+ * service registers on that hook and adds its part afterwards: a unique booking
+ * reference and the in-app notification.
  */
 @Injectable()
-export class HotelBookingConfirmationService {
+export class HotelBookingConfirmationService implements OnModuleInit {
   private readonly logger = new Logger(HotelBookingConfirmationService.name);
 
   constructor(
     @InjectModel(HotelBooking.name)
     private readonly bookingModel: Model<HotelBooking>,
     private readonly notificationsService: NotificationsService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
-  async confirmAfterPayment(bookingId: string): Promise<HotelBookingDocument> {
+  onModuleInit(): void {
+    this.paymentsService.onBookingConfirmed(async (event) => {
+      if (event.bookingType === BookingType.HOTEL) {
+        await this.finalizeConfirmed(event.bookingId);
+      }
+    });
+  }
+
+  /**
+   * Adds the booking reference to a reservation that PAY-01 already confirmed.
+   * One atomic update that only matches a CONFIRMED reservation without a
+   * reference, so a repeated webhook changes nothing and sends no second
+   * notification. Returns the updated reservation, or null if nothing matched.
+   */
+  async finalizeConfirmed(
+    bookingId: string,
+  ): Promise<HotelBookingDocument | null> {
     if (!Types.ObjectId.isValid(bookingId)) {
-      throw new BadRequestException('Invalid reservation id');
+      return null;
     }
     const id = new Types.ObjectId(bookingId);
 
-    const existing = await this.bookingModel.findById(id);
-    if (!existing) {
-      throw new NotFoundException('Reservation not found');
-    }
-    // Idempotent: a repeated payment callback must not change anything.
-    if (existing.status === HotelBookingStatus.CONFIRMED) {
-      return existing;
-    }
-    if (existing.status !== HotelBookingStatus.PENDING_PAYMENT) {
-      throw new ConflictException(
-        `Reservation is ${existing.status} and cannot be confirmed`,
-      );
-    }
-
-    const confirmed = await this.confirmWithUniqueReference(id);
-    await this.notifyConfirmed(confirmed);
-    return confirmed;
-  }
-
-  /** One atomic update: only a still-valid PENDING_PAYMENT hold is confirmed. */
-  private async confirmWithUniqueReference(
-    id: Types.ObjectId,
-  ): Promise<HotelBookingDocument> {
     for (let attempt = 1; attempt <= MAX_REFERENCE_ATTEMPTS; attempt++) {
       try {
-        const confirmed = await this.bookingModel.findOneAndUpdate(
+        const updated = await this.bookingModel.findOneAndUpdate(
           {
             _id: id,
-            status: HotelBookingStatus.PENDING_PAYMENT,
-            holdExpiresAt: { $gt: new Date() },
+            status: HotelBookingStatus.CONFIRMED,
+            bookingReference: { $exists: false },
           },
-          {
-            $set: {
-              status: HotelBookingStatus.CONFIRMED,
-              bookingReference: generateBookingReference(),
-            },
-          },
+          { $set: { bookingReference: generateBookingReference() } },
           { returnDocument: 'after' },
         );
-        if (confirmed) return confirmed;
-
-        // Nothing matched: confirmed by a concurrent call, expired, or changed.
-        const current = await this.bookingModel.findById(id);
-        if (current?.status === HotelBookingStatus.CONFIRMED) return current;
-        throw new ConflictException(
-          'The hold on this reservation has expired or it is no longer pending payment',
-        );
+        if (!updated) {
+          return null;
+        }
+        await this.notifyConfirmed(updated);
+        return updated;
       } catch (error) {
         // Extremely unlikely reference collision: try another reference.
         if (isDuplicateKeyError(error) && attempt < MAX_REFERENCE_ATTEMPTS) {
@@ -103,9 +85,7 @@ export class HotelBookingConfirmationService {
         throw error;
       }
     }
-    throw new ConflictException(
-      'Could not generate a unique booking reference',
-    );
+    return null;
   }
 
   /** A notification failure must never undo a confirmed, paid reservation. */
