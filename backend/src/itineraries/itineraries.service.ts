@@ -24,10 +24,10 @@ import { TransportCost, TransportCostDocument } from './schemas/transport-cost.s
 import { CreateItineraryDto } from './dto/create-itinerary.dto';
 import { UpdateItineraryDto } from './dto/update-itinerary.dto';
 import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
-
 import { City, CityDocument } from '../reference-data/schemas/city.schema';
 import { CreateItineraryDayDto } from './dto/create-itinerary-day.dto';
 import { UpdateItineraryDayDto } from './dto/update-itinerary-day.dto';
+
 @Injectable()
 export class ItinerariesService {
   constructor(
@@ -46,7 +46,7 @@ export class ItinerariesService {
     @InjectConnection()
     private readonly connection: Connection,
     @InjectModel(City.name)
-private readonly cityModel: Model<CityDocument>,
+    private readonly cityModel: Model<CityDocument>,
   ) {}
 
   private async validateCountries(countryIds: string[]): Promise<void> {
@@ -247,7 +247,6 @@ private readonly cityModel: Model<CityDocument>,
     );
   }
 
-
   // ITN-05: List days in sequential order
   async findDays(userId: string, itineraryId: string) {
     const itinerary = await this.getOwnedItinerary(
@@ -311,7 +310,6 @@ private readonly cityModel: Model<CityDocument>,
       ),
     };
   }
-
 
   // ITN-01: Keep existing create, update and delete behavior unchanged.
   async create(userId: string, dto: CreateItineraryDto) {

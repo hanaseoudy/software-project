@@ -18,3 +18,22 @@ PR #101 is reviewed before merging.
 Verification performed:
 Hotel unit tests (164), lint and build passed under Node 24.
 ================================================
+
+Date: 2026-11-15
+Student: Roaa Mahmoud
+Tool: Claude (Claude Code on claude.ai)
+Related Requirement: HTL-11 (Jira TASK-53)
+Prompt:
+Now I want to make HTL-11 in sprint 2. (Then, after Claude proposed the plan:
+"go".)
+How the output was used:
+Claude read the requirement and the API contract in the project PDF
+(GET /api/hotels/search) and proposed a public search endpoint. It wrote the
+query DTO, result DTOs, a separate HotelSearchService and HotelSearchController,
+the module registration and unit tests. Search reuses the stay-availability and
+calendar-date helpers from the HTL-18 hold code so search and booking apply the
+same rules (bookable ranges, blocked ranges, Confirmed reservations and
+unexpired holds). Results are paginated 10 per page (GEN-05).
+Verification performed:
+Hotel unit tests, lint and build passed under Node 24.
+================================================

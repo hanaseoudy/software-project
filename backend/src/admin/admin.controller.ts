@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -6,6 +6,7 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -18,6 +19,7 @@ import { ACCESS_COOKIE } from '../auth/auth.cookies';
 import { ValidationErrorResponseDto } from '../auth/dto/validation-error-response.dto';
 import { AdminService } from './admin.service';
 import { CreateModeratorDto } from './dto/create-moderator.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @ApiTags('admin')
 @ApiCookieAuth(ACCESS_COOKIE)
@@ -77,5 +79,42 @@ export class AdminController {
   })
   createModerator(@Body() dto: CreateModeratorDto) {
     return this.adminService.createModerator(dto);
+  }
+
+  @Post('users/:id/reset-password')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Reset a user's or moderator's password to a temporary password (ACC-07a)",
+    description:
+      'Sets mustChangePassword = true, clears any login lockout and logs the account out everywhere. At the next login the account must set a new password with PATCH /api/auth/change-password (ACC-08).',
+  })
+  @ApiOkResponse({
+    description: 'Password reset',
+    schema: {
+      example: { id: '6aef52048e9d356647b49fdc', email: 'nour@example.com', role: 'user', mustChangePassword: true },
+    },
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid user ID, or the temporary password breaks the password rules',
+    type: ValidationErrorResponseDto,
+    example: {
+      message: 'Validation failed',
+      errors: { temporaryPassword: ['Password must contain at least one letter and one digit'] },
+    },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Not logged in',
+    example: { message: 'Not authenticated', error: 'Unauthorized', statusCode: 401 },
+  })
+  @ApiForbiddenResponse({
+    description: 'Caller is not an admin, or the target account is an admin',
+    example: { message: "An admin's password cannot be reset here", error: 'Forbidden', statusCode: 403 },
+  })
+  @ApiNotFoundResponse({
+    description: 'No account with this id',
+    example: { message: 'User not found', error: 'Not Found', statusCode: 404 },
+  })
+  resetPassword(@Param('id') id: string, @Body() dto: ResetPasswordDto) {
+    return this.adminService.resetPassword(id, dto);
   }
 }

@@ -30,7 +30,7 @@ export class FlightsController {
   constructor(private readonly flights: FlightsService) {}
 
   @ApiOperation({
-    summary: 'Create a new flight (Airline Moderator only)',
+    summary: 'Create a new flight (FLT-03)',
     description:
       'Allows an assigned airline moderator to create a flight with IATA airports and local date-times.',
   })
