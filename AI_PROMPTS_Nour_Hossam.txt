@@ -1,0 +1,115 @@
+AI usage log - Nour Hossam (Accounts & Admin)
+
+================================================
+Date: 2026-11-13
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-08 (TASK-15), ACC-13
+
+Prompt (summary of the conversation):
+Help me implement ACC-08: a logged-in user changes their password by entering
+the current password and a new one that meets the password rules. Follow the
+API contract endpoint PATCH /api/auth/change-password. It should also clear
+mustChangePassword so moderators created by ACC-13 can finish first login.
+
+How the output was used:
+Used the generated ChangePasswordDto, AuthService.changePassword and the
+controller route after reviewing them against ACC-08. The endpoint requires
+login (JwtAuthGuard), checks the current password (400 if wrong), rejects a
+new password equal to the current one (400), applies the register password
+rules, saves the new bcrypt hash, sets mustChangePassword to false, and logs
+out the user's other sessions while keeping the current one. Errors use the
+same "Validation failed" format as register.
+
+Verification:
+Added 9 unit tests (service and DTO); all 13 auth tests pass. Lint and build
+passed locally. Tested in Postman with the ACC-13 moderator: wrong current
+password 400, same password 400, weak password 400, success 200, login with
+the new password shows mustChangePassword false, and 401 when logged out.
+Swagger shows the endpoint and its responses.
+================================================
+
+================================================
+Date: 2026-11-13
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-09 (TASK-16)
+
+Prompt (summary of the conversation):
+Help me implement ACC-09: any logged-in user edits their name, phone number
+and preferred currency, saving only if all fields pass validation. Follow the
+API contract endpoints GET /api/users/me and PATCH /api/users/me.
+
+How the output was used:
+Used the generated UpdateProfileDto, UsersService and UsersController after
+reviewing them against ACC-09. Both routes require login and always use the
+id from the login cookie. PATCH changes only the fields sent; the phone
+number is cleaned (spaces and dashes removed) and must be 7-15 digits, null
+removes it; the preferred currency must be in the supported list (EGP, USD,
+EUR, GBP, SAR, AED, JPY), which is a display setting for itinerary budgets
+(ITN-18), while bookings and payments stay in USD (PAY-04). If any field is
+invalid the whole request is rejected and nothing is saved. Email and role
+are stripped and cannot be changed. The scaffold users spec files were
+replaced with real tests.
+
+Verification:
+16 unit tests pass (service, controller, DTO). Lint and build passed locally.
+Tested in Postman: GET profile 200, full update 200, invalid phone and
+currency 400 with nothing saved (checked with GET), email/role only 400,
+and 401 when logged out. Swagger shows both endpoints.
+================================================
+
+================================================
+Date: 2026-11-14
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-07a (TASK-14)
+
+Prompt (summary of the conversation):
+Help me implement ACC-07a: an admin resets a user's or moderator's password
+to a temporary password, and the account must set a new password that meets
+the password rules at its next login. Follow the API contract endpoint
+POST /api/admin/users/:id/reset-password and reuse the ACC-13 admin module.
+
+How the output was used:
+Used the generated ResetPasswordDto, AdminService.resetPassword and the
+controller route after reviewing them against ACC-07a. The admin-only
+endpoint validates the id (400), returns 404 for a missing account, refuses
+to reset an admin account (403), applies the password rules to the temporary
+password, saves the bcrypt hash, sets mustChangePassword to true, clears any
+ACC-05 lockout, and revokes all of the account's sessions. The account then
+changes the password with PATCH /api/auth/change-password (ACC-08).
+
+Verification:
+Added 9 unit tests (service and DTO); all 17 admin tests pass. Lint and build
+passed locally. Tested in Postman: reset 200, old password 401, login with
+the temporary password shows mustChangePassword true, moderator caller 403,
+admin target 403, unknown user 404, weak password 400. Swagger shows the
+endpoint and its responses.
+================================================
+================================================
+Date: 2026-11-17
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-14 (TASK-21)
+
+Prompt (summary of the conversation):
+Help me implement ACC-14: an admin views a paginated list of all accounts
+(name, email, role, status, registration date) and can search by name or
+email and filter by role and status. Follow the API contract endpoint
+GET /api/admin/accounts and the team's GEN-05 pagination helper.
+
+How the output was used:
+Used the generated ListAccountsQueryDto, AdminAccountsService and
+AdminAccountsController after reviewing them against ACC-14. Admin only;
+newest first, 10 per page; search matches first name, last name or email
+(case-insensitive, every word must match, special characters treated as
+plain text); role and status are exact filters and can be combined. Only the
+needed columns are read, never the password. Kept in separate files so it
+does not conflict with the ACC-07a PR.
+
+Verification:
+13 new unit tests (service and DTO); all 21 admin tests pass. Lint and build
+passed locally. Postman: full list 200 with pagination, search=sara,
+role=moderator, and an invalid role 400.
+================================================
