@@ -77,14 +77,13 @@ export class AdminReportsController {
       'and "delete" deletes it (a post with its comments and likes; a comment also lowers the post comment count; ' +
       'an itinerary with its days, activities and costs); both set the report and every other open report about ' +
       'the same item to resolved. A report can be resolved only once: 409 afterwards, also when two admins act at ' +
-      'the same time. Itineraries cannot be hidden yet (400). Unknown body fields are rejected.',
+      'the same time. Posts, comments, reviews and itineraries can all be hidden. Unknown body fields are rejected.',
   })
   @ApiParam({ name: 'id', description: 'Report id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60730' })
   @ApiBody({ type: ResolveReportDto })
   @ApiOkResponse({ description: 'Report resolved or dismissed', type: ResolveReportResponseDto })
   @ApiBadRequestResponse({
-    description:
-      'Invalid report id or action, unknown body field, or "Hiding this content type is not available yet"',
+    description: 'Invalid report id or action, or unknown body field',
     type: ValidationErrorResponseDto,
     example: { message: 'Validation failed', errors: { action: ['Action must be dismiss, hide or delete'] } },
   })
@@ -106,16 +105,16 @@ export class AdminReportsController {
   // Supporting endpoint (PDF 8.10): GEN-10 "hide ... any post, comment, review or itinerary directly"
   @Patch('content/:type/:id/hide')
   @ApiOperation({
-    summary: 'Hide a post, comment or review directly (GEN-10)',
+    summary: 'Hide a post, comment, review or itinerary directly (GEN-10)',
     description:
       'Admin only. Hides the item so it is visible only to its author and admins, and marks the open reports ' +
-      'about it as resolved. Hiding an already hidden item succeeds. Itineraries cannot be hidden yet (400).',
+      'about it as resolved. Hiding an already hidden item succeeds.',
   })
   @ApiParam({ name: 'type', enum: ReportContentType })
   @ApiParam({ name: 'id', description: 'Content id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
   @ApiOkResponse({ description: 'Content hidden', type: ModerationResultDto })
   @ApiBadRequestResponse({
-    description: 'Invalid type or id, or "Hiding this content type is not available yet"',
+    description: 'Invalid type or id',
     type: ValidationErrorResponseDto,
     example: { message: 'Validation failed', errors: { type: ['Content type must be post, comment, review or itinerary'] } },
   })

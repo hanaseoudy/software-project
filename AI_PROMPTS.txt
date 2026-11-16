@@ -864,3 +864,20 @@ Tested POST /api/flight-bookings/hold in Postman against a test flight with 2
 economy seats: 201 with PENDING_PAYMENT on the first hold, 409 when the seats
 were exhausted. Tested 401 without login, round-trip and future-birth-date 400 errors, validation errors (400) and the documented responses in
 Swagger. The TypeScript build compiles with no errors.
+
+================================================
+Date: 2026-11-16
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-10
+Prompt:
+Fix the team leader's review comments on GEN-10: add isHidden to the itinerary schema,
+implement itinerary hiding in AdminReportsService.hideContent(), remove the restriction on
+hiding itineraries, and add the missing AI_PROMPTS entry.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed and built by me (npm run build, 0 errors).
+Changed files: backend/src/itineraries/schemas/itinerary.schema.ts (isHidden field, default false),
+backend/src/reports/admin-reports.service.ts (itinerary hiding, restriction removed) and
+backend/src/reports/admin-reports.controller.ts (Swagger text updated).
+================================================

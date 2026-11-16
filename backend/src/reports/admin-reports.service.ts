@@ -137,7 +137,6 @@ export class AdminReportsService {
     }
 
     const moderation = action === ResolveAction.HIDE ? ModerationAction.HIDE : ModerationAction.DELETE;
-    this.assertSupported(report.contentType, moderation);
     // One transaction: if the content is missing (404) or anything fails, the report stays open
     const otherReportsResolved = await this.runDb('Could not resolve the report', () =>
       this.reportModel.db.transaction(async (session) => {
@@ -162,7 +161,6 @@ export class AdminReportsService {
     this.requireAdminId(adminId);
     const contentType = this.toContentType(params?.type);
     const contentId = this.toObjectId(params?.id, 'id', 'Content id must be a valid id');
-    this.assertSupported(contentType, action);
     const reportsResolved = await this.runDb(
       action === ModerationAction.HIDE ? 'Could not hide the content' : 'Could not delete the content',
       () =>
@@ -186,13 +184,6 @@ export class AdminReportsService {
       : this.deleteContent(type, id, session);
   }
 
-  private assertSupported(type: ReportContentType, action: ModerationAction): void {
-    // The itinerary schema has no hidden flag (only PRIVATE/PUBLIC visibility owned by the itinerary module)
-    if (action === ModerationAction.HIDE && type === ReportContentType.ITINERARY) {
-      throw new BadRequestException('Hiding this content type is not available yet');
-    }
-  }
-
   // "Hidden content is visible only to its author and admins": only the hidden flag is changed
   private async hideContent(type: ReportContentType, id: Types.ObjectId, session: ClientSession): Promise<void> {
     let matched = 0;
@@ -214,7 +205,10 @@ export class AdminReportsService {
           .exec());
         break;
       case ReportContentType.ITINERARY:
-        throw new BadRequestException('Hiding this content type is not available yet');
+        ({ matchedCount: matched } = await this.itineraryModel
+          .updateOne({ _id: id }, { $set: { isHidden: true } }, { session })
+          .exec());
+        break;
     }
     if (matched !== 1) throw new NotFoundException('Content not found');
   }
