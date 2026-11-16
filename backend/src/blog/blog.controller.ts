@@ -10,11 +10,15 @@ import {
   Query,
   Req,
   UnauthorizedException,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
   ApiBody,
+  ApiConsumes,
   ApiCookieAuth,
   ApiCreatedResponse,
   ApiExtraModels,
@@ -47,6 +51,10 @@ import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PublicPostDetailDto, PublicPostSummaryDto } from './dto/public-post-response.dto';
 import type { PublicPostsPage } from './dto/public-post-response.dto';
 import { PaginatedResponseDto, PaginationQueryDto } from '../common/pagination/pagination';
+import { AttachedImageResponseDto, RemovedImageResponseDto } from './dto/post-image-response.dto';
+import { imageUploadOptions } from '../uploads/image-upload.options';
+import { ImageCategory } from '../uploads/uploads.constants';
+import type { UploadedImage } from '../uploads/uploads.service';
 
 @ApiTags('blog')
 @Controller('posts')
@@ -268,6 +276,72 @@ export class BlogController {
     @StrictBody() dto: CreateCommentDto,
   ): Promise<CommentResponseDto> {
     return this.blogService.addComment(this.requireUserId(req), id, dto.text);
+  }
+
+  @Post(':id/images')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('image', imageUploadOptions(ImageCategory.POST)))
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Attach an image to my post (BLG-10, GEN-08)',
+    description:
+      'Author only. Uploads one image in the multipart field "image" and attaches it to the logged-in ' +
+      'user\'s own post, whether draft or published. The image must be JPG or PNG, up to 5 MB; a post can ' +
+      'have at most 5 images. The file is stored on the server and served from the returned URL.',
+  })
+  @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['image'],
+      properties: { image: { type: 'string', format: 'binary', description: 'JPG or PNG image, up to 5 MB' } },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Image attached', type: AttachedImageResponseDto })
+  @ApiResponse({
+    status: 400,
+    description:
+      'No image was provided, the file is not a valid JPG or PNG image, or the post already has 5 images',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Not logged in', type: ErrorResponseDto })
+  @ApiResponse({ status: 403, description: 'The post belongs to another user', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Invalid post id or the post does not exist', type: ErrorResponseDto })
+  @ApiResponse({ status: 413, description: 'The image is larger than 5 MB', type: ErrorResponseDto })
+  addImage(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @UploadedFile() file: UploadedImage | undefined,
+  ): Promise<AttachedImageResponseDto> {
+    return this.blogService.addImage(this.requireUserId(req), id, file);
+  }
+
+  @Delete(':id/images/:imageId')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Remove an image from my post (BLG-10)',
+    description:
+      'Author only. Removes the image from the logged-in user\'s own post and deletes the stored file. ' +
+      'Returns the post\'s remaining images.',
+  })
+  @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
+  @ApiParam({ name: 'imageId', description: 'Image id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60718' })
+  @ApiResponse({ status: 200, description: 'Image removed', type: RemovedImageResponseDto })
+  @ApiResponse({ status: 401, description: 'Not logged in', type: ErrorResponseDto })
+  @ApiResponse({ status: 403, description: 'The post belongs to another user', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 404,
+    description: 'Invalid post or image id, the post does not exist, or the image is not on this post',
+    type: ErrorResponseDto,
+  })
+  removeImage(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('imageId') imageId: string,
+  ): Promise<RemovedImageResponseDto> {
+    return this.blogService.removeImage(this.requireUserId(req), id, imageId);
   }
 
   // The user id always comes from the authenticated token, never from the body or query
