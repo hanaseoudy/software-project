@@ -12,8 +12,6 @@ import { Review } from '../hotel-bookings/schemas/review.schema';
 import { User } from '../users/schemas/user.schema';
 import { City } from '../reference-data/schemas/city.schema';
 import { Country } from '../reference-data/schemas/country.schema';
-import { Review } from '../hotel-bookings/schemas/review.schema';
-import { User } from '../users/schemas/user.schema';
 import { UploadsService } from '../uploads/uploads.service';
 import { ModeratorAssignment } from '../users/schemas/moderatorassignment.schema';
 import { UserRole } from '../users/schemas/user.schema';
