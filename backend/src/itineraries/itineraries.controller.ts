@@ -1,4 +1,3 @@
-
 import {
   Body,
   Controller,
@@ -29,6 +28,8 @@ import { ItinerariesService } from './itineraries.service';
 import { CreateItineraryDto } from './dto/create-itinerary.dto';
 import { UpdateItineraryDto } from './dto/update-itinerary.dto';
 
+import { CreateItineraryDayDto } from './dto/create-itinerary-day.dto';
+import { UpdateItineraryDayDto } from './dto/update-itinerary-day.dto';
 @ApiTags('itineraries')
 @ApiCookieAuth(ACCESS_COOKIE)
 @UseGuards(JwtAuthGuard)
@@ -74,4 +75,47 @@ export class ItinerariesController {
   remove(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.itinerariesService.remove(req.user!.sub, id);
   }
+
+  @Post(':id/days')
+  @ApiOperation({ summary: 'Add itinerary day (ITN-05)' })
+  addDay(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: CreateItineraryDayDto,
+  ) {
+    return this.itinerariesService.addDay(
+      req.user!.sub,
+      id,
+      dto,
+    );
+  }
+
+  @Get(':id/days')
+  @ApiOperation({ summary: 'List itinerary days (ITN-05)' })
+  findDays(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    return this.itinerariesService.findDays(
+      req.user!.sub,
+      id,
+    );
+  }
+
+  @Patch(':id/days/:dayId')
+  @ApiOperation({ summary: 'Update itinerary day (ITN-05)' })
+  updateDay(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('dayId') dayId: string,
+    @Body() dto: UpdateItineraryDayDto,
+  ) {
+    return this.itinerariesService.updateDay(
+      req.user!.sub,
+      id,
+      dayId,
+      dto,
+    );
+  }
+
 }

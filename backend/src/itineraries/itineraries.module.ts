@@ -34,6 +34,11 @@ import {
   TransportCostSchema,
 } from './schemas/transport-cost.schema';
 
+import {
+  City,
+  CitySchema,
+} from '../reference-data/schemas/city.schema';
+
 import { ItinerariesController } from './itineraries.controller';
 import { ItinerariesService } from './itineraries.service';
 
@@ -64,6 +69,10 @@ import { ItinerariesService } from './itineraries.service';
       {
         name: TransportCost.name,
         schema: TransportCostSchema,
+      },
+      {
+        name: City.name,
+        schema: CitySchema,
       },
     ]),
   ],
