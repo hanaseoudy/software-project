@@ -9,6 +9,8 @@ import { Types } from 'mongoose';
 import { HotelBooking } from '../hotel-bookings/schemas/hotel-booking.schema';
 import { City } from '../reference-data/schemas/city.schema';
 import { Country } from '../reference-data/schemas/country.schema';
+import { Review } from '../hotel-bookings/schemas/review.schema';
+import { User } from '../users/schemas/user.schema';
 import { UploadsService } from '../uploads/uploads.service';
 import { ModeratorAssignment } from '../users/schemas/moderatorassignment.schema';
 import { UserRole } from '../users/schemas/user.schema';
@@ -121,6 +123,8 @@ describe('HotelsService.getRoomStatuses (HTL-08)', () => {
           provide: getModelToken(ModeratorAssignment.name),
           useValue: assignmentModel,
         },
+        { provide: getModelToken(Review.name), useValue: {} },
+        { provide: getModelToken(User.name), useValue: {} },
         { provide: UploadsService, useValue: {} },
       ],
     }).compile();
