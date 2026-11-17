@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -116,5 +116,69 @@ export class AdminController {
   })
   resetPassword(@Param('id') id: string, @Body() dto: ResetPasswordDto) {
     return this.adminService.resetPassword(id, dto);
+  }
+
+  @Patch('accounts/:id/suspend')
+  @ApiOperation({
+    summary: 'Suspend a user or moderator account (ACC-16, ACC-15)',
+    description:
+      'The account can no longer log in and is logged out everywhere. Its bookings stay valid and its content stays visible.',
+  })
+  @ApiOkResponse({
+    description: 'Account suspended',
+    schema: { example: { id: '6aef52048e9d356647b49fdc', email: 'nour@example.com', role: 'user', status: 'suspended' } },
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid user ID',
+    example: { message: 'Invalid user ID', error: 'Bad Request', statusCode: 400 },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Not logged in',
+    example: { message: 'Not authenticated', error: 'Unauthorized', statusCode: 401 },
+  })
+  @ApiForbiddenResponse({
+    description: 'Caller is not an admin, or the target account is an admin',
+    example: { message: 'An admin account cannot be suspended', error: 'Forbidden', statusCode: 403 },
+  })
+  @ApiNotFoundResponse({
+    description: 'No account with this id',
+    example: { message: 'User not found', error: 'Not Found', statusCode: 404 },
+  })
+  @ApiConflictResponse({
+    description: 'The account is already suspended or is deactivated',
+    example: { message: 'Account is already suspended', error: 'Conflict', statusCode: 409 },
+  })
+  suspendAccount(@Param('id') id: string) {
+    return this.adminService.suspendAccount(id);
+  }
+
+  @Patch('accounts/:id/reactivate')
+  @ApiOperation({ summary: 'Reactivate a suspended user or moderator account (ACC-16, ACC-15)' })
+  @ApiOkResponse({
+    description: 'Account reactivated; it can log in again',
+    schema: { example: { id: '6aef52048e9d356647b49fdc', email: 'nour@example.com', role: 'user', status: 'active' } },
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid user ID',
+    example: { message: 'Invalid user ID', error: 'Bad Request', statusCode: 400 },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Not logged in',
+    example: { message: 'Not authenticated', error: 'Unauthorized', statusCode: 401 },
+  })
+  @ApiForbiddenResponse({
+    description: 'Caller is not an admin, or the target account is an admin',
+    example: { message: 'An admin account cannot be reactivated', error: 'Forbidden', statusCode: 403 },
+  })
+  @ApiNotFoundResponse({
+    description: 'No account with this id',
+    example: { message: 'User not found', error: 'Not Found', statusCode: 404 },
+  })
+  @ApiConflictResponse({
+    description: 'The account is not suspended',
+    example: { message: 'Only a suspended account can be reactivated', error: 'Conflict', statusCode: 409 },
+  })
+  reactivateAccount(@Param('id') id: string) {
+    return this.adminService.reactivateAccount(id);
   }
 }

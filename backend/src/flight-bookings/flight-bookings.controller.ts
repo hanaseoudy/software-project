@@ -3,6 +3,7 @@ import {
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiCookieAuth,
+  ApiForbiddenResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -11,8 +12,11 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { UserRole } from '../users/schemas/user.schema';
 import { HoldFlightBookingDto } from './dto/hold-flight-booking.dto';
 import { FlightBookingsService } from './flight-bookings.service';
 
@@ -24,6 +28,8 @@ export class FlightBookingsController {
   constructor(private readonly flightBookingsService: FlightBookingsService) {}
 
   @Post('hold')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.USER)
   @ApiOperation({
     summary:
       'FLT-22: atomically hold seats; creates a PENDING_PAYMENT booking valid for 10 minutes',
@@ -31,6 +37,7 @@ export class FlightBookingsController {
   @ApiCreatedResponse({ description: 'Seats held, booking created' })
   @ApiBadRequestResponse({ description: 'Invalid passengers, trip type or flight' })
   @ApiUnauthorizedResponse({ description: 'Not authenticated' })
+  @ApiForbiddenResponse({ description: 'Only registered users can create bookings' })
   @ApiNotFoundResponse({ description: 'Flight not found' })
   @ApiConflictResponse({ description: 'Not enough seats available' })
   hold(@Req() req: AuthenticatedRequest, @Body() dto: HoldFlightBookingDto) {

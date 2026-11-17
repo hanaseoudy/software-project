@@ -4,9 +4,10 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
-import { Connection, Model, Types } from 'mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 
 import {
   Itinerary,
@@ -184,67 +185,145 @@ export class ItinerariesService {
     return date.toISOString().slice(0, 10);
   }
 
-  // ITN-05: Add a new itinerary day
-  async addDay(
+  // All day writers must modify the parent BEFORE reading its days. The unique
+  // index prevents duplicates; this shared write also prevents concurrent gaps.
+  private async withDayTransaction<T>(
     userId: string,
     itineraryId: string,
-    dto: CreateItineraryDayDto,
-  ) {
-    const itinerary = await this.getOwnedItinerary(
-      userId,
-      itineraryId,
-    );
-
-    await this.validateCity(dto.cityId);
-
-    // Retry if two requests try to create the same day number.
+    work: (session: ClientSession, itinerary: Itinerary & { _id: Types.ObjectId }) => Promise<T>,
+    forbiddenOnOtherOwner = false,
+  ): Promise<T> {
+    this.validateObjectId(itineraryId);
     for (let attempt = 0; attempt < 5; attempt++) {
-      const lastDay = await this.itineraryDayModel
-        .findOne({ itineraryId: itinerary._id })
-        .sort({ dayNumber: -1 })
-        .lean();
-
-      const dayNumber = lastDay ? lastDay.dayNumber + 1 : 1;
-
-      if (dayNumber > 60) {
-        throw new BadRequestException(
-          'An itinerary cannot exceed 60 days',
-        );
-      }
-
+      const session = await this.connection.startSession();
+      let commitUncertain = false;
       try {
-        const day = await this.itineraryDayModel.create({
-          itineraryId: itinerary._id,
-          dayNumber,
-          cityId: dto.cityId,
-          notes: dto.notes,
-        });
-
-        return {
-          ...day.toObject(),
-          date: this.deriveDayDate(
-            itinerary.startDate,
-            dayNumber,
-          ),
-        };
-      } catch (error: unknown) {
-        // MongoDB duplicate-key error.
-        // Another request may have created this day number first.
-        const isDuplicateKey =
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          error.code === 11000;
-
-        if (!isDuplicateKey) {
-          throw error;
+        session.startTransaction({ readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' }, readPreference: 'primary', maxCommitTimeMS: 5000 });
+        const itinerary = await this.itineraryModel.findOneAndUpdate(
+          { _id: new Types.ObjectId(itineraryId), userId: new Types.ObjectId(userId) },
+          { $inc: { __v: 1 } },
+          { session, returnDocument: 'after' },
+        ).lean();
+        if (!itinerary) {
+          if (forbiddenOnOtherOwner && await this.itineraryModel.exists({ _id: new Types.ObjectId(itineraryId) }).session(session)) {
+            throw new ForbiddenException("You cannot delete another user's itinerary");
+          }
+          throw new NotFoundException('Itinerary not found');
         }
+        const result = await work(session, itinerary);
+        // An ambiguous commit must retry COMMIT, never replay the deletion.
+        for (let commitAttempt = 0; commitAttempt < 5; commitAttempt++) {
+          try {
+            await session.commitTransaction();
+            return result;
+          } catch (error) {
+            // The latest response decides uncertainty; this label wins if both are present.
+            commitUncertain = this.hasErrorLabel(error, 'UnknownTransactionCommitResult');
+            if (!commitUncertain) throw error;
+          }
+        }
+        throw new ServiceUnavailableException('Transaction outcome is uncertain. Refresh the itinerary before retrying.');
+      } catch (error) {
+        if (!commitUncertain && session.inTransaction()) await session.abortTransaction();
+        if (commitUncertain || !this.hasErrorLabel(error, 'TransientTransactionError')) throw error;
+        if (attempt === 4) throw new ConflictException('Itinerary changed concurrently. Please retry.');
+        await new Promise(resolve => setTimeout(resolve, 50 * 2 ** attempt));
+      } finally {
+        await session.endSession();
       }
     }
+    throw new ConflictException('Itinerary changed concurrently. Please retry.');
+  }
 
-    throw new ConflictException(
-      'Could not add itinerary day due to concurrent updates. Please retry.',
-    );
+  private hasErrorLabel(error: unknown, label: string): boolean {
+    return typeof error === 'object' && error !== null &&
+      'hasErrorLabel' in error && typeof error.hasErrorLabel === 'function' &&
+      error.hasErrorLabel(label) === true;
+  }
+
+  // ITN-05: preserve append semantics and enforce the limit under the same lock.
+  async addDay(userId: string, itineraryId: string, dto: CreateItineraryDayDto) {
+    return this.withDayTransaction(userId, itineraryId, async (session, itinerary) => {
+      await this.validateCity(dto.cityId);
+      const lastDay = await this.itineraryDayModel.findOne({ itineraryId: itinerary._id })
+        .sort({ dayNumber: -1 }).session(session).lean();
+      const dayNumber = lastDay ? lastDay.dayNumber + 1 : 1;
+      if (dayNumber > 60) throw new BadRequestException('An itinerary cannot exceed 60 days');
+      const [day] = await this.itineraryDayModel.create([{
+        itineraryId: itinerary._id, dayNumber, cityId: dto.cityId, notes: dto.notes,
+      }], { session });
+      return { ...day.toObject(), date: this.deriveDayDate(itinerary.startDate, dayNumber) };
+    });
+  }
+
+  private async deleteDayExpenses(dayIds: Types.ObjectId[], session: ClientSession) {
+    const filter = { dayId: { $in: dayIds } };
+    // Operations sharing a transaction/session must run sequentially.
+    await this.activityModel.deleteMany(filter, { session });
+    await this.budgetEntryModel.deleteMany(filter, { session });
+    await this.transportCostModel.deleteMany(filter, { session });
+  }
+
+  // ITN-07 only: native-currency totals. The full summary and FX conversion
+  // endpoints belong to ITN-14 / ITN-18. Decimal aggregation avoids 0.1 + 0.2 drift.
+  private async survivingBudgetTotals(itineraryId: Types.ObjectId, session: ClientSession) {
+    const sources = [
+      { model: this.activityModel, field: 'cost', name: 'activityCosts' },
+      { model: this.budgetEntryModel, field: 'amount', name: 'budgetCosts' },
+      { model: this.transportCostModel, field: 'amount', name: 'transportCosts' },
+    ];
+    const totals = await this.itineraryDayModel.aggregate<{ currency: string; total: number }>([
+      { $match: { itineraryId } },
+      ...sources.map(({ model, field, name }) => ({ $lookup: {
+        from: model.collection.name, let: { day: '$_id' }, as: name,
+        pipeline: [
+          { $match: { $expr: { $eq: ['$dayId', '$$day'] }, [field]: { $ne: null } } },
+          { $group: { _id: '$currency', amount: { $sum: { $toDecimal: { $toString: `$${field}` } } } } },
+          { $project: { _id: 0, currency: '$_id', amount: 1 } },
+        ],
+      } })),
+      { $project: { expenses: { $concatArrays: sources.map(source => `$${source.name}`) } } },
+      { $unwind: '$expenses' },
+      { $group: { _id: '$expenses.currency', total: { $sum: '$expenses.amount' } } },
+      { $sort: { _id: 1 } },
+      { $project: { _id: 0, currency: '$_id', total: { $toDouble: '$total' } } },
+    ]).session(session);
+    if (totals.some(item => !item.currency || !Number.isFinite(item.total))) {
+      throw new ConflictException('Existing expenses have invalid amounts or missing currencies. Correct them before deleting a day.');
+    }
+    return totals;
+  }
+
+  async removeDay(userId: string, itineraryId: string, dayId: string) {
+    this.validateObjectId(itineraryId);
+    this.validateObjectId(dayId, 'day');
+    return this.withDayTransaction(userId, itineraryId, async (session, itinerary) => {
+      const day = await this.itineraryDayModel.findOne({
+        _id: new Types.ObjectId(dayId), itineraryId: itinerary._id,
+      }).session(session).lean();
+      if (!day) throw new NotFoundException('Itinerary day not found');
+      await this.deleteDayExpenses([day._id], session);
+      await this.itineraryDayModel.deleteOne({ _id: day._id, itineraryId: itinerary._id }, { session });
+      const laterDays = await this.itineraryDayModel.find({
+        itineraryId: itinerary._id, dayNumber: { $gt: day.dayNumber },
+      }).sort({ dayNumber: 1 }).session(session).lean();
+      // Free the next number before moving its successor. Never use unordered
+      // bulk updates or temporary numbers with this unique index.
+      for (const later of laterDays) {
+        await this.itineraryDayModel.updateOne(
+          { _id: later._id, itineraryId: itinerary._id },
+          { $inc: { dayNumber: -1 } }, { session, runValidators: true },
+        );
+      }
+      const days = await this.itineraryDayModel.find({ itineraryId: itinerary._id })
+        .sort({ dayNumber: 1 }).session(session).lean();
+      const budgetTotals = await this.survivingBudgetTotals(itinerary._id, session);
+      return {
+        message: 'Itinerary day deleted successfully',
+        days: days.map(item => ({ ...item, date: this.deriveDayDate(itinerary.startDate, item.dayNumber) })),
+        budgetTotals,
+      };
+    });
   }
 
   // ITN-05: List days in sequential order
@@ -275,40 +354,23 @@ export class ItinerariesService {
     dayId: string,
     dto: UpdateItineraryDayDto,
   ) {
-    const itinerary = await this.getOwnedItinerary(
-      userId,
-      itineraryId,
-    );
-
+    this.validateObjectId(itineraryId);
     this.validateObjectId(dayId, 'day');
-
-    const day = await this.itineraryDayModel.findOne({
-      _id: new Types.ObjectId(dayId),
-      itineraryId: itinerary._id,
+    return this.withDayTransaction(userId, itineraryId, async (session, itinerary) => {
+      const changes: { cityId?: string; notes?: string } = {};
+      if (dto.cityId !== undefined) {
+        await this.validateCity(dto.cityId);
+        changes.cityId = dto.cityId;
+      }
+      if (dto.notes !== undefined) changes.notes = dto.notes;
+      // Explicit field update never writes a previously read dayNumber.
+      const day = await this.itineraryDayModel.findOneAndUpdate(
+        { _id: new Types.ObjectId(dayId), itineraryId: itinerary._id },
+        { $set: changes }, { session, returnDocument: 'after', runValidators: true },
+      );
+      if (!day) throw new NotFoundException('Itinerary day not found');
+      return { ...day.toObject(), date: this.deriveDayDate(itinerary.startDate, day.dayNumber) };
     });
-
-    if (!day) {
-      throw new NotFoundException('Itinerary day not found');
-    }
-
-    if (dto.cityId !== undefined) {
-      await this.validateCity(dto.cityId);
-      day.cityId = dto.cityId;
-    }
-
-    if (dto.notes !== undefined) {
-      day.notes = dto.notes;
-    }
-
-    await day.save();
-
-    return {
-      ...day.toObject(),
-      date: this.deriveDayDate(
-        itinerary.startDate,
-        day.dayNumber,
-      ),
-    };
   }
 
   // ITN-01: Keep existing create, update and delete behavior unchanged.
@@ -347,30 +409,17 @@ export class ItinerariesService {
   }
 
   async remove(userId: string, itineraryId: string) {
-    this.validateObjectId(itineraryId);
-    const itineraryObjectId = new Types.ObjectId(itineraryId);
-    const ownerId = new Types.ObjectId(userId);
-
-    await this.connection.transaction(async (session) => {
-      const itinerary = await this.itineraryModel.findById(itineraryObjectId).session(session);
-      if (!itinerary) throw new NotFoundException('Itinerary not found');
-      if (itinerary.userId.toString() !== userId) {
-        throw new ForbiddenException("You cannot delete another user's itinerary");
-      }
-
+    await this.withDayTransaction(userId, itineraryId, async (session, itinerary) => {
       const days = await this.itineraryDayModel.find(
-        { itineraryId: itineraryObjectId }, { _id: 1 }, { session },
+        { itineraryId: itinerary._id }, { _id: 1 }, { session },
       ).lean();
-      const dayIds = days.map(day => day._id);
-      await this.activityModel.deleteMany({ dayId: { $in: dayIds } }, { session });
-      await this.budgetEntryModel.deleteMany({ dayId: { $in: dayIds } }, { session });
-      await this.transportCostModel.deleteMany({ dayId: { $in: dayIds } }, { session });
-      await this.itineraryDayModel.deleteMany({ itineraryId: itineraryObjectId }, { session });
+      await this.deleteDayExpenses(days.map(day => day._id), session);
+      await this.itineraryDayModel.deleteMany({ itineraryId: itinerary._id }, { session });
       const result = await this.itineraryModel.deleteOne(
-        { _id: itineraryObjectId, userId: ownerId }, { session },
+        { _id: itinerary._id, userId: new Types.ObjectId(userId) }, { session },
       );
       if (result.deletedCount !== 1) throw new NotFoundException('Itinerary not found or already deleted');
-    });
+    }, true);
     return { message: 'Itinerary deleted successfully' };
   }
 }
