@@ -532,7 +532,26 @@ Lint, build and all unit tests passed under Node 24 (140 tests). Postman checks 
 with the temporary fake-login test kit (not committed).
 ================================================
 
-================================================
+Date: 2026-11-08
+Student: Mariam Haithem
+Tool: Claude (Claude Sonnet 5.5)
+Related Requirement: HTL-02 (TASK-45)
+Prompt (summary of the conversation):
+I asked AI to finish the last Sprint 1 Hotels ticket, HTL-02: a hotel details page showing the
+profile, photos, amenities, check-in/check-out times, cancellation policy, average rating and
+reviews, and the available rooms when dates are provided. The branch is stacked on HTL-05
+because the available-rooms part needs rooms (HTL-03), bookable ranges (HTL-04) and the
+declared dependency HTL-01.
+
+How the output was used:
+AI added a public GET /api/hotels/:id with optional checkIn and checkOut query dates. Reviews
+show the 10 most recent visible ones with the reviewer's first name and last initial. When both
+dates are sent, a room is listed only if its bookable ranges cover every night, it is not
+blocked, and no confirmed booking or live hold overlaps the stay. Inactive hotels return 404.
+Invalid or half-given dates return 400 with field errors. I reviewed the code and tests and
+tested it in Postman.
+Verification performed:
+Lint, build and all unit tests passed under Node 24 (165 tests). Postman checks done locally.
 Date: 2026-11-10
 Student: Sara Gomaa
 Tool: Claude
@@ -544,7 +563,6 @@ validation, ownership checks, error codes, logo upload.
 How the output was used:
 Used the explanations and corrections to write the DTOs, service and
 controller myself. Reviewed and adjusted every snippet before committing.
-===============================================
 
 Date: 2026-11-08
 Student: Nour Hossam
@@ -569,9 +587,7 @@ Added unit tests for RolesGuard covering no required roles, allowed and
 rejected roles, missing user, controller-level roles and method-level
 overrides. Lint, build, all unit tests (26) and E2E tests passed locally.
 
-================================================
 
-================================================
 
 Date: 2026-11-09
 Student: Mariam Haithem
@@ -865,7 +881,6 @@ economy seats: 201 with PENDING_PAYMENT on the first hold, 409 when the seats
 were exhausted. Tested 401 without login, round-trip and future-birth-date 400 errors, validation errors (400) and the documented responses in
 Swagger. The TypeScript build compiles with no errors.
 
-================================================
 Date: 2026-11-16
 Student: Seif Allam
 Tool: ChatGPT / Codex (OpenAI)
@@ -909,9 +924,7 @@ Verification:
 - Additional test-inclusive TypeScript check: itinerary files had no errors;
   45 existing errors in hotels.service.spec.ts and one in app.e2e-spec.ts remain.
 - No schema/index migration, Atlas access, unrelated source edits or commits.
-================================================
 
-================================================
 Date: 2026-11-16
 Student: Seif Allam
 Tool: ChatGPT / Codex (OpenAI)
@@ -936,4 +949,70 @@ The exact uncertain-then-definitive-transient regression failed before the fix.
 After the fix, all 14 ITN-07 unit tests and 26 isolated local MongoDB 8.0.20
 replica-set integration tests passed. Build and lint passed; lint retained five
 existing airline/flight warnings. No schema migration, Atlas access or commits.
+Date: 2026-11-16
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-10
+Prompt:
+Fix the team leader's review comments on GEN-10: add isHidden to the itinerary schema,
+implement itinerary hiding in AdminReportsService.hideContent(), remove the restriction on
+hiding itineraries, and add the missing AI_PROMPTS entry.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed and built by me (npm run build, 0 errors).
+Changed files: backend/src/itineraries/schemas/itinerary.schema.ts (isHidden field, default false),
+backend/src/reports/admin-reports.service.ts (itinerary hiding, restriction removed) and
+backend/src/reports/admin-reports.controller.ts (Swagger text updated).
+
+Date: 2026-11-13 (updated 2026-11-16)
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-19 (TASK-37) - passenger details and extra baggage
+
+Prompt (summary of the conversation):
+I asked how to implement FLT-19: the user enters each passenger's full name, date of birth and
+passport/ID number, optionally adds extra baggage per passenger up to the airline's maximum, and the
+baggage fee is added to the booking total. After FLT-22 was merged, the leader asked me to connect it to
+createHold(): use the airline baggage policy (FLT-08) and the cabin allowance (FLT-04) and add the fees.
+
+How the output was used:
+AI added PassengerDetailsDto (class-validator + Swagger), pure helpers in utils/baggage-fees.ts (policy
+check, per-passenger fee, total) and utils/birth-date.ts (strict YYYY-MM-DD, real day, not in the future),
+with jest specs. The helpers have no @nestjs imports because some existing suites on develop fail on an
+ES-module import error. For the leader's review I added calculateLegBaggageFees() and
+assertFreeBagsWithinAllowance() and called them from FlightBookingsService.createHold(): for each flight leg
+the free bags are checked against the cabin's freeBags and maxBagWeightKg, the extra bags against the
+airline's baggagePolicy (extraBagPrice, maxExtraBagsPerPassenger) and the cabin's max weight; a broken rule
+returns 400. The fees of all legs are saved in booking.baggageFees, kept apart from totalPrice (the seat
+fares) because PAY-01 already charges totalPrice + baggageFees, so adding them to totalPrice as well would
+charge the user twice. I reviewed the code and the tests.
+
+Verification:
+npx jest src/flight-bookings: 2 suites, 22 tests passed. tsc and oxlint report no errors in the
+flight-bookings files. Postman screenshots of the hold endpoint are attached to the PR.
+Date: 2026-11-16
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-21 (TASK-38)
+
+Prompt (summary of the conversation):
+Help me implement FLT-21: show a booking summary (flight, passengers, baggage,
+total) before payment, for a flight booking created by FLT-22 (hold). It
+depends on FLT-19 (passenger details and baggage fees).
+
+How the output was used:
+Used the generated GET /api/flight-bookings/:id/summary endpoint (JwtAuthGuard,
+only the booking's owner can read it; 404 otherwise, 400 for an invalid id).
+FlightBookingsService.getSummary loads the booking, its outbound and optional
+return flight with airline and airport details, and a pure helper
+buildBookingSummary builds the response: flights (one segment per leg),
+passengers with their baggage, extra bag count and fees, and pricing where
+total = seat fares + baggage fees (the same amount PAY-01 charges). It also
+returns holdExpiresAt and canPay (pending booking whose hold has not ended).
+Baggage fees come from the booking's baggageFees field, which FLT-19 will fill
+when it is connected to the hold endpoint.
+
+Verification:
+6 jest tests for buildBookingSummary pass; tsc --noEmit and oxlint show no
+errors in the changed files. Postman screenshots are attached to the PR.
 ================================================
