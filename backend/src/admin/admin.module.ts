@@ -11,6 +11,8 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminProvidersController } from './admin-providers.controller';
 import { AdminProvidersService } from './admin-providers.service';
+import { AdminAccountsController } from './admin-accounts.controller';
+import { AdminAccountsService } from './admin-accounts.service';
 
 @Module({
   imports: [
@@ -24,7 +26,7 @@ import { AdminProvidersService } from './admin-providers.service';
     AuthModule,
     NotificationsModule,
   ],
-  controllers: [AdminController, AdminProvidersController],
-  providers: [AdminService, AdminProvidersService],
+controllers: [AdminController, AdminAccountsController, AdminProvidersController],
+  providers: [AdminService, AdminAccountsService, AdminProvidersService],
 })
 export class AdminModule {}

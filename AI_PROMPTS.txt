@@ -880,7 +880,90 @@ Tested POST /api/flight-bookings/hold in Postman against a test flight with 2
 economy seats: 201 with PENDING_PAYMENT on the first hold, 409 when the seats
 were exhausted. Tested 401 without login, round-trip and future-birth-date 400 errors, validation errors (400) and the documented responses in
 Swagger. The TypeScript build compiles with no errors.
-================================================
+
+Date: 2026-11-16
+Student: Seif Allam
+Tool: ChatGPT / Codex (OpenAI)
+Related Requirement: ITN-07; dependency ITN-05; preserved ITN-01 and ITN-03
+
+Prompt (summary of the conversation):
+Inspect the reviewed requirements and project PDF, synchronize the ITN-07
+branch with approved develop changes, and implement authenticated owner-only
+day deletion. Keep the unique (itineraryId, dayNumber) index and schemas.
+Investigate real MongoDB transaction behavior before choosing a design.
+Atomically delete dependent activities, budget entries and transport costs,
+preserve surviving IDs, renumber ascending, derive dates, and return surviving
+budget totals separated by currency. Coordinate day creation/deletion and
+whole-itinerary deletion, protect day updates from stale numbering, bound
+transaction retries, and test rollback and concurrency without using Atlas.
+
+How the output was used:
+Read the mandatory CSV and PDF sections 6.5, 8.8 and 11. After approval,
+fast-forwarded ITN-07 to develop containing merged ITN-03 and ITN-05. Initial
+index-removal proposal was rejected after isolated MongoDB 8.0.20 replica-set
+probes demonstrated safe ascending renumbering with the unique index intact.
+Implemented the DELETE endpoint and Swagger responses in the existing
+itinerary controller/service. Coordinated writers through an actual parent
+__v increment inside the transaction. Used five attempts with exponential
+backoff for labelled transient errors; ambiguous commits retry commit only,
+with bounded retries and HTTP 503 if still uncertain. Used decimal aggregation
+for native-currency totals, counting each source record once. Full budget
+summary and FXRatesAPI conversion remain ITN-14 / ITN-18 work.
+
+Verification:
+- npm run build: passed after npm ci restored merged locked dependencies.
+- npm run lint: passed, with five warnings in unchanged airline/flight files.
+- ITN-07 unit tests: 6 passed.
+- Isolated local MongoDB replica-set integration tests: 26 passed, including
+  first/middle/last/only deletion, auth/ownership, stable references, dates,
+  currencies, injected failures, real E11000 rollback, overlapping writers,
+  the 60-day limit and bounded HTTP 409 exhaustion.
+- Jest used NODE_OPTIONS=--experimental-vm-modules for installed ESM packages.
+- Full unit suite: 439 passed, 3 failed in unchanged BlogService tests whose
+  provider mocks omit LikeModel (and other required model dependencies).
+- Additional test-inclusive TypeScript check: itinerary files had no errors;
+  45 existing errors in hotels.service.spec.ts and one in app.e2e-spec.ts remain.
+- No schema/index migration, Atlas access, unrelated source edits or commits.
+
+Date: 2026-11-16
+Student: Seif Allam
+Tool: ChatGPT / Codex (OpenAI)
+Related Requirement: ITN-07 (transaction retry review correction)
+
+Prompt (summary of the conversation):
+Make the smallest correction to stale commitUncertain state after an uncertain
+commit followed by a definitive transient failure. Prioritize the unknown-result
+label when both MongoDB labels occur, keep retries bounded, and prevent replay
+while a commit outcome remains uncertain. Add focused regression coverage.
+
+How the output was used:
+Changed only the commit-error classification in the existing retry helper.
+Each latest commit response now recomputes uncertainty. Unknown results,
+including dual-label errors, retry commit only; a definitive transient failure
+allows the existing bounded whole-transaction retry path. Non-retryable errors
+propagate without replay. Deletion, numbering, ownership and budget logic were
+unchanged. Added eight focused test cases to the original six unit tests.
+
+Verification:
+The exact uncertain-then-definitive-transient regression failed before the fix.
+After the fix, all 14 ITN-07 unit tests and 26 isolated local MongoDB 8.0.20
+replica-set integration tests passed. Build and lint passed; lint retained five
+existing airline/flight warnings. No schema migration, Atlas access or commits.
+Date: 2026-11-16
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-10
+Prompt:
+Fix the team leader's review comments on GEN-10: add isHidden to the itinerary schema,
+implement itinerary hiding in AdminReportsService.hideContent(), remove the restriction on
+hiding itineraries, and add the missing AI_PROMPTS entry.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed and built by me (npm run build, 0 errors).
+Changed files: backend/src/itineraries/schemas/itinerary.schema.ts (isHidden field, default false),
+backend/src/reports/admin-reports.service.ts (itinerary hiding, restriction removed) and
+backend/src/reports/admin-reports.controller.ts (Swagger text updated).
+
 Date: 2026-11-13 (updated 2026-11-16)
 Student: Mariam Mashoud
 Tool: Claude
@@ -932,4 +1015,86 @@ when it is connected to the hold endpoint.
 Verification:
 6 jest tests for buildBookingSummary pass; tsc --noEmit and oxlint show no
 errors in the changed files. Postman screenshots are attached to the PR.
+================================================
+Date: 2026-11-08
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: GEN-11 (TASK-103)
+
+Prompt (summary of the conversation):
+Help me implement GEN-11: flight bookings and hotel reservations follow
+Pending Payment -> Confirmed -> Completed, with Pending Payment -> Expired
+(hold timeout) and Confirmed -> Cancelled as the only other transitions. Build
+it standalone, without depending on FLT-22, HTL-18 or PAY-01.
+
+How the output was used:
+Used the generated shared helper (BookingStatus, the allowed-transition map,
+canTransitionBooking, assertBookingTransition, isTerminalBookingStatus and
+InvalidBookingTransitionError) and its unit tests after reviewing them against
+GEN-11. The helper has no framework dependency, so callers map the error to a
+409. Existing schemas and enums were not changed. Note: FlightBookingStatus on
+develop has HELD and no COMPLETED, so wiring flights to this helper needs a
+decision from the leader.
+
+Verification:
+New unit tests (9) pass, and tsc and oxlint pass. Five other existing test
+suites on develop (app, users, blog) fail on a Jest ES module issue that is
+unrelated to this change. The helper is not wired into the booking services
+yet, so no endpoint was tested in Swagger or Postman.
+================================================
+
+Date: 2026-11-17
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: GEN-11 (TASK-103) - review fixes on PR #44
+
+Prompt (summary of the conversation):
+The leader asked for three changes: add COMPLETED to FlightBookingStatus, remove
+the unused HELD and make PENDING_PAYMENT the schema default, and add two hourly
+jobs that move CONFIRMED bookings to COMPLETED (hotel reservations once checkOut
+has passed, flight bookings once their last flight has arrived, i.e. the return
+flight for round trips). Both jobs must filter on status CONFIRMED, and be
+registered in HotelBookingsModule and FlightBookingsModule.
+
+How the output was used:
+Used the generated changes after reviewing them. FlightBookingStatus now has
+COMPLETED and no HELD, default PENDING_PAYMENT (no code used HELD). New
+HotelCompletionService and FlightCompletionService run every hour with @Cron;
+the hotel job updates CONFIRMED reservations with checkOut <= now, the flight job
+finds CONFIRMED bookings whose last flight (returnFlight, else outboundFlight)
+has arrivalTime <= now and updates them with status CONFIRMED re-checked in the
+update, so a booking cancelled in between is never completed. Both are
+registered as providers in their modules. The policies spec used HELD as an
+example of a rejected status, so it now uses COMPLETED. develop was also merged
+into the branch (AI_PROMPTS.txt conflict resolved by keeping all entries).
+
+Verification:
+New unit tests for both jobs pass together with the 9 GEN-11 transition tests,
+and tsc passes (only the existing hotels.service.spec errors on develop remain).
+The jobs run on a schedule, so there is no endpoint to test in Swagger or Postman.
+================================================
+================================================
+Date: 2026-11-17
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-22, HTL-16/18 - booking creation restricted to registered users (review on PR #44)
+
+Prompt (summary of the conversation):
+The leader asked that booking creation is only allowed for registered users:
+add RolesGuard and @Roles(UserRole.USER) next to JwtAuthGuard on the booking
+creation routes of flight-bookings.controller.ts and hotel-bookings.controller.ts,
+only on those routes (not the whole controllers), so moderator/admin booking
+management stays accessible.
+
+How the output was used:
+Used the generated change after reviewing it. POST /flight-bookings/hold and
+POST /hotel-bookings now have @UseGuards(RolesGuard) and @Roles(UserRole.USER)
+at method level; the class-level JwtAuthGuard still runs first. The existing
+RolesGuard was reused (401 when unauthenticated, 403 for MODERATOR/ADMIN). A 403
+response was added to the Swagger docs of both routes. The summary route was not
+changed.
+
+Verification:
+tsc passes (only the existing hotels.service.spec errors on develop remain).
+Expected: registered user 201, moderator/admin 403, no login 401.
 ================================================

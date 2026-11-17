@@ -94,7 +94,11 @@ export class AuthService {
     const passwordOk = user ? await bcrypt.compare(dto.password, user.passwordHash) : false;
     if (!user || !passwordOk) {
       if (user) {
-        await this.recordFailedLogin(user);
+        // ACC-05: the 5th consecutive failure locks the account and shows the lockout message right away.
+        const lockedUntil = await this.recordFailedLogin(user);
+        if (lockedUntil) {
+          throw this.accountLocked(lockedUntil);
+        }
       }
       throw this.invalidCredentials();
     }
@@ -297,18 +301,15 @@ async refresh(refreshToken: string | undefined) {
 
 
     /** ACC-05: count a failed login; the 5th consecutive failure locks the account for 15 minutes. */
-  private async recordFailedLogin(user: UserDocument) {
+  private async recordFailedLogin(user: UserDocument): Promise<Date | null> {
     await this.userModel.updateOne({ _id: user._id }, { $inc: { failedLoginAttempts: 1 } });
     // Only matches once the count has reached 5, so concurrent failures lock exactly once.
-    await this.userModel.updateOne(
+    const lockedUntil = new Date(Date.now() + LOCK_MINUTES * 60 * 1000);
+    const result = await this.userModel.updateOne(
       { _id: user._id, failedLoginAttempts: { $gte: MAX_FAILED_LOGINS } },
-      {
-        $set: {
-          failedLoginAttempts: 0,
-          lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60 * 1000),
-        },
-      },
+      { $set: { failedLoginAttempts: 0, lockedUntil } },
     );
+    return result.modifiedCount > 0 ? lockedUntil : null;
   }
 
   private async revokeSession(sessionId: string) {
