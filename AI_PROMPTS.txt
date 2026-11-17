@@ -1016,3 +1016,85 @@ Verification:
 6 jest tests for buildBookingSummary pass; tsc --noEmit and oxlint show no
 errors in the changed files. Postman screenshots are attached to the PR.
 ================================================
+Date: 2026-11-08
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: GEN-11 (TASK-103)
+
+Prompt (summary of the conversation):
+Help me implement GEN-11: flight bookings and hotel reservations follow
+Pending Payment -> Confirmed -> Completed, with Pending Payment -> Expired
+(hold timeout) and Confirmed -> Cancelled as the only other transitions. Build
+it standalone, without depending on FLT-22, HTL-18 or PAY-01.
+
+How the output was used:
+Used the generated shared helper (BookingStatus, the allowed-transition map,
+canTransitionBooking, assertBookingTransition, isTerminalBookingStatus and
+InvalidBookingTransitionError) and its unit tests after reviewing them against
+GEN-11. The helper has no framework dependency, so callers map the error to a
+409. Existing schemas and enums were not changed. Note: FlightBookingStatus on
+develop has HELD and no COMPLETED, so wiring flights to this helper needs a
+decision from the leader.
+
+Verification:
+New unit tests (9) pass, and tsc and oxlint pass. Five other existing test
+suites on develop (app, users, blog) fail on a Jest ES module issue that is
+unrelated to this change. The helper is not wired into the booking services
+yet, so no endpoint was tested in Swagger or Postman.
+================================================
+
+Date: 2026-11-17
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: GEN-11 (TASK-103) - review fixes on PR #44
+
+Prompt (summary of the conversation):
+The leader asked for three changes: add COMPLETED to FlightBookingStatus, remove
+the unused HELD and make PENDING_PAYMENT the schema default, and add two hourly
+jobs that move CONFIRMED bookings to COMPLETED (hotel reservations once checkOut
+has passed, flight bookings once their last flight has arrived, i.e. the return
+flight for round trips). Both jobs must filter on status CONFIRMED, and be
+registered in HotelBookingsModule and FlightBookingsModule.
+
+How the output was used:
+Used the generated changes after reviewing them. FlightBookingStatus now has
+COMPLETED and no HELD, default PENDING_PAYMENT (no code used HELD). New
+HotelCompletionService and FlightCompletionService run every hour with @Cron;
+the hotel job updates CONFIRMED reservations with checkOut <= now, the flight job
+finds CONFIRMED bookings whose last flight (returnFlight, else outboundFlight)
+has arrivalTime <= now and updates them with status CONFIRMED re-checked in the
+update, so a booking cancelled in between is never completed. Both are
+registered as providers in their modules. The policies spec used HELD as an
+example of a rejected status, so it now uses COMPLETED. develop was also merged
+into the branch (AI_PROMPTS.txt conflict resolved by keeping all entries).
+
+Verification:
+New unit tests for both jobs pass together with the 9 GEN-11 transition tests,
+and tsc passes (only the existing hotels.service.spec errors on develop remain).
+The jobs run on a schedule, so there is no endpoint to test in Swagger or Postman.
+================================================
+================================================
+Date: 2026-11-17
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-22, HTL-16/18 - booking creation restricted to registered users (review on PR #44)
+
+Prompt (summary of the conversation):
+The leader asked that booking creation is only allowed for registered users:
+add RolesGuard and @Roles(UserRole.USER) next to JwtAuthGuard on the booking
+creation routes of flight-bookings.controller.ts and hotel-bookings.controller.ts,
+only on those routes (not the whole controllers), so moderator/admin booking
+management stays accessible.
+
+How the output was used:
+Used the generated change after reviewing it. POST /flight-bookings/hold and
+POST /hotel-bookings now have @UseGuards(RolesGuard) and @Roles(UserRole.USER)
+at method level; the class-level JwtAuthGuard still runs first. The existing
+RolesGuard was reused (401 when unauthenticated, 403 for MODERATOR/ADMIN). A 403
+response was added to the Swagger docs of both routes. The summary route was not
+changed.
+
+Verification:
+tsc passes (only the existing hotels.service.spec errors on develop remain).
+Expected: registered user 201, moderator/admin 403, no login 401.
+================================================

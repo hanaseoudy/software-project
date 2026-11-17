@@ -6,6 +6,7 @@ import { Airport, AirportSchema } from '../airports/schemas/airport.schema';
 import { Flight, FlightSchema } from '../flights/schemas/flight.schema';
 import { FlightBookingsController } from './flight-bookings.controller';
 import { FlightBookingsService } from './flight-bookings.service';
+import { FlightCompletionService } from './flight-completion.service';
 import { FlightHoldExpiryService } from './flight-hold-expiry.service';
 import {
   FlightBooking,
@@ -23,7 +24,11 @@ import {
     ]),
   ],
   controllers: [FlightBookingsController],
-  providers: [FlightBookingsService, FlightHoldExpiryService],
+  providers: [
+    FlightBookingsService,
+    FlightHoldExpiryService,
+    FlightCompletionService,
+  ],
   exports: [FlightBookingsService],
 })
 export class FlightBookingsModule {}
