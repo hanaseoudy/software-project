@@ -19,6 +19,8 @@ import {
 import { CreateFlightsDto } from './dto/create-flights.dto';
 import { AddCabinDto } from './dto/add-cabin.dto';
 import { isValidObjectId } from 'mongoose';
+import { SearchFlightsDto } from './dto/search-flights.dto';
+import { Airline, AirlineDocument } from '../airlines/schemas/airline.schema';
 
 @Injectable()
 export class FlightsService {
@@ -29,6 +31,8 @@ export class FlightsService {
     private readonly airportModel: Model<AirportDocument>,
     @InjectModel(ModeratorAssignment.name)
     private readonly assignmentModel: Model<ModeratorAssignmentDocument>,
+    @InjectModel(Airline.name)
+    private readonly airlineModel: Model<AirlineDocument>,
   ) {}
 
   async create(moderatorId: string, dto: CreateFlightsDto) {
@@ -135,6 +139,59 @@ export class FlightsService {
     }
 
     return updated.populate(['airline', 'departureAirport', 'arrivalAirport']);
+  }
+
+  // constructor: inject the Airline model next to the Flight model
+
+  async search(dto: SearchFlightsDto) {
+    // 1. Which airlines are active right now?
+
+    const activeAirlines = await this.airlineModel
+      .find({ isActive: true })
+      .select('_id')
+      .lean();
+    const activeIds = activeAirlines.map((a) => a._id);
+
+    const [depAirport, arrAirport] = await Promise.all([
+      this.airportModel.findOne({ iataCode: dto.departureAirport }),
+      this.airportModel.findOne({ iataCode: dto.arrivalAirport }),
+    ]);
+
+    // 2. If either airport code doesn't exist in your DB, return an empty list (200 OK)
+    if (!depAirport || !arrAirport) {
+      return [];
+    }
+
+    // 2. Find matching scheduled flights of those airlines
+    const flights = await this.flightsModel
+      .find({
+        departureAirport: depAirport._id,
+        arrivalAirport: arrAirport._id,
+        departureLocalDate: dto.departureDate,
+        status: FlightStatus.SCHEDULED,
+        airline: { $in: activeIds },
+      })
+      .populate('airline', 'name code')
+      .sort({ departureTime: 1 })
+      .lean();
+
+    // 3. Keep only cabins with enough free seats, drop flights left with none
+    const results = flights
+      .map((flight) => ({
+        ...flight,
+        cabins: flight.cabins
+          .map((c) => ({
+            ...c,
+            availableSeats: c.totalSeats - c.bookedSeats - c.heldSeats,
+          }))
+          .filter((c) => c.availableSeats >= dto.passengers),
+      }))
+      .filter((flight) => flight.cabins.length > 0);
+
+    return {
+      flights: results,
+      message: results.length ? 'Flights found' : 'No flights found',
+    };
   }
 
   private async getModeratorAirlineId(userId: string) {
