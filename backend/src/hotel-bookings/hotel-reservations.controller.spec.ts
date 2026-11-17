@@ -6,6 +6,7 @@ import { HotelBookingsController } from './hotel-bookings.controller';
 import { ReviewsService } from './reviews.service';
 import { HotelBookingsService } from './hotel-bookings.service';
 import { HotelReservationsController } from './hotel-reservations.controller';
+import { HotelCancellationService } from './hotel-cancellation.service';
 import { HotelReservationsService } from './hotel-reservations.service';
 
 describe('reservation controllers (HTL-20 / HTL-22)', () => {
@@ -23,6 +24,7 @@ describe('reservation controllers (HTL-20 / HTL-22)', () => {
         { provide: HotelBookingsService, useValue: {} },
         { provide: ReviewsService, useValue: {} },
         { provide: HotelReservationsService, useValue: service },
+        { provide: HotelCancellationService, useValue: {} },
       ],
     })
       .overrideGuard(JwtAuthGuard)

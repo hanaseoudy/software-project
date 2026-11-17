@@ -130,6 +130,21 @@ assigned hotel moderator sees guest, dates and status, optional status filter).
 Unpaid holds are never listed, and a Confirmed stay whose check-out has passed
 is shown as Completed. It wrote the query and response DTOs, a
 HotelReservationsService, two controllers and unit tests. I will review the
+Related Requirement: HTL-21 (Jira TASK-60)
+Prompt:
+Open the PR for HTL-20 and HTL-22 and then start the last one. (HTL-21 is the
+last of my sprint 3 tasks; it depends on HTL-17, HTL-10 and PAY-03, which are
+all on develop.)
+How the output was used:
+Claude read the HTL-21 requirement, the hotel cancellation tiers (HTL-10) and
+the PAY-03 refund service, and added two endpoints for the guest:
+GET /api/hotel-bookings/:id/cancellation-quote shows the refund before
+cancelling, and POST /api/hotel-bookings/:id/cancel cancels the whole
+Confirmed reservation before its check-in date and creates the refund through
+RefundsService.issueRefund. The guest sends the refund amount they were shown
+and the cancellation is refused if it changed. Cancelling frees the rooms
+because availability only counts Confirmed reservations and unexpired holds.
+It wrote the DTOs, a HotelCancellationService and unit tests. I will review the
 changes before the pull request is merged.
 Verification performed:
 Unit tests, lint and build passed under Node 24.

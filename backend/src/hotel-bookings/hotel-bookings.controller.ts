@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
@@ -40,6 +42,12 @@ import {
   ReservationDetailsDto,
 } from './dto/reservation-views.dto';
 import { HotelReservationsService } from './hotel-reservations.service';
+import {
+  CancelReservationDto,
+  CancelReservationResultDto,
+  CancellationQuoteDto,
+} from './dto/cancel-reservation.dto';
+import { HotelCancellationService } from './hotel-cancellation.service';
 
 @ApiTags('Hotel Bookings')
 @ApiCookieAuth()
@@ -50,6 +58,7 @@ export class HotelBookingsController {
     private readonly hotelBookingsService: HotelBookingsService,
     private readonly reviewsService: ReviewsService,
     private readonly reservations: HotelReservationsService,
+    private readonly cancellation: HotelCancellationService,
   ) {}
 
   @Post()
@@ -194,5 +203,54 @@ export class HotelBookingsController {
     @Param('id') id: string,
   ): Promise<ReservationDetailsDto> {
     return this.reservations.getMine(req.user!.sub, id);
+  }
+
+  @Get(':id/cancellation-quote')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.USER)
+  @ApiOperation({
+    summary: 'HTL-21: see the refund before cancelling a reservation',
+    description:
+      "Registered users only, for their own Confirmed reservation that has not reached its check-in date. The refund is computed from the hotel's cancellation tiers (HTL-10) on the full total of the reservation.",
+  })
+  @ApiOkResponse({ type: CancellationQuoteDto })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
+  @ApiForbiddenResponse({ description: 'Only registered users can cancel reservations' })
+  @ApiNotFoundResponse({ description: 'Reservation not found (or not yours)' })
+  @ApiConflictResponse({
+    description:
+      'Not a Confirmed reservation, already cancelled, or the check-in date has been reached',
+  })
+  cancellationQuote(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<CancellationQuoteDto> {
+    return this.cancellation.quote(req.user!.sub, id);
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.USER)
+  @ApiOperation({
+    summary: 'HTL-21: cancel my whole Confirmed reservation',
+    description:
+      'Registered users only, before the check-in date. Send the refund amount shown by the cancellation quote. The reservation becomes Cancelled, all its rooms are free again for those dates and a refund is created (PAY-03). Partial cancellation is not supported.',
+  })
+  @ApiOkResponse({ type: CancelReservationResultDto })
+  @ApiBadRequestResponse({ description: 'Validation failed; errors are grouped by field' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
+  @ApiForbiddenResponse({ description: 'Only registered users can cancel reservations' })
+  @ApiNotFoundResponse({ description: 'Reservation not found (or not yours)' })
+  @ApiConflictResponse({
+    description:
+      'Not a Confirmed reservation, already cancelled, the check-in date has been reached, or the refund changed since the quote',
+  })
+  cancel(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: CancelReservationDto,
+  ): Promise<CancelReservationResultDto> {
+    return this.cancellation.cancel(req.user!.sub, id, dto);
   }
 }
