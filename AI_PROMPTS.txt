@@ -1016,6 +1016,60 @@ Verification:
 6 jest tests for buildBookingSummary pass; tsc --noEmit and oxlint show no
 errors in the changed files. Postman screenshots are attached to the PR.
 ================================================
+
+Date: 2026-11-17
+Student: Seif Allam
+Tool: ChatGPT / Codex (OpenAI)
+Related Requirement: ITN-10; dependency ITN-05; GEN-12 currency reference data
+
+Prompt (summary of the conversation):
+Implement itinerary activity creation, partial update and deletion using the
+three official endpoints, authenticated ownership checks, strict field and
+money validation, supported currencies and Swagger documentation. Allow null
+to clear time or cost, with cost removal also clearing currency. Reject empty
+PATCH and unsupported input fields. Preserve images for ITN-12 and store costs
+only on Activity records for ITN-14 compatibility, without FX conversion.
+Create an independent worktree from develop, preserve all ITN-07 work, and
+investigate/test parent-document transaction coordination without importing
+ITN-07 commits or connecting to shared Atlas.
+
+How the output was used:
+Read the mandatory CSV, project PDF and existing schemas/API conventions.
+Created feature/ITN-10-activity-management in a separate worktree from develop
+at a652ddc. Implemented activity DTOs, response mapping, controller/service and
+module registration for the existing Currency schema. Every activity mutation
+writes the owned parent __v before authoritative child reads in one transaction.
+PATCH/DELETE perform discovery-only reads first, then recheck parent/day/activity
+after that write. Transient failures and ambiguous commits have separate bounded
+retry paths, prioritizing uncertainty when both MongoDB error labels occur.
+No Activity schema, existing itinerary service/controller, dependency manifest,
+ITN-12 image management or ITN-18 conversion changes were needed.
+
+Concurrency compatibility and limits:
+Develop has no day-deletion endpoint. Committed integration tests label their
+coordinated day-deletion routine as a protocol fixture. A separate temporary
+probe loaded the actual unmerged ITN-07 service at runtime and passed 30 local
+concurrency trials (10 each for activity create/update/delete versus removeDay),
+with no orphan activities and stable surviving day IDs/numbering. No ITN-07
+source or commits were added to this branch. Future day/reorder writers must
+follow the same parent-write protocol; arbitrary direct database writes are
+outside that guarantee. Tests used a single-node MongoDB 8.0.20 replica set;
+primary failover was not tested.
+
+Verification:
+- Build passed; lint passed with five existing airline/flight warnings.
+- Final focused unit tests: 41 passed across DTO, controller and service suites.
+- Final isolated API integration tests: 45 passed, including actual JWT/session
+  authentication, authorization, partial PATCH, null clearing, zero cost,
+  supported currencies, strict HH:mm (including a trailing-newline regression),
+  dependent-parent races, duplicate deletion and injected database failures.
+- Broader unit suite before the final strict-time regression addition:
+  609 passed, 3 failed in existing BlogService provider-mock tests.
+- Additional test-inclusive type check found no activity errors after correcting
+  a new test type; 45 existing hotel-test errors and one app E2E error remain.
+- Jest used NODE_OPTIONS=--experimental-vm-modules for ESM dependencies.
+- No Atlas access, migrations, unrelated source edits, commits or pushes.
+- Original ITN-07 checkout and its two pending AI-log deletions were preserved.
 Date: 2026-11-08
 Student: Mariam Mashoud
 Tool: Claude
@@ -1041,7 +1095,6 @@ New unit tests (9) pass, and tsc and oxlint pass. Five other existing test
 suites on develop (app, users, blog) fail on a Jest ES module issue that is
 unrelated to this change. The helper is not wired into the booking services
 yet, so no endpoint was tested in Swagger or Postman.
-================================================
 
 Date: 2026-11-17
 Student: Mariam Mashoud
@@ -1072,8 +1125,6 @@ Verification:
 New unit tests for both jobs pass together with the 9 GEN-11 transition tests,
 and tsc passes (only the existing hotels.service.spec errors on develop remain).
 The jobs run on a schedule, so there is no endpoint to test in Swagger or Postman.
-================================================
-================================================
 Date: 2026-11-17
 Student: Mariam Mashoud
 Tool: Claude
