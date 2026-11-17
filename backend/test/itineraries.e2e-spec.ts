@@ -3,18 +3,24 @@ import { Test } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { getConnectionToken, MongooseModule } from '@nestjs/mongoose';
-import { Connection, Types } from 'mongoose';
+import mongoose, { Connection, Types } from 'mongoose';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { SwaggerModule } from '@nestjs/swagger';
-import { rm } from 'fs/promises';
+import { access, mkdir, mkdtemp, rm } from 'fs/promises';
+import { spawn } from 'child_process';
+import { createServer } from 'net';
+import { MongoClient } from 'mongodb';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import { ItinerariesModule } from '../src/itineraries/itineraries.module';
 import { ItinerariesService } from '../src/itineraries/itineraries.service';
 import { createSwaggerConfig } from '../src/common/swagger.config';
-import { Itinerary } from '../src/itineraries/schemas/itinerary.schema';
-import { ItineraryDay } from '../src/itineraries/schemas/itinerary-day.schema';
+import { Itinerary, ItinerarySchema, ItineraryVisibility } from '../src/itineraries/schemas/itinerary.schema';
+import { ItineraryDay, ItineraryDaySchema } from '../src/itineraries/schemas/itinerary-day.schema';
+import { ActivitiesService } from '../src/itineraries/activities.service';
+import { TransportCostsService } from '../src/itineraries/transport-costs.service';
+import { PublicItinerariesController } from '../src/itineraries/public-itineraries.controller';
 import { Activity } from '../src/itineraries/schemas/activity.schema';
 import { BudgetCategory, BudgetEntry } from '../src/itineraries/schemas/budget-entry.schema';
 import { IntercityTransportMode, TransportCost } from '../src/itineraries/schemas/transport-cost.schema';
@@ -685,5 +691,322 @@ describe('ITN-07 against an isolated local replica set', () => {
     });
   });
  
+
+  describe('ITN-20 owner visibility and public reads', () => {
+    const tracked = new Set<string>();
+    const http = () => app.getHttpServer();
+    const search = (query = '') => request(http()).get('/api/itineraries/public/search' + query);
+    const detail = (id: string) => request(http()).get('/api/itineraries/public/' + id);
+    const visibility = (id: string, value: unknown, cookies = auth) => request(http()).patch('/api/itineraries/' + id).set('Cookie', cookies).send({ visibility: value });
+    async function fixture(count = 2, expenses = false) {
+      const data = await seed(count, expenses); tracked.add(data.id); return data;
+    }
+    afterEach(async () => {
+      if (tracked.size) await models().parent.updateMany({ _id: { $in: [...tracked].map(id => new Types.ObjectId(id)) } }, { $set: { visibility: ItineraryVisibility.PRIVATE } });
+      tracked.clear();
+    });
+    it('creates Private itineraries even when creation supplies visibility and preserves omitted PATCH behavior', async () => {
+      const created = await request(http()).post('/api/itineraries').set('Cookie', auth).send({ title: 'Private default', countryIds: ['EG'], startDate: '2028-02-28', visibility: 'PUBLIC' }).expect(201);
+      const id = created.body._id; tracked.add(id);
+      expect(created.body.visibility).toBe('PRIVATE');
+      await detail(id).expect(404);
+      await request(http()).patch('/api/itineraries/' + id).set('Cookie', auth).send({ title: 'Ordinary edit' }).expect(200);
+      expect((await models().parent.findById(id).lean())!.visibility).toBe('PRIVATE');
+      expect((await search().expect(200)).body.items).not.toContainEqual(expect.objectContaining({ id }));
+    });
+    it.each(['missing', 'null'])('treats legacy %s visibility as Private in owner reads and rejects public reads', async kind => {
+      const { id } = await fixture();
+      await models().parent.collection.updateOne({ _id: new Types.ObjectId(id) }, kind === 'missing' ? { $unset: { visibility: '' } } : { $set: { visibility: null } });
+      const own = await request(http()).get('/api/itineraries/' + id).set('Cookie', auth).expect(200);
+      expect(own.body.visibility).toBe('PRIVATE');
+      const ordered = await models().parent.find({ userId: owner }).sort({ updatedAt: -1, _id: -1 }).lean();
+      const page = Math.floor(ordered.findIndex(item => item._id.toString() === id) / 10) + 1;
+      const listed = await service.findAll(owner, page);
+      expect(listed.items.find(item => item.id === id)?.visibility).toBe('PRIVATE');
+      await detail(id).expect(404);
+      expect((await search().expect(200)).body.total).toBe(0);
+      await visibility(id, 'PUBLIC').expect(200);
+      await detail(id).expect(200);
+      await visibility(id, 'PRIVATE').expect(200);
+      expect((await models().parent.findById(id).lean())!.visibility).toBe('PRIVATE');
+    });
+    it('persists repeated transitions and revokes search/direct links immediately after each acknowledgement', async () => {
+      const { id } = await fixture();
+      for (const value of ['PUBLIC', 'PUBLIC', 'PRIVATE', 'PRIVATE', 'PUBLIC', 'PRIVATE']) {
+        const changed = await visibility(id, value).expect(200);
+        expect(changed.body.visibility).toBe(value);
+        expect((await models().parent.findById(id).lean())!.visibility).toBe(value);
+        const result = await search().expect(200);
+        expect(result.headers['cache-control']).toBe('no-store');
+        expect(result.body.total).toBe(value === 'PUBLIC' ? 1 : 0);
+        await detail(id).expect(value === 'PUBLIC' ? 200 : 404);
+      }
+    });
+    it.each([null, '', 'public', 'private', 'OTHER', 1, true, {}, []])('rejects invalid visibility %j without writes', async value => {
+      const { id } = await fixture(), before = await snapshot(id);
+      await visibility(id, value).expect(400);
+      expect(await snapshot(id)).toBe(before);
+    });
+    it('validates IDs and authentication while preserving owner update status conventions', async () => {
+      const { id } = await fixture(), before = await snapshot(id);
+      await request(http()).patch('/api/itineraries/' + id).send({ visibility: 'PUBLIC' }).expect(401);
+      await visibility(id, 'PUBLIC', otherAuth).expect(403);
+      await visibility('bad', 'PUBLIC').expect(400);
+      await visibility(oid().toString(), 'PUBLIC').expect(404);
+      await detail('bad').expect(400);
+      await detail(oid().toString()).expect(404);
+      expect(await snapshot(id)).toBe(before);
+    });
+    it('allowlists public fields, preserves UTC order after real ITN-08 reordering, and protects conditional reads', async () => {
+      const { id, days } = await fixture(4, true);
+      await models().parent.collection.updateOne({ _id: new Types.ObjectId(id) }, { $set: { privateMemo: 'secret', clonedFromId: oid(), originalAuthorName: 'Private attribution' } });
+      await visibility(id, 'PUBLIC').expect(200);
+      await request(http()).patch('/api/itineraries/' + id + '/days/' + days[3]._id + '/reorder').set('Cookie', auth).send({ newPosition: 2 }).expect(200);
+      const before = await snapshot(id);
+      const result = await detail(id).expect(200);
+      expect(result.headers['cache-control']).toBe('no-store');
+      expect(Object.keys(result.body).sort()).toEqual(['countryIds', 'dayCount', 'days', 'id', 'startDate', 'title', 'visibility']);
+      expect(result.body.days.map((day: { id: string }) => day.id)).toEqual([days[0], days[3], days[1], days[2]].map(day => day._id.toString()));
+      expect(result.body.days.map((day: { date: string }) => day.date)).toEqual(['2028-02-28', '2028-02-29', '2028-03-01', '2028-03-02']);
+      for (const day of result.body.days) expect(Object.keys(day).sort()).toEqual(['cityId', 'date', 'dayNumber', 'id']);
+      expect(JSON.stringify(result.body)).not.toContain('secret');
+      expect(await snapshot(id)).toBe(before);
+      const etag = result.headers.etag ?? '"previous-response"';
+      await detail(id).set('If-None-Match', etag).expect(200);
+      await visibility(id, 'PRIVATE').expect(200);
+      await detail(id).set('If-None-Match', etag).expect(404);
+      await search().set('If-None-Match', '*').expect(200).expect(response => { expect(response.body.total).toBe(0); });
+    });
+    it('filters before pagination/counting and returns deterministic pages of ten', async () => {
+      const ids: string[] = [], fixed = new Date('2028-01-01T00:00:00Z');
+      for (let i = 0; i < 13; i++) {
+        const { id } = await fixture(i % 3); ids.push(id);
+        await models().parent.collection.updateOne({ _id: new Types.ObjectId(id) }, { $set: { visibility: 'PUBLIC', updatedAt: fixed } });
+      }
+      const hidden = await fixture(), legacy = await fixture(), ordinary = await fixture();
+      await models().parent.collection.updateOne({ _id: new Types.ObjectId(hidden.id) }, { $set: { visibility: 'PUBLIC', isHidden: true } });
+      await models().parent.collection.updateOne({ _id: new Types.ObjectId(legacy.id) }, { $unset: { visibility: '' } });
+      const first = await search('?page=1').expect(200), second = await search('?page=2').expect(200), third = await search('?page=3').expect(200);
+      expect(first.body).toMatchObject({ total: 13, pageSize: 10, totalPages: 2 });
+      expect(second.body).toMatchObject({ total: 13, page: 2, pageSize: 10, totalPages: 2 });
+      expect(first.body.items).toHaveLength(10); expect(second.body.items).toHaveLength(3); expect(third.body.items).toEqual([]);
+      expect([...first.body.items, ...second.body.items].map((item: { id: string }) => item.id)).toEqual(ids.sort().reverse());
+      for (const item of [...first.body.items, ...second.body.items]) expect(Object.keys(item).sort()).toEqual(['countryIds', 'dayCount', 'id', 'startDate', 'title', 'visibility']);
+      for (const id of [hidden.id, legacy.id, ordinary.id]) await detail(id).expect(404);
+    });
+    it.each(['?q=Egypt', '?cityId=CAI', '?minDays=1', '?visibility=PRIVATE', '?page=0', '?page=1.5', '?page=abc'])('rejects unsupported filters or invalid pagination %s', async query => {
+      await search(query).expect(400);
+    });
+    it('preserves moderation hiding, owner identity and associated records during a mixed visibility PATCH', async () => {
+      const { id, days } = await fixture(2, true), parent = models().parent;
+      await parent.updateOne({ _id: id }, { $set: { isHidden: true } });
+      const before = JSON.parse(await snapshot(id));
+      const result = await request(http()).patch('/api/itineraries/' + id).set('Cookie', auth).send({ visibility: 'PUBLIC', title: 'New title', startDate: '2028-12-31', countryIds: ['EG'], isHidden: false, userId: oid().toString() }).expect(200);
+      expect(result.body).toMatchObject({ visibility: 'PUBLIC', title: 'New title', isHidden: true, userId: owner });
+      expect((await parent.findById(id).lean())!.__v).toBe(before[0].__v + 1);
+      expect(JSON.parse(await snapshot(id)).slice(1)).toEqual(before.slice(1));
+      expect((await numbered(id)).map(day => day._id.toString())).toEqual(days.map(day => day._id.toString()));
+      await detail(id).expect(404);
+      expect((await search().expect(200)).body.total).toBe(0);
+    });
+    it.each(['PUBLIC', 'PRIVATE'])('keeps all nonowner mutations and owner-only reads protected when %s', async value => {
+      const { id, days } = await fixture(2, true), foreign = await fixture(1);
+      await visibility(id, value).expect(200);
+      const m = models(), activity = (await m.activity.findOne({ dayId: days[0]._id }))!, transport = (await m.transport.findOne({ dayId: days[0]._id }))!;
+      const before = await snapshot(id), other = otherAuth;
+      await request(http()).patch('/api/itineraries/' + id).set('Cookie', other).send({ title: 'Attack' }).expect(403);
+      await request(http()).delete('/api/itineraries/' + id).set('Cookie', other).expect(403);
+      await request(http()).post('/api/itineraries/' + id + '/days').set('Cookie', other).send({ cityId: 'CAI' }).expect(404);
+      await request(http()).patch('/api/itineraries/' + id + '/days/' + days[0]._id).set('Cookie', other).send({ notes: 'Attack' }).expect(404);
+      await request(http()).delete('/api/itineraries/' + id + '/days/' + days[0]._id).set('Cookie', other).expect(404);
+      await request(http()).patch('/api/itineraries/' + id + '/days/' + days[0]._id + '/reorder').set('Cookie', other).send({ newPosition: 2 }).expect(404);
+      await request(http()).post('/api/itineraries/' + id + '/days/' + days[0]._id + '/activities').set('Cookie', other).send({ name: 'Attack', description: 'No' }).expect(404);
+      await request(http()).patch('/api/activities/' + activity._id).set('Cookie', other).send({ name: 'Attack' }).expect(404);
+      await request(http()).delete('/api/activities/' + activity._id).set('Cookie', other).expect(404);
+      const transportBody = { dayId: days[0]._id.toString(), mode: IntercityTransportMode.BUS, fromCityId: 'CAI', toCityId: 'GIZ', amount: 1, currency: 'USD' };
+      await request(http()).post('/api/itineraries/' + id + '/transport-costs').set('Cookie', other).send(transportBody).expect(404);
+      await request(http()).patch('/api/transport-costs/' + transport._id).set('Cookie', other).send({ amount: 1 }).expect(404);
+      await request(http()).delete('/api/transport-costs/' + transport._id).set('Cookie', other).expect(404);
+      for (const route of ['', '/days', '/groups']) await request(http()).get('/api/itineraries/' + id + route).set('Cookie', other).expect(404);
+      await request(http()).get('/api/itineraries/' + id + '/groups').expect(401);
+      await request(http()).post('/api/itineraries/' + id + '/days/' + foreign.days[0]._id + '/activities').set('Cookie', auth).send({ name: 'Cross', description: 'No' }).expect(404);
+      await request(http()).patch('/api/transport-costs/' + transport._id).set('Cookie', auth).send({ dayId: foreign.days[0]._id.toString() }).expect(404);
+      expect(await snapshot(id)).toBe(before);
+    });
+    it('removes deleted Public itineraries from public results', async () => {
+      const { id } = await fixture(2, true);
+      await visibility(id, 'PUBLIC').expect(200);
+      expect((await search().expect(200)).body.total).toBe(1);
+      await request(http()).delete('/api/itineraries/' + id).set('Cookie', auth).expect(200);
+      await detail(id).expect(404);
+      expect((await search().expect(200)).body.total).toBe(0);
+    });
+    it('verifies raw driver timestamps, primary reads and cleanup on the wire', async () => {
+      const { id } = await fixture(); await visibility(id, 'PUBLIC').expect(200);
+      const commands: { requestId: number; command: Record<string, any> }[] = [], replies = new Map<number, any>();
+      const started = (event: { databaseName: string; commandName: string; requestId: number; command: Record<string, any> }) => { if (event.databaseName === db.name && ['find', 'aggregate'].includes(event.commandName)) commands.push(event); };
+      const succeeded = (event: { requestId: number; reply: any }) => replies.set(event.requestId, event.reply);
+      const client = db.getClient(), start = client.startSession.bind(client), sessions: ReturnType<typeof start>[] = [], run = db.db!.runCursorCommand.bind(db.db!), cursors: ReturnType<typeof run>[] = [];
+      jest.spyOn(client, 'startSession').mockImplementation(options => { const session = start(options); sessions.push(session); return session; });
+      jest.spyOn(db.db!, 'runCursorCommand').mockImplementation((command, options) => { const cursor = run(command, options); cursors.push(cursor); return cursor; });
+      db.getClient().on('commandStarted', started); db.getClient().on('commandSucceeded', succeeded);
+      try { await service.findPublicOne(id); }
+      finally { db.getClient().off('commandStarted', started); db.getClient().off('commandSucceeded', succeeded); }
+      expect(commands).toHaveLength(3);
+      expect(commands.map(event => event.command.readConcern.level)).toEqual(['linearizable', 'snapshot', 'linearizable']);
+      expect(commands[1].command.readConcern.atClusterTime).toEqual(replies.get(commands[0].requestId).operationTime);
+      for (const event of commands) { expect(event.command.lsid).toEqual(commands[0].command.lsid); expect(event.command.startTransaction).toBeUndefined(); expect(event.command.readConcern.afterClusterTime).toBeUndefined(); }
+      expect(sessions).toHaveLength(1); expect(sessions[0].hasEnded).toBe(true); expect(sessions[0].operationTime).toBeUndefined();
+      expect(cursors).toHaveLength(1); expect(cursors[0].closed).toBe(true);
+    });
+    it('rejects an actual historical Public snapshot if revocation commits before the final recheck', async () => {
+      const { id } = await fixture(); await visibility(id, 'PUBLIC').expect(200);
+      const original = db.db!.runCursorCommand.bind(db.db!); let sawPublicSnapshot = false;
+      jest.spyOn(db.db!, 'runCursorCommand').mockImplementationOnce((command, options) => {
+        const cursor = original(command, options), read = cursor.toArray.bind(cursor);
+        jest.spyOn(cursor, 'toArray').mockImplementationOnce(async () => { const rows = await read(); sawPublicSnapshot = rows[0]?.visibility === 'PUBLIC'; await service.update(owner, id, { visibility: ItineraryVisibility.PRIVATE }); return rows; });
+        return cursor;
+      });
+      await detail(id).expect(404);
+      expect(sawPublicSnapshot).toBe(true);
+      await detail(id).expect(404);
+      expect((await search().expect(200)).body.total).toBe(0);
+    });
+    it('anchors an overlapping search to its earlier valid barrier, then excludes revoked data on the next request', async () => {
+      const { id } = await fixture(); await visibility(id, 'PUBLIC').expect(200);
+      const command = db.db!.command.bind(db.db!);
+      jest.spyOn(db.db!, 'command').mockImplementationOnce(async (...args) => {
+        const reply = await command(...args);
+        await service.update(owner, id, { visibility: ItineraryVisibility.PRIVATE });
+        return reply;
+      });
+      const overlapping = await search().expect(200);
+      expect(overlapping.body.items.map((item: { id: string }) => item.id)).toEqual([id]);
+      expect(overlapping.body.total).toBe(1);
+      expect((await search().expect(200)).body.total).toBe(0);
+    });
+    it.each(['reorder', 'delete', 'activity', 'transport'])('serializes visibility revocation with a real %s parent-write operation', async kind => {
+      const { id, days } = await fixture(4, true), m = models(); await visibility(id, 'PUBLIC').expect(200);
+      const beforeVersion = (await m.parent.findById(id).lean())!.__v;
+      const original = m.parent.findOneAndUpdate.bind(m.parent);
+      let entered!: () => void, release!: () => void;
+      const ready = new Promise<void>(resolve => { entered = resolve; }), gate = new Promise<void>(resolve => { release = resolve; });
+      jest.spyOn(m.parent, 'findOneAndUpdate').mockImplementationOnce((...args) => {
+        const query = original(...args), exec = query.exec.bind(query);
+        jest.spyOn(query, 'exec').mockImplementationOnce(async () => { const result = await exec(); entered(); await gate; return result; }); return query;
+      });
+      const operation = kind === 'reorder' ? service.reorderDay(owner, id, days[3]._id.toString(), { newPosition: 2 }) : kind === 'delete' ? service.removeDay(owner, id, days[1]._id.toString()) : kind === 'activity' ? app.get(ActivitiesService).create(owner, id, days[0]._id.toString(), { name: 'During race', description: 'Keep owner-only' }) : app.get(TransportCostsService).create(owner, id, { dayId: days[0]._id.toString(), mode: IntercityTransportMode.BUS, fromCityId: 'CAI', toCityId: 'GIZ', amount: 1, currency: 'USD' });
+      await Promise.race([ready, operation.then(() => { throw new Error('Gate not reached'); })]);
+      try {
+        const changing = service.update(owner, id, { visibility: ItineraryVisibility.PRIVATE });
+        const completion = Promise.all([operation, changing]);
+        await new Promise(resolve => setTimeout(resolve, 30)); release(); await completion;
+        expect((await m.parent.findById(id).lean())!.__v).toBe(beforeVersion + 2);
+        expect((await m.parent.findById(id).lean())!.visibility).toBe('PRIVATE');
+        const final = await numbered(id); expect(final).toHaveLength(kind === 'delete' ? 3 : 4);
+        if (kind === 'reorder') expect(final.map(day => day._id.toString())).toEqual([days[0], days[3], days[1], days[2]].map(day => day._id.toString()));
+        await detail(id).expect(404); expect((await search().expect(200)).body.total).toBe(0);
+      } finally { release(); await operation.catch(() => undefined); }
+    });
+    it('fails closed without a timestamp and ends sessions/cursors after driver errors', async () => {
+      const { id } = await fixture(); await visibility(id, 'PUBLIC').expect(200);
+      const client = db.getClient(), start = client.startSession.bind(client), sessions: ReturnType<typeof start>[] = [], command = db.db!.command.bind(db.db!);
+      jest.spyOn(client, 'startSession').mockImplementation(options => { const session = start(options); sessions.push(session); return session; });
+      jest.spyOn(db.db!, 'command').mockImplementationOnce(async (...args) => { const reply = await command(...args); delete reply.operationTime; return reply; });
+      await detail(id).expect(503); expect(sessions[0].hasEnded).toBe(true);
+      const run = db.db!.runCursorCommand.bind(db.db!); let failedCursor: ReturnType<typeof run> | undefined;
+      jest.spyOn(db.db!, 'runCursorCommand').mockImplementationOnce((raw, options) => { failedCursor = run(raw, options); jest.spyOn(failedCursor, 'toArray').mockRejectedValueOnce(new Error('Private database details')); return failedCursor; });
+      const result = await detail(id).expect(503);
+      expect(JSON.stringify(result.body)).not.toContain('Private database details');
+      expect(failedCursor!.closed).toBe(true); expect(sessions[1].hasEnded).toBe(true);
+    });
+    it('fails closed on real majority loss with bounded deadlines in a dedicated replica set', async () => {
+      // This test owns its processes and never changes the replica set supplied
+      // through TEST_MONGODB_URI. Existing binaries only; no downloads/install.
+      const binary = process.env.ITN20_MONGOD_PATH;
+      if (!binary) throw new Error('ITN-20 quorum test requires ITN20_MONGOD_PATH pointing to an existing mongod binary');
+      await access(binary);
+      const directory = await mkdtemp(path.join(tmpdir(), 'itn20-quorum-'));
+      const children: ReturnType<typeof spawn>[] = [], exits: Promise<void>[] = [];
+      let control: MongoClient | undefined, isolated: Connection | undefined, publicApp: INestApplication | undefined;
+      const freePort = () => new Promise<number>((resolve, reject) => {
+        const server = createServer(); server.once('error', reject);
+        server.listen(0, '127.0.0.1', () => {
+          const address = server.address();
+          if (!address || typeof address === 'string') { server.close(); reject(new Error('No local test port')); return; }
+          server.close(error => error ? reject(error) : resolve(address.port));
+        });
+      });
+      try {
+        const ports = [await freePort(), await freePort()];
+        if (ports[0] === ports[1]) throw new Error('Local test ports must be distinct');
+        const setName = path.basename(directory);
+        for (let i = 0; i < 2; i++) {
+          const data = path.join(directory, String(i)); await mkdir(data);
+          const child = spawn(binary, ['--dbpath', data, '--port', String(ports[i]), '--bind_ip', '127.0.0.1', '--replSet', setName, '--logpath', path.join(data, 'mongod.log')], { windowsHide: true, stdio: 'ignore' });
+          children.push(child); exits.push(new Promise(resolve => { child.once('exit', () => resolve()); child.once('error', () => resolve()); }));
+        }
+        for (let attempt = 0; attempt < 60; attempt++) {
+          const candidate = new MongoClient('mongodb://127.0.0.1:' + ports[0] + '/?directConnection=true', { serverSelectionTimeoutMS: 100 });
+          try { await candidate.connect(); control = candidate; break; }
+          catch { await candidate.close(); await new Promise(resolve => setTimeout(resolve, 100)); }
+        }
+        if (!control) throw new Error('Dedicated local quorum-test MongoDB did not start');
+        await control.db('admin').command({ replSetInitiate: { _id: setName, members: [
+          { _id: 0, host: '127.0.0.1:' + ports[0], priority: 2 },
+          { _id: 1, host: '127.0.0.1:' + ports[1], priority: 0 },
+        ], settings: { electionTimeoutMillis: 1000, heartbeatIntervalMillis: 500 } } });
+        for (let attempt = 0; attempt < 200; attempt++) {
+          if ((await control.db('admin').command({ hello: 1 })).isWritablePrimary) break;
+          if (attempt === 199) throw new Error('Dedicated replica set did not elect a primary');
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        const uri = 'mongodb://127.0.0.1:' + ports[0] + ',127.0.0.1:' + ports[1] + '/travel_itn20_quorum?replicaSet=' + setName;
+        isolated = mongoose.createConnection(uri, { serverSelectionTimeoutMS: 10000 });
+        await isolated.asPromise();
+        const parent = isolated.model(Itinerary.name, ItinerarySchema), day = isolated.model(ItineraryDay.name, ItineraryDaySchema);
+        await parent.init(); await day.init();
+        const id = oid();
+        await parent.collection.insertOne({ _id: id, userId: oid(), title: 'Quorum fixture', countryIds: ['EG'], startDate: new Date('2028-02-28T00:00:00Z'), visibility: ItineraryVisibility.PUBLIC }, { writeConcern: { w: 'majority' } });
+        const reader = new ItinerariesService(parent as never, {} as never, day as never, {} as never, {} as never, {} as never, isolated, {} as never);
+        const module = await Test.createTestingModule({ controllers: [PublicItinerariesController], providers: [{ provide: ItinerariesService, useValue: reader }] }).compile();
+        publicApp = module.createNestApplication(); publicApp.setGlobalPrefix('api');
+        publicApp.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true })); await publicApp.init();
+        const server = publicApp.getHttpServer();
+        await request(server).get('/api/itineraries/public/' + id).expect(200);
+        await request(server).get('/api/itineraries/public/search').expect(200);
+        // Two voters require both members for majority. Stop only this test's
+        // secondary, then exercise the actual HTTP/controller/service commands.
+        children[1].kill(); await exits[1];
+        for (const route of ['/api/itineraries/public/' + id, '/api/itineraries/public/search']) {
+          const started = Date.now();
+          const result = await request(server).get(route).expect(503);
+          expect(Date.now() - started).toBeLessThan(8000);
+          expect(result.headers['cache-control']).toBe('no-store');
+          expect(result.body).not.toHaveProperty('items');
+          expect(result.body).not.toHaveProperty('days');
+        }
+      } finally {
+        if (publicApp) await publicApp.close();
+        if (isolated) await isolated.close();
+        if (control) await control.close();
+        for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill();
+        await Promise.all(exits);
+        const resolved = path.resolve(directory);
+        if (path.dirname(resolved) === path.resolve(tmpdir()) && path.basename(resolved).startsWith('itn20-quorum-')) await rm(resolved, { recursive: true, force: true });
+      }
+    }, 60000);
+
+    it('documents public allowlists, errors and unchanged mutation authentication', () => {
+      const document = SwaggerModule.createDocument(app, createSwaggerConfig());
+      const discovery = document.paths['/api/itineraries/public/search'].get!, direct = document.paths['/api/itineraries/public/{id}'].get!;
+      for (const status of ['200', '400', '503']) expect(discovery.responses).toHaveProperty(status);
+      for (const status of ['200', '400', '404', '503']) expect(direct.responses).toHaveProperty(status);
+      expect(discovery.security ?? []).toEqual([]); expect(direct.security ?? []).toEqual([]);
+      expect(document.paths['/api/itineraries/{id}'].patch!.security).toContainEqual({ access_token: [] });
+      expect(document.components!.schemas!.UpdateItineraryDto).toMatchObject({ properties: { visibility: { enum: ['PRIVATE', 'PUBLIC'] } } });
+    });
+  });
+
 });
  
