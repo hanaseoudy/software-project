@@ -201,12 +201,13 @@ export class FlightsService {
         arrivalAirport: to._id,
         departureLocalDate: localDate,
         status: FlightStatus.SCHEDULED,
+        departureTime: { $gt: new Date() },
       })
       .populate('airline')
       .lean();
 
     return flights
-      .filter((f: any) => f.airline.isActive)
+      .filter((f: any) => f.airline && f.airline.isActive !== false)
       .map((f: any) => ({
         ...f,
         cabins: f.cabins
