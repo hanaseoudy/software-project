@@ -48,8 +48,6 @@ import { StrictBody } from './strict-body.decorator';
 import { MyPostSummaryDto } from './dto/my-post-response.dto';
 import type { MyPostsPage } from './dto/my-post-response.dto';
 import { ListPostsQueryDto } from './dto/list-posts-query.dto';
-import { PostSearchItemDto } from './dto/post-search-response.dto';
-import type { PostSearchPage } from './dto/post-search-response.dto';
 import { PublicPostDetailDto, PublicPostSummaryDto } from './dto/public-post-response.dto';
 import type { PublicPostsPage } from './dto/public-post-response.dto';
 import { PaginatedResponseDto, PaginationQueryDto } from '../common/pagination/pagination';
@@ -121,8 +119,9 @@ export class BlogController {
   @ApiOperation({
     summary: 'Browse and search published posts (BLG-02, BLG-09)',
     description:
-      'Public, no login needed. Lists published, non-hidden posts newest first with title, author, date, ' +
+      'Public, no login needed. Lists published, non-hidden posts with title, author, date, ' +
       'excerpt, tags, images, like count and comment count. Optional exact tag filter. ' +
+      'Without "search" the posts are listed newest first (BLG-02). ' +
       'With "search" (BLG-09), matches the keyword (case-insensitive, partial) in the title, the tags or the author name, ' +
       'ordered by interaction score (likes + comments) descending, newest first as tie-breaker. ' +
       'Paginated with a fixed page size of 10 (GEN-05); no results returns an empty page.',

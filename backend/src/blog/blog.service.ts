@@ -15,7 +15,6 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { LikeResponseDto } from './dto/like-response.dto';
 import { MyPostsPage } from './dto/my-post-response.dto';
 import { PostResponseDto } from './dto/post-response.dto';
-import { PostSearchPage } from './dto/post-search-response.dto';
 import { PublicAuthorDto, PublicPostDetailDto, PublicPostsPage } from './dto/public-post-response.dto';
 import { TagPostsPage, TagsPage } from './dto/tag-response.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
@@ -23,7 +22,6 @@ import { commentTextError } from './comment-rules';
 import { Comment, CommentDocument } from './schemas/comment.schema';
 import { Like, LikeDocument } from './schemas/like.schema';
 import { Post, PostDocument, PostStatus } from './schemas/post.schema';
-import { searchTextError } from './search-rules';
 import { escapeRegex, normalizeTags } from './tag-rules';
 import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
 import { AccountStatus, User, UserDocument } from '../users/schemas/user.schema';
@@ -36,6 +34,9 @@ type PostImage = { _id: Types.ObjectId; url: string };
 
 // BLG-02: list rows show the first 200 characters of the body
 const EXCERPT_LENGTH = 200;
+
+// BLG-02, BLG-09: fields read for a public list row (the same with or without search)
+const PUBLIC_LIST_FIELDS = 'title author content tags images likesCount commentsCount createdAt';
 
 // ACC-12: comments of deactivated (or missing) accounts are shown under this name
 const DELETED_USER = 'Deleted user';
@@ -106,79 +107,32 @@ export class BlogService {
 
   // BLG-02: public list of published, non-hidden posts, newest first, optional tag filter, page size 10 (GEN-05).
   // ACC-12: posts of deactivated authors are hidden.
-    // BLG-02: public list of published, non-hidden posts, optional exact tag filter, page size 10 (GEN-05).
-  // ACC-12: posts of deactivated authors are hidden.
   // BLG-09: with a search keyword, case-insensitive partial match in the title, the tags or the author name,
   // ordered by interaction score (likes + comments) descending, newest first as tie-breaker.
-  // Without a keyword the posts are listed newest first.
   async listPublished(tag: string | undefined, page = 1, search?: string): Promise<PublicPostsPage> {
-    let keyword: string | undefined;
-    if (search !== undefined) {
-      const error = searchTextError(search);
-      if (error) {
-        throw new BadRequestException({ message: 'Validation failed', errors: { search: [error] } });
-      }
-      keyword = escapeRegex(search.trim());
-    }
-
     const deactivated = await this.runDb('Could not load the posts', () =>
       this.userModel.distinct('_id', { status: AccountStatus.DEACTIVATED }).exec(),
     );
-    const filter: Record<string, unknown> = {
+    const filter = {
       ...VISIBLE_POSTS,
       author: { $nin: deactivated },
       ...(tag !== undefined ? { tags: String(tag).trim().toLowerCase() } : {}),
-    };
-    if (keyword !== undefined) {
-      // BLG-09: authors whose display name ("firstName lastName") contains the keyword, in one query
-      const matchingAuthors = await this.runDb('Could not load the posts', () =>
-        this.userModel
-          .distinct('_id', {
-            $expr: {
-              $regexMatch: {
-                input: {
-                  $trim: { input: { $concat: [{ $ifNull: ['$firstName', ''] }, ' ', { $ifNull: ['$lastName', ''] }] } },
-                },
-                regex: keyword,
-                options: 'i',
-              },
-            },
-          })
-          .exec(),
-      );
-      filter.$or = [
-        { title: { $regex: keyword, $options: 'i' } },
-        { tags: { $regex: keyword, $options: 'i' } },
-        { author: { $in: matchingAuthors } },
-      ];
-    }
-
-    type ListedPost = Post & { _id: Types.ObjectId; createdAt: Date };
-    const fields = 'title author content tags images likesCount commentsCount createdAt';
-    const loadPage = (): Promise<ListedPost[]> => {
-      if (keyword === undefined) {
-        return this.postModel
-          .find(filter)
-          .select(fields)
-          .sort({ createdAt: -1, _id: -1 })
-          .skip(skipFor(page))
-          .limit(PAGE_SIZE)
-          .lean<ListedPost[]>()
-          .exec();
-      }
-      // BLG-09: interaction score = likes + comments, highest first, then newest first
-      const pipeline: PipelineStage[] = [
-        { $match: filter },
-        { $addFields: { score: { $add: [{ $ifNull: ['$likesCount', 0] }, { $ifNull: ['$commentsCount', 0] }] } } },
-        { $sort: { score: -1, createdAt: -1, _id: -1 } },
-        { $skip: skipFor(page) },
-        { $limit: PAGE_SIZE },
-        { $project: Object.fromEntries(fields.split(' ').map((field) => [field, 1])) },
-      ];
-      return this.postModel.aggregate<ListedPost>(pipeline).exec();
+      ...(search !== undefined ? { $or: await this.searchConditions(search) } : {}),
     };
     const [posts, total] = await this.runDb('Could not load the posts', () =>
-      Promise.all([loadPage(), this.postModel.countDocuments(filter).exec()]),
+      Promise.all([
+        search === undefined
+          ? this.postModel
+              .find(filter)
+              .select(PUBLIC_LIST_FIELDS)
+              .sort({ createdAt: -1, _id: -1 })
+              .skip(skipFor(page))
+              .limit(PAGE_SIZE)
+              .lean<(Post & { _id: Types.ObjectId; createdAt: Date })[]>()
+              .exec()
+          : this.postModel.aggregate<Post & { _id: Types.ObjectId; createdAt: Date }>(this.rankedPage(filter, page)).exec(),
+        this.postModel.countDocuments(filter).exec(),
+      ]),
     );
     const users = await this.loadPublicUsers(posts.map((post) => post.author));
     const items = posts.map((post) => ({
@@ -193,6 +147,43 @@ export class BlogService {
       commentsCount: post.commentsCount ?? 0,
     }));
     return paginate(items, total, page);
+  }
+
+  // BLG-09: the keyword is matched literally (regex characters escaped), case-insensitive, anywhere in the title,
+  // any tag or the author's display name ("firstName lastName", as built in loadPublicUsers). Only user ids are read.
+  private async searchConditions(search: string) {
+    const keyword = escapeRegex(search.trim());
+    const authors = await this.runDb('Could not load the posts', () =>
+      this.userModel
+        .distinct('_id', {
+          $expr: {
+            $regexMatch: {
+              input: { $trim: { input: { $concat: [{ $ifNull: ['$firstName', ''] }, ' ', { $ifNull: ['$lastName', ''] }] } } },
+              regex: keyword,
+              options: 'i',
+            },
+          },
+        })
+        .exec(),
+    );
+    return [
+      { title: { $regex: keyword, $options: 'i' } },
+      { tags: { $regex: keyword, $options: 'i' } },
+      { author: { $in: authors } },
+    ];
+  }
+
+  // BLG-09: one page ordered by interaction score (likes + comments) descending, then newest first, then _id.
+  // The score is computed in the pipeline only and is not returned or stored.
+  private rankedPage(filter: PipelineStage.Match['$match'], page: number): PipelineStage[] {
+    return [
+      { $match: filter },
+      { $addFields: { score: { $add: [{ $ifNull: ['$likesCount', 0] }, { $ifNull: ['$commentsCount', 0] }] } } },
+      { $sort: { score: -1, createdAt: -1, _id: -1 } },
+      { $skip: skipFor(page) },
+      { $limit: PAGE_SIZE },
+      { $project: Object.fromEntries(PUBLIC_LIST_FIELDS.split(' ').map((field) => [field, 1])) },
+    ];
   }
 
   // BLG-02: public post page. 404 for an invalid id, a missing, draft or hidden post,
