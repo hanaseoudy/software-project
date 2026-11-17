@@ -56,7 +56,6 @@ import { FlightsModule } from './flights/flights.module';
     AirlinesModule,
     ItinerariesModule,
     FlightsModule,
-    ScheduleModule.forRoot(),
   ],
 
   controllers: [AppController],
