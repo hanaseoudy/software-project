@@ -16,6 +16,7 @@ import { CreateFlightsDto } from './dto/create-flights.dto';
 import {
   ApiBadRequestResponse,
   ApiCookieAuth,
+  ApiExtraModels,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -111,6 +112,7 @@ export class FlightsController {
       'keeping only cabins with enough free seats (total - booked - held) for the passengers. ' +
       'Returns "No flights found" when nothing matches. Open to guests and registered users.',
   })
+  @ApiExtraModels(SearchFlightsDto)
   @ApiOkResponse({
     description:
       'Matching flights, or an empty list with the message "No flights found"',
