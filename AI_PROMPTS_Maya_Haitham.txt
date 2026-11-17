@@ -627,3 +627,20 @@ the only build errors are the missing local nodemailer install from develop). Ch
 admin-providers.service.ts, admin-reports.service.ts, admin.module.ts, reports.module.ts, and (approved) admin.controller.ts
 and admin-providers.controller.ts to pass the admin id. Nothing was left open.
 ================================================
+================================================
+Date: 2026-11-17
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: HTL-23
+
+Prompt:
+Implement HTL-23: one rating 1 to 5 and an optional review of up to 1000 characters per completed hotel
+reservation, edit and delete, and recalculation of the hotel's average rating, following the requirement
+sheet and project PDF.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed in three passes and built by me (no errors in the
+changed files; the only build errors are the missing local nodemailer install from develop). Changed files:
+backend/src/hotel-bookings (reviews controller, service and DTOs, review route, module, review schema).
+Open items: hiding a review through GEN-10 does not recalculate the average yet; HTL-24 is separate; reported in the PR.
+================================================
