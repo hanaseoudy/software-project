@@ -882,6 +882,74 @@ were exhausted. Tested 401 without login, round-trip and future-birth-date 400 e
 Swagger. The TypeScript build compiles with no errors.
 
 Date: 2026-11-16
+Student: Seif Allam
+Tool: ChatGPT / Codex (OpenAI)
+Related Requirement: ITN-07; dependency ITN-05; preserved ITN-01 and ITN-03
+
+Prompt (summary of the conversation):
+Inspect the reviewed requirements and project PDF, synchronize the ITN-07
+branch with approved develop changes, and implement authenticated owner-only
+day deletion. Keep the unique (itineraryId, dayNumber) index and schemas.
+Investigate real MongoDB transaction behavior before choosing a design.
+Atomically delete dependent activities, budget entries and transport costs,
+preserve surviving IDs, renumber ascending, derive dates, and return surviving
+budget totals separated by currency. Coordinate day creation/deletion and
+whole-itinerary deletion, protect day updates from stale numbering, bound
+transaction retries, and test rollback and concurrency without using Atlas.
+
+How the output was used:
+Read the mandatory CSV and PDF sections 6.5, 8.8 and 11. After approval,
+fast-forwarded ITN-07 to develop containing merged ITN-03 and ITN-05. Initial
+index-removal proposal was rejected after isolated MongoDB 8.0.20 replica-set
+probes demonstrated safe ascending renumbering with the unique index intact.
+Implemented the DELETE endpoint and Swagger responses in the existing
+itinerary controller/service. Coordinated writers through an actual parent
+__v increment inside the transaction. Used five attempts with exponential
+backoff for labelled transient errors; ambiguous commits retry commit only,
+with bounded retries and HTTP 503 if still uncertain. Used decimal aggregation
+for native-currency totals, counting each source record once. Full budget
+summary and FXRatesAPI conversion remain ITN-14 / ITN-18 work.
+
+Verification:
+- npm run build: passed after npm ci restored merged locked dependencies.
+- npm run lint: passed, with five warnings in unchanged airline/flight files.
+- ITN-07 unit tests: 6 passed.
+- Isolated local MongoDB replica-set integration tests: 26 passed, including
+  first/middle/last/only deletion, auth/ownership, stable references, dates,
+  currencies, injected failures, real E11000 rollback, overlapping writers,
+  the 60-day limit and bounded HTTP 409 exhaustion.
+- Jest used NODE_OPTIONS=--experimental-vm-modules for installed ESM packages.
+- Full unit suite: 439 passed, 3 failed in unchanged BlogService tests whose
+  provider mocks omit LikeModel (and other required model dependencies).
+- Additional test-inclusive TypeScript check: itinerary files had no errors;
+  45 existing errors in hotels.service.spec.ts and one in app.e2e-spec.ts remain.
+- No schema/index migration, Atlas access, unrelated source edits or commits.
+
+Date: 2026-11-16
+Student: Seif Allam
+Tool: ChatGPT / Codex (OpenAI)
+Related Requirement: ITN-07 (transaction retry review correction)
+
+Prompt (summary of the conversation):
+Make the smallest correction to stale commitUncertain state after an uncertain
+commit followed by a definitive transient failure. Prioritize the unknown-result
+label when both MongoDB labels occur, keep retries bounded, and prevent replay
+while a commit outcome remains uncertain. Add focused regression coverage.
+
+How the output was used:
+Changed only the commit-error classification in the existing retry helper.
+Each latest commit response now recomputes uncertainty. Unknown results,
+including dual-label errors, retry commit only; a definitive transient failure
+allows the existing bounded whole-transaction retry path. Non-retryable errors
+propagate without replay. Deletion, numbering, ownership and budget logic were
+unchanged. Added eight focused test cases to the original six unit tests.
+
+Verification:
+The exact uncertain-then-definitive-transient regression failed before the fix.
+After the fix, all 14 ITN-07 unit tests and 26 isolated local MongoDB 8.0.20
+replica-set integration tests passed. Build and lint passed; lint retained five
+existing airline/flight warnings. No schema migration, Atlas access or commits.
+Date: 2026-11-16
 Student: Maya Haitham
 Tool: Claude Code
 Related Requirement: GEN-10

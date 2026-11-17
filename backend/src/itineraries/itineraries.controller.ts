@@ -13,6 +13,8 @@ import {
 } from '@nestjs/common';
 import {
   ApiCookieAuth,
+  ApiResponse,
+  ApiParam,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -116,6 +118,36 @@ export class ItinerariesController {
       dayId,
       dto,
     );
+  }
+
+  @Delete(':id/days/:dayId')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Delete itinerary day and recalculate itinerary (ITN-07)',
+    description: 'Frontend confirms deletion. Atomically deletes the day and its expenses, preserves surviving day IDs, renumbers days and derives UTC dates. Budget totals remain separated by currency; no FX conversion.',
+  })
+  @ApiParam({ name: 'id', description: 'Itinerary MongoDB ObjectId' })
+  @ApiParam({ name: 'dayId', description: 'Day MongoDB ObjectId belonging to this itinerary' })
+  @ApiOkResponse({ description: 'Deleted; returns message, ordered days with derived dates, and budgetTotals [{ currency, total }]. Empty itineraries return empty arrays.', schema: {
+    type: 'object', required: ['message', 'days', 'budgetTotals'], properties: {
+      message: { type: 'string' },
+      days: { type: 'array', items: { type: 'object', properties: {
+        _id: { type: 'string' }, itineraryId: { type: 'string' }, dayNumber: { type: 'integer', minimum: 1, maximum: 60 },
+        cityId: { type: 'string' }, notes: { type: 'string' }, date: { type: 'string', format: 'date' },
+      } } },
+      budgetTotals: { type: 'array', items: { type: 'object', properties: {
+        currency: { type: 'string', example: 'USD' }, total: { type: 'number', example: 125.5 },
+      } } },
+    },
+  } })
+  @ApiResponse({ status: 400, description: 'Invalid itinerary or day ID' })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  @ApiResponse({ status: 404, description: 'Itinerary unavailable to this owner, or day not found in itinerary' })
+  @ApiResponse({ status: 409, description: 'Concurrent update retries exhausted or surviving expenses require correction' })
+  @ApiResponse({ status: 500, description: 'Database operation failed; uncommitted changes roll back' })
+  @ApiResponse({ status: 503, description: 'Commit outcome uncertain; refresh itinerary before retrying' })
+  removeDay(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Param('dayId') dayId: string) {
+    return this.itinerariesService.removeDay(req.user!.sub, id, dayId);
   }
 
 }
