@@ -19,6 +19,7 @@ import { UpdateAirlineDto } from './dto/update-airline.dto';
 import { UploadedImage, UploadsService } from '../uploads/uploads.service';
 import { ImageCategory } from '../uploads/uploads.constants';
 import { SetCancellationPolicyDto } from './dto/set-cancellation-policy.dto';
+import { SetBaggagePolicyDto } from './dto/set-baggage-policy.dto';
 
 @Injectable()
 export class AirlinesService {
@@ -53,6 +54,34 @@ export class AirlinesService {
     this.validateObjectId(id);
     const airline = await this.airlineModel.findById(id);
     if (!airline) throw new NotFoundException('Airline not found');
+    return airline;
+  }
+
+  async setBaggagePolicy(
+    id: string,
+    dto: SetBaggagePolicyDto,
+    user: AuthPayload,
+  ) {
+    // 1. Validate ID format and verify moderator owns this airline (400 / 403)
+    await this.assertOwnsAirline(id, user.sub);
+
+    // 2. Update the airline's extra baggage policy fields
+    const airline = await this.airlineModel.findByIdAndUpdate(
+      id,
+      {
+        baggagePolicy: {
+          extraBagPrice: dto.extraBagPrice,
+          maxExtraBagsPerPassenger: dto.maxExtraBagsPerPassenger,
+        },
+      },
+      { new: true, runValidators: true },
+    );
+
+    // 3. Ensure airline still exists (404)
+    if (!airline) {
+      throw new NotFoundException('Airline not found');
+    }
+
     return airline;
   }
 

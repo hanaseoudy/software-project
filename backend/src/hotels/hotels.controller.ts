@@ -2,12 +2,14 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
   Patch,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -39,6 +41,8 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
 import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dto';
 import { RoomResponseDto } from './dto/room-response.dto';
+import { RoomStatusQueryDto } from './dto/room-status-query.dto';
+import { RoomStatusPageDto } from './dto/room-status.dto';
 import {
   CancellationTiersResponseDto,
   UpdateCancellationTiersDto,
@@ -49,6 +53,8 @@ import {
   PoliciesResponseDto,
   UpdatePoliciesDto,
 } from './dto/update-policies.dto';
+import { UpdateRoomAvailabilityDto } from './dto/update-room-availability.dto';
+import { UpdateRoomDto } from './dto/update-room.dto';
 import { HotelsService } from './hotels.service';
 
 @ApiTags('Hotels')
@@ -244,6 +250,74 @@ export class HotelsController {
     return this.hotelsService.addRoomBookableRange(id, roomId, dto, req.user!);
   }
 
+  // ---------- HTL-05 (from feature/HTL-05) ----------
+
+  @Patch(':id/rooms/:roomId')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Edit a room: beds, occupancy or price (HTL-05)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Send at least one field. A new price applies to future bookings only; existing reservations keep the price they were made with.',
+  })
+  @ApiOkResponse({ description: 'Room updated', type: RoomResponseDto })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: { pricePerNight: ['Price per night must be more than 0'] },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel or room not found' })
+  updateRoom(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Body() dto: UpdateRoomDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.updateRoom(id, roomId, dto, req.user!);
+  }
+
+  @Delete(':id/rooms/:roomId/availability/:rangeId')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Remove a bookable date range from a room (HTL-05)',
+    description:
+      'Extra route (not in the API contract): the contract only has PATCH for availability, which changes dates, and a PATCH cannot remove a whole range cleanly. DELETE removes one bookable range by its id. Hotel moderator only, and only for the hotel they are assigned to. Not allowed while the room has a Confirmed or Pending Payment reservation inside the range.',
+  })
+  @ApiOkResponse({
+    description: 'The range that was removed',
+    type: RoomAvailabilityResponseDto,
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel, room or range not found' })
+  @ApiConflictResponse({
+    description: 'A Confirmed or Pending Payment reservation exists in the range',
+  })
+  removeRoomBookableRange(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Param('rangeId') rangeId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomAvailabilityResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.removeRoomBookableRange(
+      id,
+      roomId,
+      rangeId,
+      req.user!,
+    );
+  }
+
+  // ---------- HTL-06 (from develop) ----------
+
   @Post(':id/rooms/:roomId/blocks')
   @Roles(UserRole.MODERATOR)
   @ApiOperation({
@@ -365,5 +439,81 @@ export class HotelsController {
   ): Promise<PoliciesResponseDto> {
     // RolesGuard guarantees req.user is set on this route.
     return this.hotelsService.updatePolicies(id, dto, req.user!);
+  }
+
+  @Patch(':id/rooms/:roomId/availability')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Change the dates of a bookable range of a room (HTL-05)',
+    description:
+      'This is the endpoint named in the official API contract (PATCH /api/hotels/:id/rooms/:roomId/availability). Hotel moderator only, and only for the hotel they are assigned to. Send the rangeId and the new startDate and/or endDate (both days included). The new dates must not overlap another bookable range, and days taken out of the range must not have a Confirmed or Pending Payment reservation. The DELETE route below removes a whole range.',
+  })
+  @ApiOkResponse({
+    description: 'Range updated',
+    type: RoomAvailabilityResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: { endDate: ['End date must be on or after the start date'] },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel, room or range not found' })
+  @ApiConflictResponse({
+    description:
+      'The dates overlap another bookable range, or a Confirmed or Pending Payment reservation is in the removed days',
+  })
+  updateRoomBookableRange(
+    @Param('id') id: string,
+    @Param('roomId') roomId: string,
+    @Body() dto: UpdateRoomAvailabilityDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomAvailabilityResponseDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.updateRoomBookableRange(
+      id,
+      roomId,
+      dto,
+      req.user!,
+    );
+  }
+
+  // ---------- HTL-08 ----------
+
+  @Get(':id/availability')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: "View each room's status for a date range (HTL-08)",
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Send the first and last day (both included). For every room of the hotel the response lists periods in date order with the status AVAILABLE (inside a bookable range), BOOKED (a Confirmed reservation or an unexpired Pending Payment hold, with its reservation reference) or BLOCKED. A reservation shows its nights, so the check-out day is not part of it. Days that are not in a bookable range, a block or a reservation have no period. Results are paginated, 10 rooms per page, sorted by room number.',
+  })
+  @ApiOkResponse({
+    description: 'One page of rooms with their status periods',
+    type: RoomStatusPageDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: { endDate: ['End date must be on or after the start date'] },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel not found' })
+  getRoomStatuses(
+    @Param('id') id: string,
+    @Query() query: RoomStatusQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<RoomStatusPageDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.getRoomStatuses(id, query, req.user!);
   }
 }
