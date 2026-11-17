@@ -32,6 +32,7 @@ import { UpdateItineraryDto } from './dto/update-itinerary.dto';
 
 import { CreateItineraryDayDto } from './dto/create-itinerary-day.dto';
 import { UpdateItineraryDayDto } from './dto/update-itinerary-day.dto';
+import { ItineraryGroupsResponseDto } from './dto/itinerary-groups-response.dto';
 @ApiTags('itineraries')
 @ApiCookieAuth(ACCESS_COOKIE)
 @UseGuards(JwtAuthGuard)
@@ -76,6 +77,23 @@ export class ItinerariesController {
   @ApiOperation({ summary: 'Delete itinerary (ITN-01)' })
   remove(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.itinerariesService.remove(req.user!.sub, id);
+  }
+
+  @Get(':id/groups')
+  @ApiOperation({
+    summary: 'Get consecutive-city groups and budget subtotals (ITN-09)',
+    description: 'Owner-only, read-only snapshot of the persisted day order. Includes budget entries, costed activities and transport costs exactly once per record. Totals remain separate by native currency; no FX conversion or purchase-level deduplication. Groups are derived dynamically, including after future ITN-08 reordering.',
+  })
+  @ApiParam({ name: 'id', description: 'Itinerary MongoDB ObjectId' })
+  @ApiOkResponse({ type: ItineraryGroupsResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid itinerary ID' })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  @ApiResponse({ status: 404, description: 'Itinerary unavailable to this owner' })
+  @ApiResponse({ status: 409, description: 'Existing day sequence, city reference, monetary amount or currency is invalid' })
+  @ApiResponse({ status: 500, description: 'Required database data could not be read; no partial subtotals are returned' })
+  @ApiResponse({ status: 503, description: 'Consistent snapshot unavailable or read timed out; retry the read' })
+  findGroups(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.itinerariesService.findGroups(req.user!.sub, id);
   }
 
   @Post(':id/days')

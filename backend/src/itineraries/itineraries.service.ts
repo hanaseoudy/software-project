@@ -28,6 +28,9 @@ import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
 import { City, CityDocument } from '../reference-data/schemas/city.schema';
 import { CreateItineraryDayDto } from './dto/create-itinerary-day.dto';
 import { UpdateItineraryDayDto } from './dto/update-itinerary-day.dto';
+import { ItineraryGroupsResponseDto } from './dto/itinerary-groups-response.dto';
+import { groupConsecutiveDays } from './utils/city-groups';
+import { CurrencySchema } from '../reference-data/schemas/currency.schema';
 
 @Injectable()
 export class ItinerariesService {
@@ -143,6 +146,123 @@ export class ItinerariesService {
       dayCount: formattedDays.length,
       days: formattedDays,
     };
+  }
+
+  // ITN-09: one snapshot session pins every related read to the same committed
+  // state, without a transaction, parent write, stored groups or cached totals.
+  async findGroups(userId: string, itineraryId: string): Promise<ItineraryGroupsResponseDto> {
+    this.validateObjectId(itineraryId);
+    let session: ClientSession | undefined;
+    try {
+      session = await this.connection.startSession({ snapshot: true, causalConsistency: false });
+      const itinerary = await this.itineraryModel.findOne({
+        _id: new Types.ObjectId(itineraryId), userId: new Types.ObjectId(userId),
+      }).session(session).read('primary').maxTimeMS(5000).lean();
+      if (!itinerary) throw new NotFoundException('Itinerary not found');
+      const days = await this.itineraryDayModel.find({ itineraryId: itinerary._id })
+        .sort({ dayNumber: 1 }).session(session).read('primary').maxTimeMS(5000).lean();
+      if (days.length > 60 || days.some((day, index) => day.dayNumber !== index + 1 ||
+          typeof day.cityId !== 'string' || !day.cityId.trim() || day.cityId !== day.cityId.trim())) {
+        throw new ConflictException('Existing itinerary day numbering or city is invalid');
+      }
+      if (!days.length) return { itineraryId: itinerary._id.toString(), groups: [] };
+      const cities = await this.cityModel.find({ cityId: { $in: [...new Set(days.map(day => day.cityId))] } })
+        .session(session).read('primary').maxTimeMS(5000).lean();
+      const citiesById = new Map(cities.map(city => [city.cityId, city]));
+      if (days.some(day => {
+        const city = citiesById.get(day.cityId);
+        return !city || typeof city.name !== 'string' || !city.name.trim() ||
+          typeof city.countryCode !== 'string' || !/^[A-Z]{2}$/.test(city.countryCode);
+      })) throw new ConflictException('Existing itinerary day has an invalid city reference');
+      const groups = groupConsecutiveDays(days);
+      const totals = await this.groupBudgetSubtotals(itinerary._id, groups.map(group => group.days.map(day => day._id)), session);
+      const dated = (day: typeof days[number]) => ({
+        id: day._id.toString(), dayNumber: day.dayNumber,
+        date: this.deriveDayDate(itinerary.startDate, day.dayNumber),
+      });
+      return {
+        itineraryId: itinerary._id.toString(),
+        groups: groups.map((group, index) => {
+          const city = citiesById.get(group.cityId)!;
+          return {
+            city: { cityId: city.cityId, name: city.name, countryCode: city.countryCode },
+            firstDay: dated(group.days[0]), lastDay: dated(group.days[group.days.length - 1]),
+            dayIds: group.days.map(day => day._id.toString()), dayCount: group.days.length,
+            budgetSubtotals: totals.filter(total => total.groupIndex === index)
+              .map(total => ({ currency: total.currency, total: total.total })),
+          };
+        }),
+      };
+    } catch (error) {
+      if (typeof error === 'object' && error !== null &&
+          (('code' in error && [50, 239, 246].includes(Number(error.code))) ||
+           ('name' in error && ['MongoNetworkError', 'MongoNetworkTimeoutError', 'MongoServerSelectionError'].includes(String(error.name))))) {
+        throw new ServiceUnavailableException('Consistent itinerary snapshot unavailable. Please retry.');
+      }
+      throw error;
+    } finally {
+      await session?.endSession();
+    }
+  }
+
+  private async groupBudgetSubtotals(itineraryId: Types.ObjectId, groupDayIds: Types.ObjectId[][], session: ClientSession) {
+    const sources = [
+      { model: this.activityModel, field: 'cost', name: 'activityCosts', optional: true },
+      { model: this.budgetEntryModel, field: 'amount', name: 'budgetCosts', optional: false },
+      { model: this.transportCostModel, field: 'amount', name: 'transportCosts', optional: false },
+    ];
+    const currencyCollection = CurrencySchema.get('collection');
+    if (!currencyCollection) throw new Error('Currency reference collection is not configured');
+    const totals = await this.itineraryDayModel.aggregate<{
+      groupIndex: number; currency: string; total: number; invalid: number; supportedCurrency: boolean;
+    }>([
+      { $match: { itineraryId } },
+      // Aggregate each source separately before concatenation. Never unwind
+      // several expense arrays together: that would multiply stored records.
+      ...sources.map(({ model, field, name, optional }) => ({ $lookup: {
+        from: model.collection.name, let: { day: '$_id' }, as: name,
+        pipeline: [
+          { $match: { $expr: { $eq: ['$dayId', '$$day'] }, ...(optional ? { [field]: { $ne: null } } : {}) } },
+          { $project: {
+            currency: 1, numeric: { $isNumber: `$${field}` },
+            amount: { $convert: { input: { $convert: { input: `$${field}`, to: 'string', onError: null, onNull: null } }, to: 'decimal', onError: null, onNull: null } },
+          } },
+          { $group: {
+            _id: '$currency', amount: { $sum: '$amount' },
+            invalid: { $max: { $cond: [{ $or: [
+              { $not: ['$numeric'] }, { $eq: ['$amount', null] }, { $lt: ['$amount', 0] },
+              { $in: [{ $toString: '$amount' }, ['NaN', 'Infinity', '-Infinity']] },
+            ] }, 1, 0] } },
+          } },
+          { $project: { _id: 0, currency: '$_id', amount: 1, invalid: 1 } },
+        ],
+      } })),
+      { $project: {
+        groupIndex: { $indexOfArray: [{ $map: { input: groupDayIds, as: 'dayIds', in: { $in: ['$_id', '$$dayIds'] } } }, true] },
+        expenses: { $concatArrays: sources.map(source => `$${source.name}`) },
+      } },
+      { $unwind: '$expenses' },
+      { $group: {
+        _id: { groupIndex: '$groupIndex', currency: '$expenses.currency' },
+        total: { $sum: '$expenses.amount' }, invalid: { $max: '$expenses.invalid' },
+      } },
+      // Use the existing schema's explicit reference-data collection name;
+      // no new model registration or currency-conversion service is required.
+      { $lookup: { from: currencyCollection, localField: '_id.currency', foreignField: 'code', as: 'supported' } },
+      { $sort: { '_id.groupIndex': 1, '_id.currency': 1 } },
+      { $project: {
+        _id: 0, groupIndex: '$_id.groupIndex', currency: '$_id.currency', invalid: 1,
+        supportedCurrency: { $eq: [{ $size: '$supported' }, 1] },
+        total: { $convert: { input: '$total', to: 'double', onError: null, onNull: null } },
+      } },
+    ]).session(session).read('primary').option({ maxTimeMS: 5000 });
+    if (totals.some(item => item.invalid || !item.supportedCurrency ||
+        typeof item.currency !== 'string' || !/^[A-Z]{3}$/.test(item.currency) ||
+        typeof item.total !== 'number' || !Number.isFinite(item.total) || item.total < 0 ||
+        !Number.isInteger(item.groupIndex) || item.groupIndex < 0 || item.groupIndex >= groupDayIds.length)) {
+      throw new ConflictException('Existing expenses have invalid amounts or missing/unsupported currencies');
+    }
+    return totals;
   }
 
   private async getOwnedItinerary(
