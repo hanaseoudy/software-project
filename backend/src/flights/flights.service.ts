@@ -20,7 +20,11 @@ import { CreateFlightsDto } from './dto/create-flights.dto';
 import { AddCabinDto } from './dto/add-cabin.dto';
 import { isValidObjectId } from 'mongoose';
 import { SearchFlightsDto } from './dto/search-flights.dto';
-import { Airline, AirlineDocument } from '../airlines/schemas/airline.schema';
+import {
+  Airline,
+  AirlineDocument,
+  CabinClass,
+} from '../airlines/schemas/airline.schema';
 
 @Injectable()
 export class FlightsService {
@@ -144,54 +148,88 @@ export class FlightsService {
   // constructor: inject the Airline model next to the Flight model
 
   async search(dto: SearchFlightsDto) {
-    // 1. Which airlines are active right now?
+    const { adults, children = 0, infants = 0 } = dto;
 
-    const activeAirlines = await this.airlineModel
-      .find({ isActive: true })
-      .select('_id')
-      .lean();
-    const activeIds = activeAirlines.map((a) => a._id);
-
-    const [depAirport, arrAirport] = await Promise.all([
-      this.airportModel.findOne({ iataCode: dto.departureAirport }),
-      this.airportModel.findOne({ iataCode: dto.arrivalAirport }),
-    ]);
-
-    // 2. If either airport code doesn't exist in your DB, return an empty list (200 OK)
-    if (!depAirport || !arrAirport) {
-      return [];
+    if (infants > adults) {
+      throw new BadRequestException('Infants cannot outnumber adults');
+    }
+    if (dto.returnDate && dto.returnDate < dto.departureDate) {
+      throw new BadRequestException('returnDate cannot be before departDate');
     }
 
-    // 2. Find matching scheduled flights of those airlines
+    const seatsNeeded = adults + children; // infants occupy no seat
+    const party = { adults, children, infants };
+
+    const outbound = await this.findLeg(
+      dto.departureAirport,
+      dto.arrivalAirport,
+      dto.departureDate,
+      seatsNeeded,
+      party,
+      dto.cabinClass,
+    );
+    if (!dto.returnDate) return { outbound };
+
+    const returning = await this.findLeg(
+      dto.arrivalAirport,
+      dto.departureAirport,
+      dto.returnDate,
+      seatsNeeded,
+      party,
+      dto.cabinClass,
+    );
+    return { outbound, return: returning };
+  }
+
+  private async findLeg(
+    fromCode: string,
+    toCode: string,
+    localDate: string,
+    seatsNeeded: number,
+    party: { adults: number; children: number; infants: number },
+    cabinClass?: CabinClass,
+  ) {
+    const [from, to] = await Promise.all([
+      this.airportModel.findOne({ iataCode: fromCode }),
+      this.airportModel.findOne({ iataCode: toCode }),
+    ]);
+    if (!from || !to) throw new BadRequestException('Unknown airport code');
+
     const flights = await this.flightsModel
       .find({
-        departureAirport: depAirport._id,
-        arrivalAirport: arrAirport._id,
-        departureLocalDate: dto.departureDate,
+        departureAirport: from._id,
+        arrivalAirport: to._id,
+        departureLocalDate: localDate,
         status: FlightStatus.SCHEDULED,
-        airline: { $in: activeIds },
       })
-      .populate('airline', 'name code')
-      .sort({ departureTime: 1 })
+      .populate('airline')
       .lean();
 
-    // 3. Keep only cabins with enough free seats, drop flights left with none
-    const results = flights
-      .map((flight) => ({
-        ...flight,
-        cabins: flight.cabins
-          .map((c) => ({
-            ...c,
-            availableSeats: c.totalSeats - c.bookedSeats - c.heldSeats,
+    return flights
+      .filter((f: any) => f.airline.isActive)
+      .map((f: any) => ({
+        ...f,
+        cabins: f.cabins
+          .filter((c: any) => !cabinClass || c.cabinClass === cabinClass)
+          .map((c: any) => ({
+            cabinId: c._id,
+            cabinClass: c.cabinClass,
+            seatsRemaining: c.totalSeats - c.bookedSeats - c.heldSeats,
+            fare: c.price,
+            totalPrice: this.tripPrice(c.price, party),
           }))
-          .filter((c) => c.availableSeats >= dto.passengers),
+          .filter((c: any) => c.seatsRemaining >= seatsNeeded),
       }))
-      .filter((flight) => flight.cabins.length > 0);
+      .filter((f: any) => f.cabins.length > 0);
+  }
 
-    return {
-      flights: results,
-      message: results.length ? 'Flights found' : 'No flights found',
-    };
+  private tripPrice(
+    fare: number,
+    p: { adults: number; children: number; infants: number },
+  ) {
+    const cents = Math.round(fare * 100);
+    const infantCents = Math.round(cents * 0.1);
+    return (cents * (p.adults + p.children) + infantCents * p.infants) / 100;
   }
 
   private async getModeratorAirlineId(userId: string) {

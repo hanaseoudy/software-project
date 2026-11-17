@@ -1,14 +1,16 @@
 import {
-  IsDateString,
   IsInt,
-  IsMongoId,
   IsNotEmpty,
   Length,
   Matches,
+  IsEnum,
+  IsOptional,
+  Max,
   Min,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+import { CabinClass } from '../../airlines/schemas/airline.schema';
 
 export class SearchFlightsDto {
   @ApiProperty({ example: 'CAI' })
@@ -37,9 +39,39 @@ export class SearchFlightsDto {
   })
   departureDate: string;
 
+  @ApiProperty({
+    example: '2026-12-05',
+    description: 'Local date at the departure airport',
+  })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  returnDate?: string;
+
   @ApiProperty({ example: 2, minimum: 1 })
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  passengers: number;
+  @Max(9)
+  adults: number;
+
+  @ApiProperty({ example: 2, minimum: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(9)
+  children?: number = 0;
+
+  @ApiProperty({ example: 2, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(9)
+  infants?: number = 0;
+
+  @ApiProperty({ enum: CabinClass })
+  @IsOptional()
+  @IsEnum(CabinClass)
+  cabinClass?: CabinClass;
 }
