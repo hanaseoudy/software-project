@@ -4,7 +4,6 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
-  IsDateString,
   IsEnum,
   IsMongoId,
   IsNotEmpty,
@@ -46,7 +45,6 @@ export class PassengerDto {
   type: PassengerType;
 
   @ApiProperty({ example: '2002-05-20' })
-  @IsDateString()
   @IsNotFutureDate()
   dateOfBirth: string;
 

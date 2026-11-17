@@ -25,7 +25,7 @@ export class CreateFlightsDto {
 
   @ApiProperty({ example: 'DXB' })
   @IsNotEmpty()
-  @Length(3, 3, { message: 'Departure airport must be a 3-letter IATA code' })
+  @Length(3, 3, { message: 'Arrival airport must be a 3-letter IATA code' })
   @Transform(({ value }) =>
     typeof value === 'string' ? value.trim().toUpperCase() : value,
   )

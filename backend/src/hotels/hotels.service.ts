@@ -54,9 +54,9 @@ import {
   RoomDayStatus,
   StatusInterval,
 } from './utils/room-status';
-import { UploadsService } from '../uploads/uploads.service';
+import { UploadsService, type UploadedImage } from '../uploads/uploads.service';
 import { DELETED_USER, reviewerName } from './utils/reviewer-name';
-import { ImageCategory } from '../uploads/uploads.constants';
+import { ImageCategory, MAX_IMAGES } from '../uploads/uploads.constants';
 import { Hotel, HotelDocument } from './schemas/hotel.schema';
 import { Room, RoomDocument } from './schemas/room.schema';
 import {
@@ -140,6 +140,39 @@ export class HotelsService {
     await hotel.save();
 
     return this.toResponse(hotel);
+  }
+
+  /**
+   * HTL-01 / GEN-08: the assigned moderator uploads photos for their hotel (JPG/PNG, 5 MB each, at most 5 per hotel).
+   * The files are validated first, then the URLs are saved with an update that re-checks the limit, so two
+   * uploads at the same time cannot push the hotel past 5 photos.
+   */
+  async addImages(
+    id: string,
+    files: UploadedImage[] | undefined,
+    user: AuthPayload,
+  ): Promise<HotelResponseDto> {
+    const hotel = await this.findHotelOrFail(id);
+    await this.assertModeratorOwnsHotel(user, hotel);
+
+    const urls = await this.uploads.saveForOwner(
+      files,
+      ImageCategory.HOTEL,
+      hotel.images,
+    );
+    const max = MAX_IMAGES[ImageCategory.HOTEL];
+    const result = await this.hotelModel
+      .updateOne(
+        { _id: hotel._id, [`images.${max - urls.length}`]: { $exists: false } },
+        { $push: { images: { $each: urls } } },
+      )
+      .exec();
+    if (result.modifiedCount === 0) {
+      await Promise.all(urls.map((url) => this.uploads.deleteByUrl(url)));
+      throw new BadRequestException(`A hotel can have at most ${max} images`);
+    }
+
+    return this.toResponse(await this.findHotelOrFail(id));
   }
 
   /** HTL-09: the assigned moderator sets the standard check-in/check-out times. */

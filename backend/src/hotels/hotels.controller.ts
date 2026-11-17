@@ -11,10 +11,15 @@ import {
   Put,
   Query,
   Req,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
+  ApiBody,
+  ApiConsumes,
   ApiConflictResponse,
   ApiCookieAuth,
   ApiCreatedResponse,
@@ -34,6 +39,9 @@ import {
 } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
+import { imageUploadOptions } from '../uploads/image-upload.options';
+import { ImageCategory, MAX_IMAGES } from '../uploads/uploads.constants';
+import type { UploadedImage } from '../uploads/uploads.service';
 import { CreateHotelDto } from './dto/create-hotel.dto';
 import { CreateRoomAvailabilityDto } from './dto/create-room-availability.dto';
 import { CreateRoomBlockDto } from './dto/create-room-block.dto';
@@ -106,6 +114,50 @@ export class HotelsController {
   ): Promise<HotelResponseDto> {
     // RolesGuard guarantees req.user is set on this route.
     return this.hotelsService.update(id, dto, req.user!);
+  }
+
+  @Post(':id/images')
+  @Roles(UserRole.MODERATOR)
+  @UseInterceptors(
+    FilesInterceptor(
+      'images',
+      MAX_IMAGES[ImageCategory.HOTEL],
+      imageUploadOptions(ImageCategory.HOTEL),
+    ),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        images: { type: 'array', items: { type: 'string', format: 'binary' } },
+      },
+    },
+  })
+  @ApiOperation({
+    summary: 'Upload hotel photos (HTL-01, GEN-08)',
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. JPG or PNG, up to 5 MB each, at most 5 photos per hotel. Send the files in the "images" form field.',
+  })
+  @ApiCreatedResponse({
+    description: 'Photos stored; returns the hotel with its updated images',
+    type: HotelResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description:
+      'No file, not a valid JPG/PNG, or the hotel would have more than 5 photos',
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel not found' })
+  uploadImages(
+    @Param('id') id: string,
+    @UploadedFiles() files: UploadedImage[],
+    @Req() req: AuthenticatedRequest,
+  ): Promise<HotelResponseDto> {
+    return this.hotelsService.addImages(id, files, req.user!);
   }
 
   @Put(':id/check-times')

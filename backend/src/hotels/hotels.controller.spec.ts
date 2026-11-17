@@ -22,6 +22,7 @@ describe('HotelsController', () => {
     deactivateRoom: jest.fn(),
     deleteRoom: jest.fn(),
     getRoomStatuses: jest.fn(),
+    addImages: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -215,5 +216,19 @@ describe('HotelsController', () => {
       controller.getRoomStatuses('h1', query, { user } as never),
     ).resolves.toEqual(page);
     expect(service.getRoomStatuses).toHaveBeenCalledWith('h1', query, user);
+  });
+
+  it('uploadImages passes the hotel id, the files and the authenticated user', async () => {
+    const files = [{ originalname: 'a.jpg' }] as never;
+    const req = { user: { sub: 'm1', role: UserRole.MODERATOR } } as never;
+    service.addImages.mockResolvedValue({ id: 'h1' });
+
+    await expect(controller.uploadImages('h1', files, req)).resolves.toEqual({
+      id: 'h1',
+    });
+    expect(service.addImages).toHaveBeenCalledWith('h1', files, {
+      sub: 'm1',
+      role: UserRole.MODERATOR,
+    });
   });
 });
