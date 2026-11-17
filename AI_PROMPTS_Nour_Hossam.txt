@@ -101,67 +101,16 @@ Verification:
 temporary password gets 403 on GET /posts/mine, can change the password, and
 then gets 200.
 ================================================
-TASK-23 (ACC-16) - Admin suspends and reactivates users
+==================================================
+TASK-19 (ACC-12) - Account deactivation and content handling
+==================================================
 Tool: Claude
-Prompt: Help me implement ACC-16 step by step: admin can suspend a registered user (they can't log in, bookings stay) and reactivate them later.
+Prompt: Help me implement ACC-12 step by step: a registered user deactivates their own account after confirmation, blocked while they have upcoming Confirmed bookings; afterwards they cannot log in, their posts and public itineraries are hidden, and their comments and reviews show "Deleted user".
 What AI helped with:
-- suspendAccount / reactivateAccount in admin.service.ts (atomic status update, revoke active sessions on suspend, block suspending admins, 409 for invalid status changes)
-- PATCH /api/admin/accounts/:id/suspend and /reactivate routes with Swagger docs
-- Unit tests in account-status.spec.ts
+- DELETE /api/users/me (AccountDeactivationController + AccountDeactivationService): password confirmation, upcoming Confirmed hotel/flight booking check, status -> deactivated, revoke all sessions, clear cookies, public itineraries -> private
+- reviewerName helper so hotel reviews of deactivated accounts show "Deleted user" (small change in hotels.service.ts)
+- Unit tests (account-deactivation.service.spec.ts, reviewer-name.spec.ts)
+- Checked that login already refuses deactivated accounts and the blog already hides their posts and shows "Deleted user" on comments
 What I did:
-- Pasted and reviewed the code, ran tests (29 passed), lint and build
-- Tested all cases in Postman (suspend, suspend again, suspended login, reactivate, suspend admin, login after reactivate)
-TASK-22 (ACC-15) - Moderator suspension and provider activation controls
-Tool: Claude
-Prompt: Help me implement ACC-15 step by step: admin suspends/reactivates moderators, deactivates/reactivates a hotel or airline (hidden from search, cannot be booked, Confirmed bookings stay valid), and affected parties get an in-app notification.
-What AI helped with:
-- In-app notifications on account suspend/reactivate (ACCOUNT_SUSPENDED / ACCOUNT_REACTIVATED) in admin.service.ts
-- New AdminProvidersService + AdminProvidersController: PATCH /api/admin/providers/:type/:id/deactivate and /reactivate, notifying the provider's assigned moderators (PROVIDER_SUSPENDED / PROVIDER_REACTIVATED)
-- One check in flight-bookings.service.ts so flights of a deactivated airline cannot be booked (hotels already checked isActive)
-- Unit tests (admin-providers.service.spec.ts, updated account-status.spec.ts and admin.service.spec.ts)
-What I did:
-- Pasted and reviewed the code, ran tests (38 passed), lint and build
-- Tested in Postman (deactivate/reactivate airline, 409 repeats, 404 unknown hotel, 400 wrong type, suspend/reactivate moderator) and checked the notifications collection in MongoDB Compass
-Date: 2026-11-17
-Student: Nour Hossam
-Tool: Claude
-Related Requirement: ACC-05 (TASK-12)
-
-Prompt (summary of the conversation):
-The ACC-05 lockout code was already on develop, but the 5th failed login still
-returned the generic "Invalid email or password"; the lockout message only
-appeared on the 6th try. Help me make the 5th failure itself return the
-lockout message, as ACC-05 requires, and add tests for the lockout.
-
-How the output was used:
-recordFailedLogin now returns the lock time when that failure locks the
-account, and login returns 423 with the lockout message right away. The rest
-of the existing logic (5 attempts, 15 minutes, reset on success, atomic lock)
-is unchanged. Updated the Swagger description for 423.
-
-Verification:
-Added 6 unit tests (generic 401 before the 5th failure, 423 on the 5th, 423
-while locked without checking the password, login after the lock expires,
-counter reset, unknown email). All 20 auth tests pass; lint and build pass.
-Postman: 4th wrong password 401, 5th 423, right password while locked 423.
-Related Requirement: ACC-14 (TASK-21)
-
-Prompt (summary of the conversation):
-Help me implement ACC-14: an admin views a paginated list of all accounts
-(name, email, role, status, registration date) and can search by name or
-email and filter by role and status. Follow the API contract endpoint
-GET /api/admin/accounts and the team's GEN-05 pagination helper.
-
-How the output was used:
-Used the generated ListAccountsQueryDto, AdminAccountsService and
-AdminAccountsController after reviewing them against ACC-14. Admin only;
-newest first, 10 per page; search matches first name, last name or email
-(case-insensitive, every word must match, special characters treated as
-plain text); role and status are exact filters and can be combined. Only the
-needed columns are read, never the password. Kept in separate files so it
-does not conflict with the ACC-07a PR.
-
-Verification:
-13 new unit tests (service and DTO); all 21 admin tests pass. Lint and build
-passed locally. Postman: full list 200 with pagination, search=sara,
-role=moderator, and an invalid role 400.
+- Pasted and reviewed the code, ran tests (399 passed in users + hotels), lint and build
+- Tested in Postman with a throwaway user (wrong/missing password, deactivate, logged out, cannot log in, moderator refused)
