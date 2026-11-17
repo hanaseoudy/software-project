@@ -1,6 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { MailService } from '../mail/mail.service';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { NotificationType } from './enums/notification.enums';
 import { Notification, NotificationDocument } from './schemas/notification.schema';
 
@@ -19,8 +21,12 @@ export interface ListNotificationsOptions {
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private readonly mail: MailService,
   ) {}
 
   private toObjectId(id: string | Types.ObjectId): Types.ObjectId {
@@ -35,16 +41,41 @@ export class NotificationsService {
    *   message: `Your booking ${ref} is confirmed.`, metadata: { bookingId } });
    */
   async create(userId: string | Types.ObjectId, input: CreateNotificationInput) {
-    return this.notificationModel.create({ user: this.toObjectId(userId), ...input });
+    const notification = await this.notificationModel.create({ user: this.toObjectId(userId), ...input });
+    void this.emailUsers([notification.user], input);
+    return notification;
   }
 
   /** Same notification for many users (e.g. a flight schedule change). */
   async createForMany(userIds: Array<string | Types.ObjectId>, input: CreateNotificationInput) {
     if (userIds.length === 0) return [];
     const unique = [...new Set(userIds.map((u) => String(u)))];
-    return this.notificationModel.insertMany(
+    const created = await this.notificationModel.insertMany(
       unique.map((u) => ({ user: this.toObjectId(u), ...input })),
     );
+    void this.emailUsers(
+      unique.map((u) => this.toObjectId(u)),
+      input,
+    );
+    return created;
+  }
+
+  /**
+   * GEN-01-B: sends the same notification by email (SMTP). Runs in the background after the
+   * in-app notification is saved, so a slow or failing email never blocks or undoes it.
+   */
+  private async emailUsers(userIds: Types.ObjectId[], input: CreateNotificationInput): Promise<void> {
+    try {
+      const users = await this.userModel
+        .find({ _id: { $in: userIds } })
+        .select('email firstName')
+        .lean();
+      await Promise.all(
+        users.map((user) => this.mail.sendNotification(user.email, user.firstName, input.title, input.message)),
+      );
+    } catch (error) {
+      this.logger.error(`Notification email could not be sent: ${(error as Error).message}`);
+    }
   }
 
   // GET /api/notifications

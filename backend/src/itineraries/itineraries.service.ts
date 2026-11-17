@@ -31,6 +31,7 @@ import { UpdateItineraryDayDto } from './dto/update-itinerary-day.dto';
 import { ItineraryGroupsResponseDto } from './dto/itinerary-groups-response.dto';
 import { groupConsecutiveDays } from './utils/city-groups';
 import { CurrencySchema } from '../reference-data/schemas/currency.schema';
+import { ReorderItineraryDayDto } from './dto/reorder-itinerary-day.dto';
 
 @Injectable()
 export class ItinerariesService {
@@ -373,6 +374,73 @@ export class ItinerariesService {
         itineraryId: itinerary._id, dayNumber, cityId: dto.cityId, notes: dto.notes,
       }], { session });
       return { ...day.toObject(), date: this.deriveDayDate(itinerary.startDate, dayNumber) };
+    });
+  }
+
+  // ITN-08: ITN-09 grouping must consume the final dayNumber order. Grouping
+  // and budget subtotals are deliberately not calculated by this operation.
+  async reorderDay(userId: string, itineraryId: string, dayId: string, dto: ReorderItineraryDayDto) {
+    this.validateObjectId(itineraryId);
+    this.validateObjectId(dayId, 'day');
+    const { newPosition } = dto;
+    if (!Number.isInteger(newPosition) || newPosition < 1 || newPosition > 60) {
+      throw new BadRequestException('newPosition must be an integer between 1 and the current day count');
+    }
+    return this.withDayTransaction(userId, itineraryId, async (session, itinerary) => {
+      const readDays = () => this.itineraryDayModel.find({ itineraryId: itinerary._id })
+        .sort({ dayNumber: 1 }).session(session).lean();
+      const days = await readDays();
+      const selected = days.find(day => day._id.equals(dayId));
+      if (!selected) throw new NotFoundException('Itinerary day not found');
+      if (newPosition > days.length) {
+        throw new BadRequestException('newPosition must not exceed the current day count');
+      }
+      const verifySequence = (items: typeof days) => {
+        if (items.length !== days.length || items.length > 60 ||
+            items.some((day, index) => day.dayNumber !== index + 1)) {
+          throw new ConflictException('Itinerary day numbering is inconsistent');
+        }
+      };
+      verifySequence(days);
+      const response = (items: typeof days) => ({
+        message: 'Itinerary day reordered successfully',
+        // Match the existing day API's _id convention, without internal metadata.
+        days: items.map(day => ({
+          _id: day._id.toString(), itineraryId: day.itineraryId.toString(),
+          dayNumber: day.dayNumber, cityId: day.cityId, notes: day.notes,
+          date: this.deriveDayDate(itinerary.startDate, day.dayNumber),
+        })),
+      });
+      const oldPosition = selected.dayNumber;
+      if (oldPosition === newPosition) return response(days);
+      const move = async (id: Types.ObjectId, from: number, to: number, temporary = false) => {
+        const result = await this.itineraryDayModel.updateOne(
+          { _id: id, itineraryId: itinerary._id, dayNumber: from },
+          { $set: { dayNumber: to } },
+          { session, runValidators: !temporary },
+        );
+        if (result.matchedCount !== 1 || result.modifiedCount !== 1) {
+          throw new ConflictException('Itinerary day changed during reordering');
+        }
+      };
+      // N+1 is vacant. At capacity it is 61: bypass Mongoose validation ONLY
+      // for this uncommitted parking write, then validate every final number.
+      // Each sequential shift fills the hole left by the preceding write.
+      const temporaryPosition = days.length + 1;
+      await move(selected._id, oldPosition, temporaryPosition, true);
+      if (newPosition < oldPosition) {
+        for (let position = oldPosition - 1; position >= newPosition; position--) {
+          await move(days[position - 1]._id, position, position + 1);
+        }
+      } else {
+        for (let position = oldPosition + 1; position <= newPosition; position++) {
+          await move(days[position - 1]._id, position, position - 1);
+        }
+      }
+      await move(selected._id, temporaryPosition, newPosition);
+      const reordered = await readDays();
+      verifySequence(reordered); // Never commit a temporary number or a gap.
+      return response(reordered);
     });
   }
 
