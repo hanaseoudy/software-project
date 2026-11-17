@@ -7,6 +7,7 @@ import { PaymentsModule } from '../payments/payments.module';
 import { HotelBookingConfirmationService } from './hotel-booking-confirmation.service';
 import { HotelBookingsController } from './hotel-bookings.controller';
 import { HotelBookingsService } from './hotel-bookings.service';
+import { HotelCompletionService } from './hotel-completion.service';
 import { HotelHoldExpiryService } from './hotel-hold-expiry.service';
 import { HotelBooking, HotelBookingSchema } from './schemas/hotel-booking.schema';
 import { Review, ReviewSchema } from './schemas/review.schema';
@@ -29,6 +30,7 @@ import { RoomLock, RoomLockSchema } from './schemas/room-lock.schema';
     HotelBookingsService,
     HotelHoldExpiryService,
     HotelBookingConfirmationService,
+    HotelCompletionService,
   ],
   exports: [MongooseModule, HotelBookingsService, HotelBookingConfirmationService],
 })

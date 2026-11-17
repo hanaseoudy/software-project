@@ -1,3 +1,4 @@
+
 import { BadRequestException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
@@ -8,7 +9,7 @@ import { HotelSearchService } from './hotel-search.service';
 import { Hotel } from './schemas/hotel.schema';
 import { RoomAvailability } from './schemas/room-availability.schema';
 import { Room } from './schemas/room.schema';
-
+ 
 // find() -> sort()/select()/lean() -> exec(), all returning the same value
 const found = (value: unknown) => {
   const chain: Record<string, unknown> = {};
@@ -18,20 +19,20 @@ const found = (value: unknown) => {
   chain.exec = () => Promise.resolve(value);
   return chain;
 };
-
+ 
 const NOW = new Date('2026-11-15T10:00:00.000Z');
 const day = (value: string) => new Date(`${value}T00:00:00.000Z`);
-
+ 
 describe('HotelSearchService', () => {
   let service: HotelSearchService;
   const hotelModel = { find: jest.fn() };
   const roomModel = { find: jest.fn() };
   const availabilityModel = { find: jest.fn() };
   const bookingModel = { find: jest.fn() };
-
+ 
   const cityId = new Types.ObjectId().toString();
   const countryId = new Types.ObjectId().toString();
-
+ 
   const query = (over: Partial<SearchHotelsQueryDto> = {}) =>
     ({
       city: cityId,
@@ -42,7 +43,7 @@ describe('HotelSearchService', () => {
       page: 1,
       ...over,
     }) as SearchHotelsQueryDto;
-
+ 
   const makeHotel = (name = 'Nile Palace') => ({
     _id: new Types.ObjectId(),
     name,
@@ -72,7 +73,7 @@ describe('HotelSearchService', () => {
   ) => ({ room: roomId, type, startDate: day(start), endDate: day(end) });
   const covering = (roomId: Types.ObjectId) =>
     range(roomId, 'available', '2026-12-01', '2026-12-31');
-
+ 
   const setup = (data: {
     hotels: unknown[];
     rooms?: unknown[];
@@ -85,7 +86,7 @@ describe('HotelSearchService', () => {
     bookingModel.find.mockReturnValue(found(data.bookings ?? []));
   };
   const run = (q = query()) => service.search(q, NOW);
-
+ 
   beforeEach(async () => {
     jest.resetAllMocks();
     const moduleRef = await Test.createTestingModule({
@@ -102,7 +103,7 @@ describe('HotelSearchService', () => {
     }).compile();
     service = moduleRef.get(HotelSearchService);
   });
-
+ 
   describe('validation', () => {
     const errorsOf = async (q: SearchHotelsQueryDto) => {
       setup({ hotels: [] });
@@ -114,43 +115,43 @@ describe('HotelSearchService', () => {
         }
       ).errors;
     };
-
+ 
     it('needs a city or a country', async () => {
       const errors = await errorsOf(query({ city: undefined }));
       expect(errors.destination).toEqual(['Choose a city or a country']);
     });
-
+ 
     it('accepts a country on its own', async () => {
       setup({ hotels: [] });
       await expect(
         run(query({ city: undefined, country: countryId })),
       ).resolves.toBeDefined();
     });
-
+ 
     it('rejects check-out on the same day as check-in', async () => {
       const errors = await errorsOf(query({ checkOut: '2026-12-10' }));
       expect(errors.checkOut).toEqual(['Check-out must be after check-in']);
     });
-
+ 
     it('rejects check-out before check-in', async () => {
       const errors = await errorsOf(query({ checkOut: '2026-12-01' }));
       expect(errors).toHaveProperty('checkOut');
     });
-
+ 
     it('rejects a check-in in the past', async () => {
       const errors = await errorsOf(
         query({ checkIn: '2026-11-14', checkOut: '2026-11-16' }),
       );
       expect(errors.checkIn).toEqual(['Check-in cannot be in the past']);
     });
-
+ 
     it('accepts a check-in today', async () => {
       setup({ hotels: [] });
       await expect(
         run(query({ checkIn: '2026-11-15', checkOut: '2026-11-16' })),
       ).resolves.toBeDefined();
     });
-
+ 
     it.each(['2026-02-30', '2026-13-01'])(
       'rejects %s because it is not a real day',
       async (value) => {
@@ -158,13 +159,13 @@ describe('HotelSearchService', () => {
         expect(errors).toHaveProperty('checkIn');
       },
     );
-
+ 
     it('does not search the database when the input is invalid', async () => {
       await errorsOf(query({ checkOut: '2026-12-10' }));
       expect(hotelModel.find).not.toHaveBeenCalled();
     });
   });
-
+ 
   describe('which hotels are searched', () => {
     it('only looks at active hotels of the chosen city and country', async () => {
       setup({ hotels: [] });
@@ -175,7 +176,7 @@ describe('HotelSearchService', () => {
         country: countryId,
       });
     });
-
+ 
     it('only looks at active rooms of those hotels', async () => {
       const hotel = makeHotel();
       setup({ hotels: [hotel] });
@@ -185,7 +186,7 @@ describe('HotelSearchService', () => {
         isActive: true,
       });
     });
-
+ 
     it('returns an empty page without looking at rooms when no hotel matches', async () => {
       setup({ hotels: [] });
       const result = await run();
@@ -198,7 +199,7 @@ describe('HotelSearchService', () => {
       });
       expect(roomModel.find).not.toHaveBeenCalled();
     });
-
+ 
     it('asks for ranges and reservations that touch the stay', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id);
@@ -220,7 +221,7 @@ describe('HotelSearchService', () => {
       });
     });
   });
-
+ 
   describe('free rooms', () => {
     it('lists a hotel with a free room and describes it', async () => {
       const hotel = makeHotel();
@@ -231,9 +232,9 @@ describe('HotelSearchService', () => {
         rooms: [dear, cheap],
         ranges: [covering(dear._id), covering(cheap._id)],
       });
-
+ 
       const result = await run();
-
+ 
       expect(result.total).toBe(1);
       expect(result.items[0]).toEqual({
         id: String(hotel._id),
@@ -249,21 +250,21 @@ describe('HotelSearchService', () => {
         lowestPricePerNight: 80,
       });
     });
-
+ 
     it('returns a null image for a hotel without photos', async () => {
       const hotel = { ...makeHotel(), images: [] };
       const room = makeRoom(hotel._id);
       setup({ hotels: [hotel], rooms: [room], ranges: [covering(room._id)] });
       expect((await run()).items[0].image).toBeNull();
     });
-
+ 
     it('skips a room with no bookable range', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id);
       setup({ hotels: [hotel], rooms: [room], ranges: [] });
       expect((await run()).total).toBe(0);
     });
-
+ 
     it('skips a room whose bookable range stops before the last night', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id);
@@ -274,7 +275,7 @@ describe('HotelSearchService', () => {
       });
       expect((await run()).total).toBe(0);
     });
-
+ 
     it('skips a room whose bookable range starts after check-in', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id);
@@ -285,7 +286,7 @@ describe('HotelSearchService', () => {
       });
       expect((await run()).total).toBe(0);
     });
-
+ 
     it('accepts a stay that ends on the last bookable day (check-out the day after)', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id);
@@ -296,7 +297,7 @@ describe('HotelSearchService', () => {
       });
       expect((await run()).total).toBe(1);
     });
-
+ 
     it('joins two bookable ranges that touch', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id);
@@ -310,7 +311,7 @@ describe('HotelSearchService', () => {
       });
       expect((await run()).total).toBe(1);
     });
-
+ 
     it('does not join two bookable ranges with a gap', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id);
@@ -324,7 +325,7 @@ describe('HotelSearchService', () => {
       });
       expect((await run()).total).toBe(0);
     });
-
+ 
     it('skips a room with a blocked range inside the stay', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id);
@@ -338,7 +339,7 @@ describe('HotelSearchService', () => {
       });
       expect((await run()).total).toBe(0);
     });
-
+ 
     it('skips a room taken by a reservation or an unexpired hold', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id);
@@ -350,7 +351,7 @@ describe('HotelSearchService', () => {
       });
       expect((await run()).total).toBe(0);
     });
-
+ 
     it('keeps the hotel when only some of its rooms are taken', async () => {
       const hotel = makeHotel();
       const taken = makeRoom(hotel._id);
@@ -365,7 +366,7 @@ describe('HotelSearchService', () => {
       expect(result.items[0].availableRooms).toBe(1);
       expect(result.items[0].lowestPricePerNight).toBe(90);
     });
-
+ 
     it('does not mix up rooms of different hotels', async () => {
       const a = makeHotel('A hotel');
       const b = makeHotel('B hotel');
@@ -380,7 +381,7 @@ describe('HotelSearchService', () => {
       expect(result.items.map((i) => i.name)).toEqual(['B hotel']);
     });
   });
-
+ 
   describe('rooms and guests', () => {
     it('defaults to one room', async () => {
       const hotel = makeHotel();
@@ -388,14 +389,14 @@ describe('HotelSearchService', () => {
       setup({ hotels: [hotel], rooms: [room], ranges: [covering(room._id)] });
       expect((await run(query({ rooms: undefined }))).total).toBe(1);
     });
-
+ 
     it('needs at least as many free rooms as asked for', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id);
       setup({ hotels: [hotel], rooms: [room], ranges: [covering(room._id)] });
       expect((await run(query({ rooms: 2 }))).total).toBe(0);
     });
-
+ 
     it('accepts a hotel with exactly the number of free rooms asked for', async () => {
       const hotel = makeHotel();
       const r1 = makeRoom(hotel._id);
@@ -407,21 +408,21 @@ describe('HotelSearchService', () => {
       });
       expect((await run(query({ rooms: 2 }))).total).toBe(1);
     });
-
+ 
     it('rejects a hotel when the guests do not fit in one room', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id, 2);
       setup({ hotels: [hotel], rooms: [room], ranges: [covering(room._id)] });
       expect((await run(query({ guests: 3 }))).total).toBe(0);
     });
-
+ 
     it('accepts guests equal to the maximum occupancy', async () => {
       const hotel = makeHotel();
       const room = makeRoom(hotel._id, 3);
       setup({ hotels: [hotel], rooms: [room], ranges: [covering(room._id)] });
       expect((await run(query({ guests: 3 }))).total).toBe(1);
     });
-
+ 
     it('adds up the occupancy of the rooms asked for', async () => {
       const hotel = makeHotel();
       const r1 = makeRoom(hotel._id, 2);
@@ -434,7 +435,7 @@ describe('HotelSearchService', () => {
       expect((await run(query({ rooms: 2, guests: 4 }))).total).toBe(1);
       expect((await run(query({ rooms: 2, guests: 5 }))).total).toBe(0);
     });
-
+ 
     it('uses the largest free rooms for the combined occupancy', async () => {
       const hotel = makeHotel();
       const rooms = [1, 4, 2].map((occupancy) =>
@@ -449,7 +450,7 @@ describe('HotelSearchService', () => {
       expect((await run(query({ rooms: 2, guests: 7 }))).total).toBe(0);
     });
   });
-
+ 
   describe('pagination', () => {
     const manyHotels = (count: number) => {
       const hotels = Array.from({ length: count }, (_, i) =>
@@ -463,7 +464,7 @@ describe('HotelSearchService', () => {
       });
       return hotels;
     };
-
+ 
     it('returns 10 hotels per page with the totals', async () => {
       manyHotels(12);
       const result = await run(query({ page: 1 }));
@@ -475,7 +476,7 @@ describe('HotelSearchService', () => {
         totalPages: 2,
       });
     });
-
+ 
     it('returns the rest on the next page', async () => {
       const hotels = manyHotels(12);
       const result = await run(query({ page: 2 }));
@@ -484,7 +485,7 @@ describe('HotelSearchService', () => {
         String(hotels[11]._id),
       ]);
     });
-
+ 
     it('returns an empty list for a page past the end', async () => {
       manyHotels(3);
       const result = await run(query({ page: 5 }));
@@ -493,3 +494,4 @@ describe('HotelSearchService', () => {
     });
   });
 });
+ 

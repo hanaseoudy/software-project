@@ -7,9 +7,12 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model, Types } from 'mongoose';
+import { PLATFORM_CURRENCY } from '../common/constants/currency.constants';
 import type { AuthPayload } from '../common/guards/jwt-auth.guard';
 import { City } from '../reference-data/schemas/city.schema';
 import { Country } from '../reference-data/schemas/country.schema';
+import { Review } from '../hotel-bookings/schemas/review.schema';
+import { User } from '../users/schemas/user.schema';
 import {
   ModeratorAssignment,
   ProviderType,
@@ -22,6 +25,12 @@ import { CreateHotelDto } from './dto/create-hotel.dto';
 import { CreateRoomAvailabilityDto } from './dto/create-room-availability.dto';
 import { CreateRoomBlockDto } from './dto/create-room-block.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
+import { HotelDetailsQueryDto } from './dto/hotel-details-query.dto';
+import {
+  AvailableRoomDto,
+  HotelDetailsResponseDto,
+  HotelReviewDto,
+} from './dto/hotel-details-response.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
 import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dto';
 import { RoomResponseDto } from './dto/room-response.dto';
@@ -37,6 +46,14 @@ import {
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { UpdateRoomAvailabilityDto } from './dto/update-room-availability.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
+import { paginate, PAGE_SIZE, skipFor } from '../common/pagination/pagination';
+import { RoomStatusQueryDto } from './dto/room-status-query.dto';
+import { RoomStatusDto, RoomStatusPageDto } from './dto/room-status.dto';
+import {
+  buildRoomStatusPeriods,
+  RoomDayStatus,
+  StatusInterval,
+} from './utils/room-status';
 import { UploadsService } from '../uploads/uploads.service';
 import { ImageCategory } from '../uploads/uploads.constants';
 import { Hotel, HotelDocument } from './schemas/hotel.schema';
@@ -66,6 +83,8 @@ export class HotelsService {
     @InjectModel(Country.name) private readonly countryModel: Model<Country>,
     @InjectModel(ModeratorAssignment.name)
     private readonly assignmentModel: Model<ModeratorAssignment>,
+    @InjectModel(Review.name) private readonly reviewModel: Model<Review>,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly uploads: UploadsService,
   ) {}
 
@@ -558,6 +577,236 @@ export class HotelsService {
     return this.toAvailabilityResponse(range);
   }
 
+  /** HTL-02: public hotel details page; lists free rooms when stay dates are sent. */
+  async getDetails(
+    id: string,
+    query: HotelDetailsQueryDto,
+  ): Promise<HotelDetailsResponseDto> {
+    const hotel = await this.findHotelOrFail(id);
+    if (!hotel.isActive) {
+      throw new NotFoundException('Hotel not found');
+    }
+    const stay = this.parseStay(query);
+
+    const [reviews, cityName, countryName] = await Promise.all([
+      this.findRecentReviews(hotel._id),
+      this.findCityName(hotel.city),
+      this.findCountryName(hotel.country),
+    ]);
+    const details: HotelDetailsResponseDto = {
+      id: hotel._id.toString(),
+      name: hotel.name,
+      description: hotel.description,
+      address: hotel.address,
+      city: hotel.city.toString(),
+      cityName,
+      country: hotel.country.toString(),
+      countryName,
+      starRating: hotel.starRating,
+      amenities: hotel.amenities,
+      images: hotel.images,
+      checkInTime: hotel.checkInTime,
+      checkOutTime: hotel.checkOutTime,
+      cancellationTiers: (hotel.policies?.cancellationTiers ?? []).map(
+        (tier) => ({
+          daysBeforeCheckIn: tier.daysBeforeCheckIn,
+          refundPercentage: tier.refundPercentage,
+        }),
+      ),
+      averageRating: hotel.averageRating,
+      reviewCount: hotel.reviewCount,
+      reviews,
+    };
+    if (stay) {
+      details.availableRooms = await this.findAvailableRooms(
+        hotel._id,
+        stay.checkIn,
+        stay.checkOut,
+      );
+    }
+    return details;
+  }
+
+  /** Display name of the hotel's city; empty if the reference row is gone. */
+  private async findCityName(cityId: Types.ObjectId): Promise<string> {
+    const city = await this.cityModel.findById(cityId).lean().exec();
+    return city?.name ?? '';
+  }
+
+  /** Display name of the hotel's country; empty if the reference row is gone. */
+  private async findCountryName(countryId: Types.ObjectId): Promise<string> {
+    const country = await this.countryModel.findById(countryId).lean().exec();
+    return country?.name ?? '';
+  }
+
+  /** Both dates or none; check-out must be after check-in and check-in cannot be in the past. */
+  private parseStay(
+    query: HotelDetailsQueryDto,
+  ): { checkIn: Date; checkOut: Date } | null {
+    if (query.checkIn === undefined && query.checkOut === undefined) {
+      return null;
+    }
+    const errors: Record<string, string[]> = {};
+    const now = new Date();
+    const today = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const checkIn =
+      query.checkIn === undefined ? null : this.parseDay(query.checkIn);
+    const checkOut =
+      query.checkOut === undefined ? null : this.parseDay(query.checkOut);
+    if (query.checkIn === undefined) {
+      errors.checkIn = ['Check-in is required when check-out is sent'];
+    } else if (!checkIn) {
+      errors.checkIn = ['Check-in must be a real date in YYYY-MM-DD format'];
+    } else if (checkIn < today) {
+      errors.checkIn = ['Check-in cannot be in the past'];
+    }
+    if (query.checkOut === undefined) {
+      errors.checkOut = ['Check-out is required when check-in is sent'];
+    } else if (!checkOut) {
+      errors.checkOut = ['Check-out must be a real date in YYYY-MM-DD format'];
+    }
+    if (checkIn && checkOut && checkOut <= checkIn) {
+      errors.checkOut = ['Check-out must be after the check-in day'];
+    }
+    if (!checkIn || !checkOut || Object.keys(errors).length > 0) {
+      throw new BadRequestException({ message: 'Validation failed', errors });
+    }
+    return { checkIn, checkOut };
+  }
+
+  private async findRecentReviews(
+    hotelId: Types.ObjectId,
+  ): Promise<HotelReviewDto[]> {
+    const reviews = await this.reviewModel
+      .find({ hotel: hotelId, hidden: false })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean()
+      .exec();
+    if (reviews.length === 0) {
+      return [];
+    }
+    const users = await this.userModel
+      .find({ _id: { $in: reviews.map((r) => r.user) } })
+      .select('firstName lastName')
+      .lean()
+      .exec();
+    const names = new Map(
+      users.map((u) => [
+        u._id.toString(),
+        `${u.firstName} ${(u.lastName ?? '').charAt(0)}.`.trim(),
+      ]),
+    );
+    return reviews.map((review) => ({
+      id: review._id.toString(),
+      reviewer: names.get(review.user.toString()) ?? 'Guest',
+      rating: review.rating,
+      comment: review.comment ?? '',
+      createdAt: (
+        (review as { createdAt?: Date }).createdAt ?? new Date(0)
+      ).toISOString(),
+    }));
+  }
+
+  /**
+   * A room is free for the stay when its bookable ranges cover every night, it is not
+   * blocked on any night, and no confirmed booking or live hold overlaps the stay.
+   */
+  private async findAvailableRooms(
+    hotelId: Types.ObjectId,
+    checkIn: Date,
+    checkOut: Date,
+  ): Promise<AvailableRoomDto[]> {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const lastNight = new Date(checkOut.getTime() - dayMs);
+
+    const rooms = await this.roomModel
+      .find({ hotel: hotelId, isActive: true })
+      .sort({ roomNumber: 1 })
+      .lean()
+      .exec();
+    if (rooms.length === 0) {
+      return [];
+    }
+    const roomIds = rooms.map((room) => room._id);
+
+    const [ranges, bookings] = await Promise.all([
+      this.availabilityModel
+        .find({
+          room: { $in: roomIds },
+          startDate: { $lte: lastNight },
+          endDate: { $gte: checkIn },
+        })
+        .sort({ startDate: 1 })
+        .lean()
+        .exec(),
+      this.bookingModel
+        .find({
+          hotel: hotelId,
+          'rooms.room': { $in: roomIds },
+          checkIn: { $lt: checkOut },
+          checkOut: { $gt: checkIn },
+          $or: [
+            { status: HotelBookingStatus.CONFIRMED },
+            {
+              status: HotelBookingStatus.PENDING_PAYMENT,
+              holdExpiresAt: { $gt: new Date() },
+            },
+          ],
+        })
+        .lean()
+        .exec(),
+    ]);
+
+    const taken = new Set<string>();
+    for (const booking of bookings) {
+      for (const booked of booking.rooms) {
+        taken.add(booked.room.toString());
+      }
+    }
+    const blocked = new Set(
+      ranges
+        .filter((r) => r.type === AvailabilityType.BLOCKED)
+        .map((r) => r.room.toString()),
+    );
+
+    return rooms
+      .filter((room) => {
+        const key = room._id.toString();
+        if (taken.has(key) || blocked.has(key)) {
+          return false;
+        }
+        // Walk the bookable ranges day by day; touching ranges count as one.
+        let next = checkIn.getTime();
+        for (const range of ranges) {
+          if (
+            range.room.toString() !== key ||
+            range.type !== AvailabilityType.AVAILABLE
+          ) {
+            continue;
+          }
+          if (
+            range.startDate.getTime() <= next &&
+            range.endDate.getTime() >= next
+          ) {
+            next = range.endDate.getTime() + dayMs;
+          }
+        }
+        return next > lastNight.getTime();
+      })
+      .map((room) => ({
+        id: room._id.toString(),
+        roomNumber: room.roomNumber,
+        type: room.type,
+        beds: room.beds,
+        maxOccupancy: room.maxOccupancy,
+        pricePerNight: room.pricePerNight,
+        currency: PLATFORM_CURRENCY, // PAY-04: one platform currency (USD)
+      }));
+  }
+
   /** HTL-06: the assigned moderator blocks a date range so the room cannot be booked. */
   async blockRoomDates(
     hotelId: string,
@@ -692,6 +941,142 @@ export class HotelsService {
   }
 
   /** Reads YYYY-MM-DD as midnight UTC; returns null for anything that is not a real calendar day. */
+  /**
+   * HTL-08: the assigned moderator sees each room's status for a chosen date range
+   * (both days included) as Available, Booked (with the reservation reference) or Blocked.
+   * A Confirmed reservation, or a Pending Payment hold that has not expired (HTL-18), is Booked.
+   */
+  async getRoomStatuses(
+    hotelId: string,
+    query: RoomStatusQueryDto,
+    user: AuthPayload,
+    now: Date = new Date(),
+  ): Promise<RoomStatusPageDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+
+    const start = this.parseDay(query.startDate);
+    const end = this.parseDay(query.endDate);
+    const errors: Record<string, string[]> = {};
+    if (!start) {
+      errors.startDate = [
+        'Start date must be a real date in YYYY-MM-DD format',
+      ];
+    }
+    if (!end) {
+      errors.endDate = ['End date must be a real date in YYYY-MM-DD format'];
+    }
+    if (start && end && end < start) {
+      errors.endDate = ['End date must be on or after the start date'];
+    }
+    if (!start || !end || Object.keys(errors).length > 0) {
+      throw new BadRequestException({ message: 'Validation failed', errors });
+    }
+
+    const page = query.page ?? 1;
+    const filter = { hotel: hotel._id };
+    const total = await this.roomModel.countDocuments(filter).exec();
+    const rooms = await this.roomModel
+      .find(filter)
+      .sort({ roomNumber: 1, _id: 1 })
+      .skip(skipFor(page))
+      .limit(PAGE_SIZE)
+      .lean<
+        (Pick<Room, 'roomNumber' | 'type' | 'isActive'> & {
+          _id: Types.ObjectId;
+        })[]
+      >()
+      .exec();
+    if (rooms.length === 0) {
+      return paginate([], total, page);
+    }
+    const roomIds = rooms.map((room) => room._id);
+
+    // Bookable ranges and blocks that touch the days (both days of a range are included).
+    const ranges = await this.availabilityModel
+      .find({
+        room: { $in: roomIds },
+        startDate: { $lte: end },
+        endDate: { $gte: start },
+      })
+      .lean<
+        Pick<RoomAvailability, 'room' | 'type' | 'startDate' | 'endDate'>[]
+      >()
+      .exec();
+
+    // A stay uses the nights from check-in up to (not including) check-out.
+    const bookings = await this.bookingModel
+      .find({
+        'rooms.room': { $in: roomIds },
+        $or: [
+          { status: HotelBookingStatus.CONFIRMED },
+          {
+            status: HotelBookingStatus.PENDING_PAYMENT,
+            holdExpiresAt: { $gt: now },
+          },
+        ],
+        checkIn: { $lte: end },
+        checkOut: { $gt: start },
+      })
+      .sort({ checkIn: 1, _id: 1 })
+      .select('bookingReference status checkIn checkOut rooms.room')
+      .lean<
+        {
+          _id: Types.ObjectId;
+          bookingReference?: string;
+          status: HotelBookingStatus;
+          checkIn: Date;
+          checkOut: Date;
+          rooms: { room: Types.ObjectId }[];
+        }[]
+      >()
+      .exec();
+
+    const dayMs = 24 * 60 * 60 * 1000;
+    const intervalsByRoom = new Map<string, StatusInterval[]>();
+    const add = (roomId: unknown, interval: StatusInterval) => {
+      const key = String(roomId);
+      intervalsByRoom.set(key, [
+        ...(intervalsByRoom.get(key) ?? []),
+        interval,
+      ]);
+    };
+    for (const range of ranges) {
+      add(range.room, {
+        status:
+          range.type === AvailabilityType.BLOCKED
+            ? RoomDayStatus.BLOCKED
+            : RoomDayStatus.AVAILABLE,
+        from: range.startDate,
+        to: range.endDate,
+      });
+    }
+    for (const booking of bookings) {
+      for (const booked of booking.rooms) {
+        add(booked.room, {
+          status: RoomDayStatus.BOOKED,
+          from: booking.checkIn,
+          to: new Date(booking.checkOut.getTime() - dayMs), // last night
+          reference: booking.bookingReference ?? String(booking._id),
+          reservationStatus: booking.status,
+        });
+      }
+    }
+
+    const items: RoomStatusDto[] = rooms.map((room) => ({
+      roomId: String(room._id),
+      roomNumber: room.roomNumber,
+      type: room.type,
+      isActive: room.isActive,
+      periods: buildRoomStatusPeriods(
+        start,
+        end,
+        intervalsByRoom.get(String(room._id)) ?? [],
+      ),
+    }));
+    return paginate(items, total, page);
+  }
+
   private parseDay(value: string): Date | null {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
       return null;

@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { NotificationType } from '../notifications/enums/notification.enums';
@@ -45,6 +46,42 @@ export class HotelBookingConfirmationService implements OnModuleInit {
         await this.finalizeConfirmed(event.bookingId);
       }
     });
+  }
+
+  /**
+   * Safety net: if the server restarted right after payment, or the hook
+   * failed, a reservation stays CONFIRMED without a booking reference. Every
+   * hour, give those reservations their reference (and notification).
+   * finalizeConfirmed only matches CONFIRMED reservations without a reference,
+   * so running it on a reservation that was already handled changes nothing.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async finalizeMissedConfirmations(): Promise<number> {
+    const missed = await this.bookingModel
+      .find({
+        status: HotelBookingStatus.CONFIRMED,
+        bookingReference: { $exists: false },
+      })
+      .select('_id')
+      .limit(100);
+
+    let finalized = 0;
+    for (const booking of missed) {
+      try {
+        if (await this.finalizeConfirmed(String(booking._id))) {
+          finalized++;
+        }
+      } catch (error) {
+        this.logger.error(
+          `Could not finalize reservation ${String(booking._id)}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
+    if (finalized > 0) {
+      this.logger.log(`Finalized ${finalized} confirmed reservation(s) without a reference`);
+    }
+    return finalized;
   }
 
   /**

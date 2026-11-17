@@ -8,6 +8,7 @@ import { Post, PostSchema } from './schemas/post.schema';
 import { Comment, CommentSchema } from './schemas/comment.schema';
 import { Like, LikeSchema } from './schemas/like.schema';
 import { AuthModule } from '../auth/auth.module';
+import { UploadsModule } from '../uploads/uploads.module';
 import { Itinerary, ItinerarySchema } from '../itineraries/schemas/itinerary.schema';
 import { PostItineraryController } from './post-itinerary.controller';
 import { PostItineraryService } from './post-itinerary.service';
@@ -22,6 +23,7 @@ import { PostItineraryService } from './post-itinerary.service';
       { name: Itinerary.name, schema: ItinerarySchema },
     ]),
     AuthModule,
+    UploadsModule, // BLG-10: shared GEN-08 image storage
   ],
   controllers: [BlogController, TagsController, CommentsController, PostItineraryController],
   providers: [BlogService, PostItineraryService],

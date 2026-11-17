@@ -57,7 +57,7 @@ describe.each([BookingType.FLIGHT, BookingType.HOTEL])('PAY-02 %s', (type) => {
     const result = await service.acceptPolicies(type, id, owner);
     expect(result.acceptedAt).toEqual(booking.policiesAcceptedAt);
   });
-  it.each(['HELD', 'CONFIRMED', 'CANCELLED', 'EXPIRED'])('rejects status %s', async status => {
+  it.each(['COMPLETED', 'CONFIRMED', 'CANCELLED', 'EXPIRED'])('rejects status %s', async status => {
     booking.status = status;
     await expect(service.acceptPolicies(type, id, owner)).rejects.toBeInstanceOf(BadRequestException);
   });

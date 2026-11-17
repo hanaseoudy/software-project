@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
+import { Airline, AirlineSchema } from '../airlines/schemas/airline.schema';
+import { Airport, AirportSchema } from '../airports/schemas/airport.schema';
 import { Flight, FlightSchema } from '../flights/schemas/flight.schema';
 import { FlightBookingsController } from './flight-bookings.controller';
 import { FlightBookingsService } from './flight-bookings.service';
+import { FlightCompletionService } from './flight-completion.service';
 import { FlightHoldExpiryService } from './flight-hold-expiry.service';
 import {
   FlightBooking,
@@ -15,11 +18,17 @@ import {
     AuthModule,
     MongooseModule.forFeature([
       { name: Flight.name, schema: FlightSchema },
+      { name: Airline.name, schema: AirlineSchema },
+      { name: Airport.name, schema: AirportSchema },
       { name: FlightBooking.name, schema: FlightBookingSchema },
     ]),
   ],
   controllers: [FlightBookingsController],
-  providers: [FlightBookingsService, FlightHoldExpiryService],
+  providers: [
+    FlightBookingsService,
+    FlightHoldExpiryService,
+    FlightCompletionService,
+  ],
   exports: [FlightBookingsService],
 })
 export class FlightBookingsModule {}

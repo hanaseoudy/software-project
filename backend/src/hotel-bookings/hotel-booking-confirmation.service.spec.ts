@@ -9,7 +9,12 @@ jest.mock('@nestjs/common', () => ({
   Injectable: () => () => undefined,
   Logger: class {
     error() {}
+    log() {}
   },
+}));
+jest.mock('@nestjs/schedule', () => ({
+  Cron: () => () => undefined,
+  CronExpression: { EVERY_HOUR: '0 0-23/1 * * *' },
 }));
 jest.mock('@nestjs/mongoose', () => ({
   InjectModel: () => () => undefined,
@@ -152,5 +157,45 @@ describe('HotelBookingConfirmationService.onModuleInit', () => {
 
     await handler({ bookingType: BookingType.HOTEL, bookingId: 'h1', paymentId: 'p2' });
     expect(finalize).toHaveBeenCalledWith('h1');
+  });
+});
+
+describe('HotelBookingConfirmationService.finalizeMissedConfirmations', () => {
+  function setupMissed(ids: Types.ObjectId[]) {
+    const ctx = setup();
+    const query = {
+      select: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue(ids.map((_id) => ({ _id }))),
+    };
+    (ctx.bookingModel as { find?: jest.Mock }).find = jest.fn().mockReturnValue(query);
+    return ctx;
+  }
+
+  it('looks only at CONFIRMED reservations without a reference', async () => {
+    const { service, bookingModel } = setupMissed([]);
+    await service.finalizeMissedConfirmations();
+    expect((bookingModel as unknown as { find: jest.Mock }).find).toHaveBeenCalledWith({
+      status: 'CONFIRMED',
+      bookingReference: { $exists: false },
+    });
+  });
+
+  it('finalizes each missed reservation and counts them', async () => {
+    const ids = [new Types.ObjectId(), new Types.ObjectId()];
+    const { service, bookingModel } = setupMissed(ids);
+    bookingModel.findOneAndUpdate.mockResolvedValue(makeBooking());
+
+    await expect(service.finalizeMissedConfirmations()).resolves.toBe(2);
+    expect(bookingModel.findOneAndUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps going when one reservation fails', async () => {
+    const ids = [new Types.ObjectId(), new Types.ObjectId()];
+    const { service, bookingModel } = setupMissed(ids);
+    bookingModel.findOneAndUpdate
+      .mockRejectedValueOnce(new Error('db down'))
+      .mockResolvedValueOnce(makeBooking());
+
+    await expect(service.finalizeMissedConfirmations()).resolves.toBe(1);
   });
 });

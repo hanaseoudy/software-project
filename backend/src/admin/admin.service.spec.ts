@@ -26,6 +26,7 @@ describe('AdminService (ACC-13, ACC-07a)', () => {
     hotelModel as any,
     airlineModel as any,
     sessionModel as any,
+    {} as any,
   );
 
   const userId = new Types.ObjectId();
