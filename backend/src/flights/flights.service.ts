@@ -204,23 +204,27 @@ export class FlightsService {
         departureTime: { $gt: new Date() },
       })
       .populate('airline')
+      .populate('departureAirport') // ADDED (GEN-06): populate departure airport so timezone is available
+      .populate('arrivalAirport')
       .lean();
 
     return flights
       .filter((f: any) => f.airline && f.airline.isActive !== false)
-      .map((f: any) => ({
-        ...f,
-        cabins: f.cabins
-          .filter((c: any) => !cabinClass || c.cabinClass === cabinClass)
-          .map((c: any) => ({
-            cabinId: c._id,
-            cabinClass: c.cabinClass,
-            seatsRemaining: c.totalSeats - c.bookedSeats - c.heldSeats,
-            fare: c.price,
-            totalPrice: this.tripPrice(c.price, party),
-          }))
-          .filter((c: any) => c.seatsRemaining >= seatsNeeded),
-      }))
+      .map((f: any) =>
+        formatFlightWithLocalTimes({
+          ...f,
+          cabins: f.cabins
+            .filter((c: any) => !cabinClass || c.cabinClass === cabinClass)
+            .map((c: any) => ({
+              cabinId: c._id,
+              cabinClass: c.cabinClass,
+              seatsRemaining: c.totalSeats - c.bookedSeats - c.heldSeats,
+              fare: c.price,
+              totalPrice: this.tripPrice(c.price, party),
+            }))
+            .filter((c: any) => c.seatsRemaining >= seatsNeeded),
+        }),
+      )
       .filter((f: any) => f.cabins.length > 0);
   }
 
