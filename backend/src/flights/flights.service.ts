@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, SortOrder } from 'mongoose';
 import { fromZonedTime } from 'date-fns-tz';
 import { Flight, FlightDocument, FlightStatus } from './schemas/flight.schema';
 import { Airport, AirportDocument } from '../airports/schemas/airport.schema';
@@ -19,6 +19,17 @@ import {
 import { CreateFlightsDto } from './dto/create-flights.dto';
 import { AddCabinDto } from './dto/add-cabin.dto';
 import { isValidObjectId } from 'mongoose';
+import {
+  SearchFlightsDto,
+  FlightSortBy,
+  SortFlightOrder,
+} from './dto/search-flights.dto';
+import {
+  Airline,
+  AirlineDocument,
+  CabinClass,
+} from '../airlines/schemas/airline.schema';
+import { formatFlightWithLocalTimes } from './utils/flight-time.formatter';
 
 @Injectable()
 export class FlightsService {
@@ -29,6 +40,8 @@ export class FlightsService {
     private readonly airportModel: Model<AirportDocument>,
     @InjectModel(ModeratorAssignment.name)
     private readonly assignmentModel: Model<ModeratorAssignmentDocument>,
+    @InjectModel(Airline.name)
+    private readonly airlineModel: Model<AirlineDocument>,
   ) {}
 
   async create(moderatorId: string, dto: CreateFlightsDto) {
@@ -135,6 +148,193 @@ export class FlightsService {
     }
 
     return updated.populate(['airline', 'departureAirport', 'arrivalAirport']);
+  }
+
+  // constructor: inject the Airline model next to the Flight model
+
+  async search(dto: SearchFlightsDto) {
+    const { adults, children = 0, infants = 0 } = dto;
+
+    if (infants > adults) {
+      throw new BadRequestException('Infants cannot outnumber adults');
+    }
+    if (dto.returnDate && dto.returnDate < dto.departureDate) {
+      throw new BadRequestException('returnDate cannot be before departDate');
+    }
+
+    if (
+      dto.minPrice !== undefined &&
+      dto.maxPrice !== undefined &&
+      dto.minPrice > dto.maxPrice
+    ) {
+      throw new BadRequestException('minPrice cannot be greater than maxPrice');
+    }
+
+    const seatsNeeded = adults + children; // infants occupy no seat
+    const party = { adults, children, infants };
+
+    const priceRange = { minPrice: dto.minPrice, maxPrice: dto.maxPrice };
+
+    const outboundRaw = await this.findLeg(
+      dto.departureAirport,
+      dto.arrivalAirport,
+      dto.departureDate,
+      seatsNeeded,
+      party,
+      dto.cabinClass,
+      priceRange,
+    );
+    const outbound = this.sortFlights(outboundRaw, dto.sortBy, dto.sortOrder); // ADDED (FLT-15)
+
+    if (!dto.returnDate) return { outbound };
+
+    const returningRaw = await this.findLeg(
+      dto.arrivalAirport,
+      dto.departureAirport,
+      dto.returnDate,
+      seatsNeeded,
+      party,
+      dto.cabinClass,
+      priceRange,
+    );
+
+    const returning = this.sortFlights(returningRaw, dto.sortBy, dto.sortOrder); // ADDED (FLT-15)
+
+    return { outbound, return: returning };
+  }
+
+  async findOne(id: string) {
+    if (!isValidObjectId(id)) {
+      throw new BadRequestException('Invalid flight ID format');
+    }
+
+    const flight = await this.flightsModel
+      .findById(id)
+      .populate('airline')
+      .populate('departureAirport')
+      .populate('arrivalAirport')
+      .lean();
+
+    if (!flight) {
+      throw new NotFoundException('Flight not found');
+    }
+
+    const formatted = formatFlightWithLocalTimes(flight);
+
+    return {
+      ...formatted,
+      cabins: (formatted.cabins ?? []).map((c: any) => ({
+        cabinId: c._id,
+        cabinClass: c.cabinClass,
+        totalSeats: c.totalSeats,
+        seatsRemaining: c.totalSeats - c.bookedSeats - c.heldSeats,
+        price: c.price,
+        currency: c.currency,
+        freeBags: c.freeBags,
+        maxBagWeightKg: c.maxBagWeightKg,
+      })),
+      cancellationPolicy: (formatted.airline as any)?.cancellationPolicy ?? {
+        rules: [],
+      },
+    };
+  }
+
+  private async findLeg(
+    fromCode: string,
+    toCode: string,
+    localDate: string,
+    seatsNeeded: number,
+    party: { adults: number; children: number; infants: number },
+    cabinClass?: CabinClass,
+    priceRange?: { minPrice?: number; maxPrice?: number },
+  ) {
+    const [from, to] = await Promise.all([
+      this.airportModel.findOne({ iataCode: fromCode }),
+      this.airportModel.findOne({ iataCode: toCode }),
+    ]);
+    if (!from || !to) throw new BadRequestException('Unknown airport code');
+
+    const flights = await this.flightsModel
+      .find({
+        departureAirport: from._id,
+        arrivalAirport: to._id,
+        departureLocalDate: localDate,
+        status: FlightStatus.SCHEDULED,
+        departureTime: { $gt: new Date() },
+      })
+      .populate('airline')
+      .populate('departureAirport')
+      .populate('arrivalAirport')
+      .lean();
+
+    return flights
+      .filter((f: any) => f.airline && f.airline.isActive !== false)
+      .map((f: any) =>
+        formatFlightWithLocalTimes({
+          ...f,
+          cabins: f.cabins
+            .filter((c: any) => !cabinClass || c.cabinClass === cabinClass)
+            .filter(
+              (c: any) =>
+                (priceRange?.minPrice === undefined ||
+                  c.price >= priceRange.minPrice) &&
+                (priceRange?.maxPrice === undefined ||
+                  c.price <= priceRange.maxPrice),
+            )
+            .map((c: any) => ({
+              cabinId: c._id,
+              cabinClass: c.cabinClass,
+              seatsRemaining: c.totalSeats - c.bookedSeats - c.heldSeats,
+              fare: c.price,
+              totalPrice: this.tripPrice(c.price, party),
+            }))
+            .filter((c: any) => c.seatsRemaining >= seatsNeeded),
+        }),
+      )
+      .filter((f: any) => f.cabins.length > 0);
+  }
+
+  private tripPrice(
+    fare: number,
+    p: { adults: number; children: number; infants: number },
+  ) {
+    const cents = Math.round(fare * 100);
+    const infantCents = Math.round(cents * 0.1);
+    return (cents * (p.adults + p.children) + infantCents * p.infants) / 100;
+  }
+
+  private sortFlights(
+    flights: any[],
+    sortBy: FlightSortBy = FlightSortBy.DEPARTURE_TIME,
+    sortOrder: SortFlightOrder = SortFlightOrder.ASC,
+  ) {
+    const dir = sortOrder === SortFlightOrder.DESC ? -1 : 1;
+
+    return [...flights].sort((a, b) => {
+      let diff = 0;
+
+      if (sortBy === FlightSortBy.PRICE) {
+        const minA = Math.min(...a.cabins.map((c: any) => c.fare));
+        const minB = Math.min(...b.cabins.map((c: any) => c.fare));
+        diff = minA - minB;
+      } else if (sortBy === FlightSortBy.DURATION) {
+        const durA =
+          a.durationMinutes ??
+          new Date(a.arrivalTime).getTime() -
+            new Date(a.departureTime).getTime();
+        const durB =
+          b.durationMinutes ??
+          new Date(b.arrivalTime).getTime() -
+            new Date(b.departureTime).getTime();
+        diff = durA - durB;
+      } else {
+        diff =
+          new Date(a.departureTime).getTime() -
+          new Date(b.departureTime).getTime();
+      }
+
+      return diff * dir;
+    });
   }
 
   private async getModeratorAirlineId(userId: string) {
