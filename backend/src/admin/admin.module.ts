@@ -6,6 +6,7 @@ import { Hotel, HotelSchema } from '../hotels/schemas/hotel.schema';
 import { Airline, AirlineSchema } from '../airlines/schemas/airline.schema';
 import { Session, SessionSchema } from '../auth/schemas/session.schema';
 import { AuthModule } from '../auth/auth.module';
+import { MailModule } from '../mail/mail.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -19,6 +20,7 @@ import { AdminService } from './admin.service';
       { name: Session.name, schema: SessionSchema },
     ]),
     AuthModule,
+    MailModule, // GEN-01-B: moderator invitation email
   ],
   controllers: [AdminController],
   providers: [AdminService],

@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -17,17 +18,21 @@ import {
 import { Hotel } from '../hotels/schemas/hotel.schema';
 import { Airline } from '../airlines/schemas/airline.schema';
 import { Session, SessionDocument } from '../auth/schemas/session.schema';
+import { MailService } from '../mail/mail.service';
 import { CreateModeratorDto } from './dto/create-moderator.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(ModeratorAssignment.name) private assignmentModel: Model<ModeratorAssignmentDocument>,
     @InjectModel(Hotel.name) private hotelModel: Model<Hotel>,
     @InjectModel(Airline.name) private airlineModel: Model<Airline>,
     @InjectModel(Session.name) private sessionModel: Model<SessionDocument>,
+    private readonly mail: MailService,
   ) {}
 
   async createModerator(dto: CreateModeratorDto) {
@@ -65,6 +70,9 @@ export class AdminService {
       await this.userModel.deleteOne({ _id: user._id });
       throw err;
     }
+
+    // GEN-01-B: invitation email (sent in the background; never includes the temporary password).
+    void this.sendInvitation(user, dto);
 
     return {
       id: user._id,
@@ -114,7 +122,25 @@ export class AdminService {
     };
   }
 
-  private async assertProviderExists(providerType: ProviderType, providerId: string) {
+  /** GEN-01-B: emails the new moderator; a failed email never undoes the account. */
+  private async sendInvitation(user: UserDocument, dto: CreateModeratorDto): Promise<void> {
+    try {
+      const provider =
+        dto.providerType === ProviderType.HOTEL
+          ? await this.hotelModel.findById(dto.providerId).select('name').lean()
+          : await this.airlineModel.findById(dto.providerId).select('name').lean();
+      await this.mail.sendModeratorInvitation({
+        to: user.email,
+        firstName: user.firstName,
+        providerType: dto.providerType,
+        providerName: provider?.name ?? (dto.providerType === ProviderType.HOTEL ? 'your hotel' : 'your airline'),
+      });
+    } catch (error) {
+      this.logger.error(`Moderator invitation email could not be sent: ${(error as Error).message}`);
+    }
+  }
+
+    private async assertProviderExists(providerType: ProviderType, providerId: string) {
     const exists =
       providerType === ProviderType.HOTEL
         ? await this.hotelModel.exists({ _id: providerId })

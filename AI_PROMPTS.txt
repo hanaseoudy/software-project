@@ -933,3 +933,30 @@ Verification:
 6 jest tests for buildBookingSummary pass; tsc --noEmit and oxlint show no
 errors in the changed files. Postman screenshots are attached to the PR.
 ================================================
+Date: 2026-11-17
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: GEN-01-B (TASK-116, bonus) - GEN-01 notifications and moderator invitations by email
+Prompt (summary of the conversation):
+I gave AI the GEN-01-B bonus story (send the GEN-01 notifications, plus moderator invitations, by email via
+SMTP, using a test inbox in development; depends on GEN-01) and asked it to check the project description
+and the dependencies on the latest develop and build it on a new branch from develop.
+
+How the output was used:
+AI checked that GEN-01 (NotificationsService) and ACC-13 (admin creates moderators) are merged in develop.
+It added a MailService (nodemailer, SMTP): it uses SMTP_HOST/PORT/USER/PASS when set (e.g. a Mailtrap test
+inbox); in development without settings it creates a free Ethereal test inbox and logs a preview link for
+each email; in production without settings email is turned off. NotificationsService.create/createForMany
+now also email the same title and message to each user, in the background, so every GEN-01 type (booking
+confirmed, cancelled, refund, flight schedule change, account and provider suspension) is emailed and a
+failed email never removes the in-app notification. AdminService.createModerator now emails the new
+moderator an invitation (role, hotel or airline name, login link, must change password on first login);
+the temporary password is never put in the email. Only placeholders were added to .env.example. I
+reviewed the code.
+Verification performed:
+Backend build and lint passed. 43 tests passed in the mail, notifications and admin suites (25 new: SMTP
+settings, Ethereal test inbox, production off, failures never throw, email content and HTML escaping,
+every notification type, many users, invitation without password, account kept when email fails). Full
+backend suite 595/598 (the 3 failures are in blog.service.spec.ts and also fail on develop). Sent a real
+notification email and a real invitation through SMTP to an Ethereal test inbox; both were received.
+The backend started with MailModule, NotificationsModule and AdminModule loaded.
