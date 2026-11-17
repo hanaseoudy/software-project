@@ -2,11 +2,13 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { Types } from 'mongoose';
 import { AdminService } from './admin.service';
 import { AccountStatus, UserRole } from '../users/schemas/user.schema';
+import { NotificationType } from '../notifications/enums/notification.enums';
 
 describe('AdminService account status (ACC-16, ACC-15)', () => {
   const userModel = { findById: jest.fn(), updateOne: jest.fn() };
   const sessionModel = { updateMany: jest.fn() };
-  const service = new AdminService(userModel as any, {} as any, {} as any, {} as any, sessionModel as any);
+  const notificationsService = { create: jest.fn() };
+  const service = new AdminService(userModel as any, {} as any, {} as any, {} as any, sessionModel as any, notificationsService as any);
 
   const id = new Types.ObjectId();
   const account = (overrides: object = {}) => ({
@@ -39,6 +41,16 @@ describe('AdminService account status (ACC-16, ACC-15)', () => {
         { user: id, revokedAt: null },
         { $set: { revokedAt: expect.any(Date) } },
       );
+    });
+
+    it('sends the account an in-app notification', async () => {
+      await service.suspendAccount(id.toString());
+      expect(notificationsService.create).toHaveBeenCalledWith(id, expect.objectContaining({ type: NotificationType.ACCOUNT_SUSPENDED }));
+    });
+
+    it('still suspends the account if the notification fails', async () => {
+      notificationsService.create.mockRejectedValue(new Error('db down'));
+      await expect(service.suspendAccount(id.toString())).resolves.toMatchObject({ status: AccountStatus.SUSPENDED });
     });
 
     it('suspends a moderator', async () => {
@@ -78,6 +90,7 @@ describe('AdminService account status (ACC-16, ACC-15)', () => {
       userModel.updateOne.mockResolvedValue({ modifiedCount: 0 });
       await expect(service.suspendAccount(id.toString())).rejects.toBeInstanceOf(ConflictException);
       expect(sessionModel.updateMany).not.toHaveBeenCalled();
+      expect(notificationsService.create).not.toHaveBeenCalled();
     });
 
     it('rejects an invalid id and an unknown account', async () => {
@@ -95,6 +108,7 @@ describe('AdminService account status (ACC-16, ACC-15)', () => {
         { _id: id, status: AccountStatus.SUSPENDED },
         { $set: { status: AccountStatus.ACTIVE } },
       );
+      expect(notificationsService.create).toHaveBeenCalledWith(id, expect.objectContaining({ type: NotificationType.ACCOUNT_REACTIVATED }));
     });
 
     it.each([AccountStatus.ACTIVE, AccountStatus.DEACTIVATED])('rejects a %s account', async (status) => {
