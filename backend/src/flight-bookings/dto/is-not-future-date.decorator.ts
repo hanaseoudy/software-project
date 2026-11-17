@@ -1,6 +1,7 @@
 import { registerDecorator, ValidationOptions } from 'class-validator';
+import { isPastCalendarDate } from '../utils/birth-date';
 
-/** Passes only for a valid date that is not in the future. */
+/** Passes only for a real calendar date (YYYY-MM-DD, so 2000-02-30 fails) that is not in the future. */
 export function IsNotFutureDate(validationOptions?: ValidationOptions) {
   return (object: object, propertyName: string) => {
     registerDecorator({
@@ -10,12 +11,10 @@ export function IsNotFutureDate(validationOptions?: ValidationOptions) {
       options: validationOptions,
       validator: {
         validate(value: unknown) {
-          if (typeof value !== 'string') return false;
-          const time = new Date(value).getTime();
-          return !Number.isNaN(time) && time <= Date.now();
+          return isPastCalendarDate(value);
         },
         defaultMessage() {
-          return 'dateOfBirth cannot be in the future';
+          return 'dateOfBirth must be a real date in YYYY-MM-DD format and not in the future';
         },
       },
     });

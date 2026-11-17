@@ -78,3 +78,23 @@ the controller route and unit tests. Results are paginated 10 rooms per page
 Verification performed:
 Hotel unit tests (304), lint and build passed under Node 24.
 ================================================
+
+Date: 2026-11-17
+Student: Roaa Mahmoud
+Tool: Claude (Claude Code on claude.ai)
+Related Requirement: FLT-19, FLT-03, HTL-01 / GEN-08 (sprint 3 fixes requested by Hana)
+Prompt:
+Let's start with the sprint 3 tasks, Hana asked me for this. (With three review
+items: passenger date of birth 2000-02-30 is accepted, the arrivalAirport error
+says "Departure airport", and there is no hotel photo upload route.)
+How the output was used:
+Claude made the passenger date-of-birth check use isPastCalendarDate so
+impossible dates and future dates are rejected, fixed the arrival airport error
+message, and added POST /api/hotels/:id/images for the assigned hotel moderator
+(JPG/PNG, 5 MB, at most 5 photos, saved through UploadsService.saveForOwner with
+an update that re-checks the limit). It also wrote unit tests for all three. I
+will review the changes before the pull request is merged.
+Verification performed:
+Unit tests, lint and build passed under Node 24 (3 blog.service.spec tests were
+already failing on develop and are unrelated).
+================================================
