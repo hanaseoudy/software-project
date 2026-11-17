@@ -114,6 +114,64 @@ export class AdminService {
     };
   }
 
+  /** ACC-16 (users), ACC-15 (moderators): a suspended account cannot log in; bookings and content are untouched. */
+  async suspendAccount(userId: string) {
+    const user = await this.findManagedAccount(userId, 'suspended');
+
+    if (user.status === AccountStatus.SUSPENDED) {
+      throw new ConflictException('Account is already suspended');
+    }
+    if (user.status === AccountStatus.DEACTIVATED) {
+      throw new ConflictException('A deactivated account cannot be suspended');
+    }
+
+    const result = await this.userModel.updateOne(
+      { _id: user._id, status: AccountStatus.ACTIVE },
+      { $set: { status: AccountStatus.SUSPENDED } },
+    );
+    if (result.modifiedCount === 0) {
+      throw new ConflictException('Account status changed, please try again');
+    }
+
+    await this.sessionModel.updateMany({ user: user._id, revokedAt: null }, { $set: { revokedAt: new Date() } });
+
+    return { id: user._id, email: user.email, role: user.role, status: AccountStatus.SUSPENDED };
+  }
+
+  /** ACC-16 (users), ACC-15 (moderators): only a suspended account can be reactivated. */
+  async reactivateAccount(userId: string) {
+    const user = await this.findManagedAccount(userId, 'reactivated');
+
+    if (user.status !== AccountStatus.SUSPENDED) {
+      throw new ConflictException('Only a suspended account can be reactivated');
+    }
+
+    const result = await this.userModel.updateOne(
+      { _id: user._id, status: AccountStatus.SUSPENDED },
+      { $set: { status: AccountStatus.ACTIVE } },
+    );
+    if (result.modifiedCount === 0) {
+      throw new ConflictException('Account status changed, please try again');
+    }
+
+    return { id: user._id, email: user.email, role: user.role, status: AccountStatus.ACTIVE };
+  }
+
+  private async findManagedAccount(userId: string, action: 'suspended' | 'reactivated') {
+    if (!isValidObjectId(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (user.role === UserRole.ADMIN) {
+      throw new ForbiddenException(`An admin account cannot be ${action}`);
+    }
+    return user;
+  }
+
   private async assertProviderExists(providerType: ProviderType, providerId: string) {
     const exists =
       providerType === ProviderType.HOTEL
