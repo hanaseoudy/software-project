@@ -116,4 +116,21 @@ query validation, the filter and sort step before pagination, and unit tests.
 I will review the changes before the pull request is merged.
 Verification performed:
 Hotel unit tests (410), lint and build passed under Node 24.
+Related Requirement: HTL-20 and HTL-22 (Jira TASK-59 and TASK-61)
+Prompt:
+Go, and make sure everything is as required. (HTL-20 and HTL-22 both depend only
+on HTL-17, so Claude built them together on one branch.)
+How the output was used:
+Claude read the two requirements and the hotel-bookings module and added three
+read-only endpoints: GET /api/hotel-bookings/mine (a guest's reservations
+grouped as upcoming, past or cancelled, 10 per page, with the size of each
+group), GET /api/hotel-bookings/:id (full details of the guest's own
+reservation, 404 for anyone else's) and GET /api/hotels/:id/reservations (the
+assigned hotel moderator sees guest, dates and status, optional status filter).
+Unpaid holds are never listed, and a Confirmed stay whose check-out has passed
+is shown as Completed. It wrote the query and response DTOs, a
+HotelReservationsService, two controllers and unit tests. I will review the
+changes before the pull request is merged.
+Verification performed:
+Unit tests, lint and build passed under Node 24.
 ================================================
