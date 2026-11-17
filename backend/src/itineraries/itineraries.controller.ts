@@ -1,3 +1,4 @@
+
 import {
   Body,
   Controller,
@@ -29,17 +30,18 @@ import { ACCESS_COOKIE } from '../auth/auth.cookies';
 import { ItinerariesService } from './itineraries.service';
 import { CreateItineraryDto } from './dto/create-itinerary.dto';
 import { UpdateItineraryDto } from './dto/update-itinerary.dto';
-
+ 
 import { CreateItineraryDayDto } from './dto/create-itinerary-day.dto';
 import { UpdateItineraryDayDto } from './dto/update-itinerary-day.dto';
 import { ReorderItineraryDayDto } from './dto/reorder-itinerary-day.dto';
+import { ItineraryGroupsResponseDto } from './dto/itinerary-groups-response.dto';
 @ApiTags('itineraries')
 @ApiCookieAuth(ACCESS_COOKIE)
 @UseGuards(JwtAuthGuard)
 @Controller('itineraries')
 export class ItinerariesController {
   constructor(private readonly itinerariesService: ItinerariesService) {}
-
+ 
   @Get()
   @ApiOperation({ summary: 'List my itineraries (ITN-03)' })
   @ApiOkResponse({ type: PaginatedResponseDto })
@@ -49,19 +51,19 @@ export class ItinerariesController {
   ) {
     return this.itinerariesService.findAll(req.user!.sub, query.page ?? 1);
   }
-
+ 
   @Get(':id')
   @ApiOperation({ summary: 'Get my itinerary details (ITN-03)' })
   findOne(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.itinerariesService.findOne(req.user!.sub, id);
   }
-
+ 
   @Post()
   @ApiOperation({ summary: 'Create itinerary (ITN-01)' })
   create(@Req() req: AuthenticatedRequest, @Body() dto: CreateItineraryDto) {
     return this.itinerariesService.create(req.user!.sub, dto);
   }
-
+ 
   @Patch(':id')
   @ApiOperation({ summary: 'Update itinerary (ITN-01)' })
   update(
@@ -71,14 +73,31 @@ export class ItinerariesController {
   ) {
     return this.itinerariesService.update(req.user!.sub, id, dto);
   }
-
+ 
   @Delete(':id')
   @HttpCode(200)
   @ApiOperation({ summary: 'Delete itinerary (ITN-01)' })
   remove(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.itinerariesService.remove(req.user!.sub, id);
   }
-
+ 
+  @Get(':id/groups')
+  @ApiOperation({
+    summary: 'Get consecutive-city groups and budget subtotals (ITN-09)',
+    description: 'Owner-only, read-only snapshot of the persisted day order. Includes budget entries, costed activities and transport costs exactly once per record. Totals remain separate by native currency; no FX conversion or purchase-level deduplication. Groups are derived dynamically, including after future ITN-08 reordering.',
+  })
+  @ApiParam({ name: 'id', description: 'Itinerary MongoDB ObjectId' })
+  @ApiOkResponse({ type: ItineraryGroupsResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid itinerary ID' })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  @ApiResponse({ status: 404, description: 'Itinerary unavailable to this owner' })
+  @ApiResponse({ status: 409, description: 'Existing day sequence, city reference, monetary amount or currency is invalid' })
+  @ApiResponse({ status: 500, description: 'Required database data could not be read; no partial subtotals are returned' })
+  @ApiResponse({ status: 503, description: 'Consistent snapshot unavailable or read timed out; retry the read' })
+  findGroups(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.itinerariesService.findGroups(req.user!.sub, id);
+  }
+ 
   @Post(':id/days')
   @ApiOperation({ summary: 'Add itinerary day (ITN-05)' })
   addDay(
@@ -92,7 +111,7 @@ export class ItinerariesController {
       dto,
     );
   }
-
+ 
   @Get(':id/days')
   @ApiOperation({ summary: 'List itinerary days (ITN-05)' })
   findDays(
@@ -104,7 +123,7 @@ export class ItinerariesController {
       id,
     );
   }
-
+ 
   @Patch(':id/days/:dayId')
   @ApiOperation({ summary: 'Update itinerary day (ITN-05)' })
   updateDay(
@@ -120,7 +139,7 @@ export class ItinerariesController {
       dto,
     );
   }
-
+ 
   @Patch(':id/days/:dayId/reorder')
   @ApiOperation({
     summary: 'Move an itinerary day to a new position (ITN-08)',
@@ -152,7 +171,7 @@ export class ItinerariesController {
   ) {
     return this.itinerariesService.reorderDay(req.user!.sub, id, dayId, dto);
   }
-
+ 
   @Delete(':id/days/:dayId')
   @HttpCode(200)
   @ApiOperation({
@@ -182,5 +201,6 @@ export class ItinerariesController {
   removeDay(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Param('dayId') dayId: string) {
     return this.itinerariesService.removeDay(req.user!.sub, id, dayId);
   }
-
+ 
 }
+ 
