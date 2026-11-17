@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { FlightsService } from './flights.service';
@@ -12,7 +14,10 @@ import { UserRole } from '../users/schemas/user.schema';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreateFlightsDto } from './dto/create-flights.dto';
 import {
+  ApiBadRequestResponse,
   ApiCookieAuth,
+  ApiExtraModels,
+  ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiResponse,
@@ -23,6 +28,7 @@ import type { AuthPayload } from '../common/guards/jwt-auth.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AddCabinDto } from './dto/add-cabin.dto';
+import { SearchFlightsDto } from './dto/search-flights.dto';
 
 @ApiTags('Flights')
 @Controller('flights')
@@ -97,5 +103,25 @@ export class FlightsController {
   ) {
     // req.user.sub is the moderator's ID extracted from the JWT token
     return this.flights.addCabin(flightId, user.sub, dto);
+  }
+
+  @ApiOperation({
+    summary: 'Search flights (public)',
+    description:
+      'Lists SCHEDULED flights of active airlines on the given local departure date, ' +
+      'keeping only cabins with enough free seats (total - booked - held) for the passengers. ' +
+      'Returns "No flights found" when nothing matches. Open to guests and registered users.',
+  })
+  @ApiExtraModels(SearchFlightsDto)
+  @ApiOkResponse({
+    description:
+      'Matching flights, or an empty list with the message "No flights found"',
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid airport id, date format, or passenger count',
+  })
+  @Get('search')
+  search(@Query() query: SearchFlightsDto) {
+    return this.flights.search(query);
   }
 }

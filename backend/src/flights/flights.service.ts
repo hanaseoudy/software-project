@@ -21,6 +21,12 @@ import { CreateFlightsDto } from './dto/create-flights.dto';
 import { formatFlightWithLocalTimes } from './utils/flight-time.formatter';
 import { AddCabinDto } from './dto/add-cabin.dto';
 import { isValidObjectId } from 'mongoose';
+import { SearchFlightsDto } from './dto/search-flights.dto';
+import {
+  Airline,
+  AirlineDocument,
+  CabinClass,
+} from '../airlines/schemas/airline.schema';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
@@ -34,6 +40,8 @@ export class FlightsService {
     private readonly airportModel: Model<AirportDocument>,
     @InjectModel(ModeratorAssignment.name)
     private readonly assignmentModel: Model<ModeratorAssignmentDocument>,
+    @InjectModel(Airline.name)
+    private readonly airlineModel: Model<AirlineDocument>,
   ) {}
 
   async create(moderatorId: string, dto: CreateFlightsDto) {
@@ -195,6 +203,98 @@ export class FlightsService {
     return formatFlightWithLocalTimes(
       await updated.populate(['airline', 'departureAirport', 'arrivalAirport']),
     );
+  }
+
+  // constructor: inject the Airline model next to the Flight model
+
+  async search(dto: SearchFlightsDto) {
+    const { adults, children = 0, infants = 0 } = dto;
+
+    if (infants > adults) {
+      throw new BadRequestException('Infants cannot outnumber adults');
+    }
+    if (dto.returnDate && dto.returnDate < dto.departureDate) {
+      throw new BadRequestException('returnDate cannot be before departDate');
+    }
+
+    const seatsNeeded = adults + children; // infants occupy no seat
+    const party = { adults, children, infants };
+
+    const outbound = await this.findLeg(
+      dto.departureAirport,
+      dto.arrivalAirport,
+      dto.departureDate,
+      seatsNeeded,
+      party,
+      dto.cabinClass,
+    );
+    if (!dto.returnDate) return { outbound };
+
+    const returning = await this.findLeg(
+      dto.arrivalAirport,
+      dto.departureAirport,
+      dto.returnDate,
+      seatsNeeded,
+      party,
+      dto.cabinClass,
+    );
+    return { outbound, return: returning };
+  }
+
+  private async findLeg(
+    fromCode: string,
+    toCode: string,
+    localDate: string,
+    seatsNeeded: number,
+    party: { adults: number; children: number; infants: number },
+    cabinClass?: CabinClass,
+  ) {
+    const [from, to] = await Promise.all([
+      this.airportModel.findOne({ iataCode: fromCode }),
+      this.airportModel.findOne({ iataCode: toCode }),
+    ]);
+    if (!from || !to) throw new BadRequestException('Unknown airport code');
+
+    const flights = await this.flightsModel
+      .find({
+        departureAirport: from._id,
+        arrivalAirport: to._id,
+        departureLocalDate: localDate,
+        status: FlightStatus.SCHEDULED,
+        departureTime: { $gt: new Date() },
+      })
+      .populate('airline')
+      .populate('departureAirport') // ADDED (GEN-06): populate departure airport so timezone is available
+      .populate('arrivalAirport')
+      .lean();
+
+    return flights
+      .filter((f: any) => f.airline && f.airline.isActive !== false)
+      .map((f: any) =>
+        formatFlightWithLocalTimes({
+          ...f,
+          cabins: f.cabins
+            .filter((c: any) => !cabinClass || c.cabinClass === cabinClass)
+            .map((c: any) => ({
+              cabinId: c._id,
+              cabinClass: c.cabinClass,
+              seatsRemaining: c.totalSeats - c.bookedSeats - c.heldSeats,
+              fare: c.price,
+              totalPrice: this.tripPrice(c.price, party),
+            }))
+            .filter((c: any) => c.seatsRemaining >= seatsNeeded),
+        }),
+      )
+      .filter((f: any) => f.cabins.length > 0);
+  }
+
+  private tripPrice(
+    fare: number,
+    p: { adults: number; children: number; infants: number },
+  ) {
+    const cents = Math.round(fare * 100);
+    const infantCents = Math.round(cents * 0.1);
+    return (cents * (p.adults + p.children) + infantCents * p.infants) / 100;
   }
 
   private async getModeratorAirlineId(userId: string) {
