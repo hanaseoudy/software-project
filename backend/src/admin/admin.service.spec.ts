@@ -27,6 +27,7 @@ describe('AdminService (ACC-13, ACC-07a)', () => {
     hotelModel as any,
     airlineModel as any,
     sessionModel as any,
+{} as any,
     mail as any,
   );
   const providerName = (name: string | null) => ({

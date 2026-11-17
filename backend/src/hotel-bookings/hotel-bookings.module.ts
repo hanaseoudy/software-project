@@ -4,6 +4,7 @@ import { AuthModule } from '../auth/auth.module';
 import { HotelsModule } from '../hotels/hotels.module';
 import { HotelBookingsController } from './hotel-bookings.controller';
 import { HotelBookingsService } from './hotel-bookings.service';
+import { HotelCompletionService } from './hotel-completion.service';
 import { HotelHoldExpiryService } from './hotel-hold-expiry.service';
 import { HotelBooking, HotelBookingSchema } from './schemas/hotel-booking.schema';
 import { Review, ReviewSchema } from './schemas/review.schema';
@@ -20,7 +21,11 @@ import { RoomLock, RoomLockSchema } from './schemas/room-lock.schema';
     ]),
   ],
   controllers: [HotelBookingsController],
-  providers: [HotelBookingsService, HotelHoldExpiryService],
+  providers: [
+    HotelBookingsService,
+    HotelHoldExpiryService,
+    HotelCompletionService,
+  ],
   exports: [MongooseModule, HotelBookingsService],
 })
 export class HotelBookingsModule {}
