@@ -8,6 +8,8 @@ import { Session, SessionSchema } from '../auth/schemas/session.schema';
 import { AuthModule } from '../auth/auth.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { AdminAccountsController } from './admin-accounts.controller';
+import { AdminAccountsService } from './admin-accounts.service';
 
 @Module({
   imports: [
@@ -20,7 +22,7 @@ import { AdminService } from './admin.service';
     ]),
     AuthModule,
   ],
-  controllers: [AdminController],
-  providers: [AdminService],
+  controllers: [AdminController, AdminAccountsController],
+  providers: [AdminService, AdminAccountsService],
 })
 export class AdminModule {}
