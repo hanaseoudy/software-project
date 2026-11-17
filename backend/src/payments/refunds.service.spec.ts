@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { Types } from 'mongoose';
 import { NotificationType } from '../notifications/enums/notification.enums';
 import { BookingType, PaymentStatus, RefundStatus } from './enums/payment.enums';
-import { RefundsService } from './refunds.service';
+import { RefundsService, refundQuote } from './refunds.service';
 
 const userId = new Types.ObjectId();
 const bookingId = new Types.ObjectId();
@@ -28,9 +28,20 @@ function setup(options: { cancelled?: boolean; payment?: any; existingRefund?: b
     findOneAndUpdate: jest.fn().mockImplementation(async () => ({ ok: true })),
     find: jest.fn().mockResolvedValue([]),
   };
+  // Simulates MongoDB's atomic findOneAndUpdate on the refundInProgress flag: only one caller wins.
+  let refundInProgress = !!options.existingRefund;
   const paymentModel = {
     findOne: jest.fn().mockResolvedValue(payment),
     findById: jest.fn().mockResolvedValue(payment),
+    findOneAndUpdate: jest.fn(async (filter: any, update: any) => {
+      if (filter.refundInProgress?.$ne === true && refundInProgress) return null;
+      refundInProgress = update.$set.refundInProgress;
+      return payment;
+    }),
+    updateOne: jest.fn(async (_filter: any, update: any) => {
+      refundInProgress = update.$set.refundInProgress;
+      return { modifiedCount: 1 };
+    }),
   };
   const bookingExists = jest.fn().mockResolvedValue(options.cancelled === false ? null : { _id: bookingId });
   const flightModel = { exists: bookingExists, updateOne: jest.fn().mockResolvedValue({}) };
@@ -52,7 +63,11 @@ function setup(options: { cancelled?: boolean; payment?: any; existingRefund?: b
     stripe as any,
     notifications as any,
   );
-  return { service, refundModel, paymentModel, flightModel, stripe, notifications, payment, getCreated: () => created };
+  return {
+    service, refundModel, paymentModel, flightModel, stripe, notifications, payment,
+    getCreated: () => created,
+    isClaimed: () => refundInProgress,
+  };
 }
 
 const input = { bookingType: BookingType.FLIGHT, bookingId, amount: 100, appliedPolicy: { daysBeforeDeparture: 7, refundPercent: 50 }, reason: 'Cancelled by user' };
@@ -105,6 +120,43 @@ describe('RefundsService (PAY-03)', () => {
       await expect(service.issueRefund(input)).rejects.toThrow(/already has a refund/);
     });
 
+    it('refunds only once when two requests arrive at the same moment (double click)', async () => {
+      const { service, stripe } = setup();
+      const results = await Promise.allSettled([service.issueRefund(input), service.issueRefund(input)]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+      expect(stripe.refunds.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the claim after a refund, so the booking cannot be refunded again', async () => {
+      const { service, isClaimed } = setup({ stripeStatus: 'succeeded' });
+      await service.issueRefund(input);
+      expect(isClaimed()).toBe(true);
+      await expect(service.issueRefund(input)).rejects.toThrow(/already has a refund/);
+    });
+
+    it('releases the claim if the refund record cannot be saved, so it can be retried', async () => {
+      const { service, refundModel, stripe, isClaimed } = setup();
+      refundModel.create.mockRejectedValueOnce(new Error('database unavailable'));
+
+      await expect(service.issueRefund(input)).rejects.toThrow('database unavailable');
+      expect(isClaimed()).toBe(false);
+      expect(stripe.refunds.create).not.toHaveBeenCalled();
+
+      await expect(service.issueRefund(input)).resolves.toEqual(expect.objectContaining({ amount: 100 }));
+    });
+
+    it('releases the claim when the refund fails, so it can be retried', async () => {
+      const { service, stripe, isClaimed } = setup({ stripeThrows: true });
+      await service.issueRefund(input);
+      expect(isClaimed()).toBe(false);
+
+      stripe.refunds.create.mockResolvedValue({ id: 're_2', status: 'succeeded' });
+      const retry = await service.issueRefund(input);
+      expect(retry?.status).toBe(RefundStatus.REFUNDED);
+    });
+
     it('finishes at once when Stripe succeeds immediately and notifies the user', async () => {
       const { service, notifications, payment } = setup({ stripeStatus: 'succeeded' });
       const result = await service.issueRefund(input);
@@ -145,6 +197,15 @@ describe('RefundsService (PAY-03)', () => {
       const { service, stripe, payment } = setup({ existingRefund: true });
       await service.refundUnconfirmedPayment(payment, 200, 'x');
       expect(stripe.refunds.create).not.toHaveBeenCalled();
+    });
+
+    it('refunds only once when Stripe sends the same webhook twice at the same moment', async () => {
+      const { service, stripe, payment } = setup({ cancelled: false });
+      await Promise.all([
+        service.refundUnconfirmedPayment(payment, 200, 'Booking not confirmed: hold ended'),
+        service.refundUnconfirmedPayment(payment, 200, 'Booking not confirmed: hold ended'),
+      ]);
+      expect(stripe.refunds.create).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -193,5 +254,58 @@ describe('RefundsService (PAY-03)', () => {
       refundModel.findById.mockResolvedValue(makeDoc({ userId: new Types.ObjectId() }));
       await expect(service.findOne(userId.toString(), new Types.ObjectId().toString())).rejects.toBeInstanceOf(NotFoundException);
     });
+  });
+});
+
+describe('refundQuote (PAY-03 amount follows the booking policy, project description 6.4)', () => {
+  const airlineTiers = [
+    { daysBeforeDeparture: 14, refundPercent: 100 },
+    { daysBeforeDeparture: 7, refundPercent: 50 },
+    { daysBeforeDeparture: 1, refundPercent: 20 },
+  ];
+  const hotelTiers = [
+    { daysBeforeCheckIn: 14, refundPercentage: 100 },
+    { daysBeforeCheckIn: 7, refundPercentage: 50 },
+    { daysBeforeCheckIn: 0, refundPercentage: 0 },
+  ];
+
+  it('uses the FLT-09 airline tier that applies and records it', () => {
+    expect(refundQuote({ paidAmount: 249.99, daysRemaining: 9, flightTiers: airlineTiers })).toEqual({
+      amount: 125,
+      appliedPolicy: {
+        source: 'FLT-09 airline cancellation tiers',
+        daysRemaining: 9,
+        daysBeforeDeparture: 7,
+        refundPercent: 50,
+      },
+    });
+  });
+
+  it('uses the HTL-10 hotel tier that applies and records it', () => {
+    expect(refundQuote({ paidAmount: 400, daysRemaining: 20, hotelTiers })).toEqual({
+      amount: 400,
+      appliedPolicy: {
+        source: 'HTL-10 hotel cancellation tiers',
+        daysRemaining: 20,
+        daysBeforeCheckIn: 14,
+        refundPercent: 100,
+      },
+    });
+  });
+
+  it('gives 0 (no refund) when no tier applies', () => {
+    expect(refundQuote({ paidAmount: 100, daysRemaining: 0, flightTiers: airlineTiers }).amount).toBe(0);
+    expect(refundQuote({ paidAmount: 100, daysRemaining: 3, hotelTiers }).amount).toBe(0);
+  });
+
+  it('refunds 100% for a provider-initiated cancellation (e.g. FLT-06)', () => {
+    expect(refundQuote({ paidAmount: 249.99, providerInitiated: true })).toEqual({
+      amount: 249.99,
+      appliedPolicy: { refundPercent: 100, rule: 'provider-initiated cancellation' },
+    });
+  });
+
+  it('rounds to cents and never uses partial days', () => {
+    expect(refundQuote({ paidAmount: 99.99, daysRemaining: 7.9, flightTiers: airlineTiers }).amount).toBe(50);
   });
 });

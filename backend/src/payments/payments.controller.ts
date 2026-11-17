@@ -47,14 +47,14 @@ export class PaymentsController {
   @ApiOperation({
     summary: 'Start paying for a Pending Payment booking (PAY-01)',
     description:
-      'Registered user only, own booking only. The booking must be Pending Payment, within its hold, with policies accepted (PAY-02). Returns a Stripe clientSecret for Stripe Elements; the booking is confirmed only by the Stripe webhook.',
+      'Registered user only, own booking only. The booking must be Pending Payment, within its hold (FLT-22 / HTL-18), with the provider policies accepted (PAY-02). The amount is taken from the booking, never from the request: for flights it is the FLT-21 summary total (seat fares + baggage fees), for hotels the reservation total; always in USD (PAY-04). Returns a Stripe clientSecret for Stripe Elements; the booking is confirmed only by the Stripe webhook.',
   })
   @ApiCreatedResponse({ type: PaymentSessionResponseDto })
   @ApiBadRequestResponse({ description: 'Validation failed' })
   @ApiUnauthorizedResponse({ description: 'Not logged in' })
-  @ApiForbiddenResponse({ description: 'Not a registered user' })
+  @ApiForbiddenResponse({ description: 'Not a registered user, or provider policies not accepted (PAY-02)' })
   @ApiNotFoundResponse({ description: 'Booking not found' })
-  @ApiConflictResponse({ description: 'Not Pending Payment, hold expired, policies not accepted, already paid, or last payment failed' })
+  @ApiConflictResponse({ description: 'Not Pending Payment, hold expired, already paid, or last payment failed' })
   @ApiServiceUnavailableResponse({ description: 'Stripe is not configured' })
   create(@Body() dto: CreatePaymentDto, @Req() req: AuthenticatedRequest): Promise<PaymentSessionResponseDto> {
     return this.paymentsService.create(req.user!.sub, dto);
@@ -87,7 +87,7 @@ export class PaymentsController {
   })
   @ApiCreatedResponse({ type: PaymentSessionResponseDto })
   @ApiUnauthorizedResponse({ description: 'Not logged in' })
-  @ApiForbiddenResponse({ description: 'Not a registered user' })
+  @ApiForbiddenResponse({ description: 'Not a registered user, or provider policies not accepted (PAY-02)' })
   @ApiNotFoundResponse({ description: 'Payment or booking not found' })
   @ApiConflictResponse({ description: 'Payment did not fail, or the hold has expired' })
   @ApiServiceUnavailableResponse({ description: 'Stripe is not configured' })

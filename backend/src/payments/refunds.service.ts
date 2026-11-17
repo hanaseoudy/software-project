@@ -19,6 +19,7 @@ import {
   HotelBookingDocument,
   HotelBookingStatus,
 } from '../hotel-bookings/schemas/hotel-booking.schema';
+import { refundPercentFor } from '../common/utils/refund-calculator';
 import { NotificationType } from '../notifications/enums/notification.enums';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RefundResponseDto } from './dto/refund-response.dto';
@@ -27,18 +28,89 @@ import { Payment, PaymentDocument } from './schemas/payment.schema';
 import { Refund, RefundDocument } from './schemas/refund.schema';
 import { STRIPE_CLIENT } from './stripe.provider';
 
+/** A flight cancellation tier (FLT-09, Airline.cancellationPolicy.rules). */
+export interface FlightCancellationTier {
+  daysBeforeDeparture: number;
+  refundPercent: number;
+}
+
+/** A hotel cancellation tier (HTL-10, Hotel.policies.cancellationTiers). */
+export interface HotelCancellationTier {
+  daysBeforeCheckIn: number;
+  refundPercentage: number;
+}
+
+/** Result of refundQuote(): pass both fields to issueRefund(). */
+export interface RefundQuote {
+  amount: number;
+  appliedPolicy: Record<string, unknown>;
+}
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
 /**
- * PAY-03 input from the cancellation tasks (FLT-26, HTL-21, FLT-06...).
- * The caller computes the amount from the provider's tiers (FLT-09 / HTL-10),
- * because the user must see it before confirming. Provider-initiated
- * cancellations pass the full paid amount (100%).
+ * PAY-03 / project description 6.4: refund amount for a cancellation, following the policy of the booking.
+ * Uses FLT-09's refundPercentFor for both flights and hotels, so every cancellation task (FLT-26, HTL-21,
+ * FLT-06, ...) calculates it the same way:
+ *
+ *   // FLT-26 user cancellation (airline tiers, FLT-09)
+ *   refundQuote({ paidAmount: payment.amount, daysRemaining, flightTiers: airline.cancellationPolicy.rules })
+ *   // HTL-21 user cancellation (hotel tiers, HTL-10)
+ *   refundQuote({ paidAmount: payment.amount, daysRemaining, hotelTiers: hotel.policies.cancellationTiers })
+ *   // FLT-06 / provider-initiated cancellation: always 100%
+ *   refundQuote({ paidAmount: payment.amount, providerInitiated: true })
+ *
+ * `daysRemaining` = whole days from now until departure (flights) or check-in (hotels).
+ */
+export function refundQuote(input: {
+  paidAmount: number;
+  daysRemaining?: number;
+  flightTiers?: FlightCancellationTier[];
+  hotelTiers?: HotelCancellationTier[];
+  providerInitiated?: boolean;
+}): RefundQuote {
+  if (input.providerInitiated) {
+    return { amount: round2(input.paidAmount), appliedPolicy: { refundPercent: 100, rule: 'provider-initiated cancellation' } };
+  }
+  const daysRemaining = Math.max(0, Math.floor(input.daysRemaining ?? 0));
+  const rules = input.flightTiers
+    ? input.flightTiers.map((t) => ({ daysBeforeDeparture: t.daysBeforeDeparture, refundPercent: t.refundPercent }))
+    : (input.hotelTiers ?? []).map((t) => ({ daysBeforeDeparture: t.daysBeforeCheckIn, refundPercent: t.refundPercentage }));
+  const refundPercent = refundPercentFor(daysRemaining, rules);
+  const tier = rules
+    .filter((r) => r.daysBeforeDeparture <= daysRemaining)
+    .sort((a, b) => b.daysBeforeDeparture - a.daysBeforeDeparture)[0];
+  const dayField = input.flightTiers ? 'daysBeforeDeparture' : 'daysBeforeCheckIn';
+  return {
+    amount: round2((input.paidAmount * refundPercent) / 100),
+    appliedPolicy: {
+      source: input.flightTiers ? 'FLT-09 airline cancellation tiers' : 'HTL-10 hotel cancellation tiers',
+      daysRemaining,
+      ...(tier ? { [dayField]: tier.daysBeforeDeparture } : {}),
+      refundPercent,
+    },
+  };
+}
+
+/**
+ * PAY-03 input from the cancellation tasks (FLT-26, HTL-21, FLT-06, ...).
+ *
+ * How to fill it (project description 6.4: the refund follows the policy applicable to the booking):
+ * - User cancellations: compute `amount` and `appliedPolicy` with refundQuote(), i.e. FLT-09's
+ *   refundPercentFor with the airline tiers (FLT-09) or the hotel tiers (HTL-10), and pass the tier used
+ *   as `appliedPolicy`. Show the user the amount before they confirm the cancellation.
+ * - Provider-initiated cancellations (e.g. FLT-06 flight cancelled): 100% of the paid amount,
+ *   refundQuote({ paidAmount, providerInitiated: true }).
+ * - Set the booking to Cancelled first; a refund is only issued for a cancelled booking.
+ * - An amount of 0 (0% tier) issues no refund and returns null.
+ * - Only one refund per booking: a second call while one is Pending or Refunded is rejected (409).
  */
 export interface IssueRefundInput {
   bookingType: BookingType;
   bookingId: string | Types.ObjectId;
-  /** Refund amount in major units (e.g. dollars); must be > 0 and <= the amount paid. */
+  /** Refund amount in major units (e.g. dollars), from refundQuote(); must be >= 0 and <= the amount paid. */
   amount: number;
-  /** The tier/policy used to compute the amount, stored with the refund. */
+  /** The tier/policy used to compute the amount (refundQuote().appliedPolicy), stored with the refund. */
   appliedPolicy?: Record<string, unknown>;
   reason?: string;
 }
@@ -61,7 +133,7 @@ export class RefundsService {
    * Returns null when the amount is 0 (no refund is issued for a 0% tier).
    */
   async issueRefund(input: IssueRefundInput): Promise<RefundResponseDto | null> {
-    const amount = Math.round(input.amount * 100) / 100;
+    const amount = round2(input.amount);
     if (!Number.isFinite(amount) || amount < 0) {
       throw new BadRequestException('Refund amount must be zero or positive');
     }
@@ -82,11 +154,8 @@ export class RefundsService {
     if (amount > payment.amount) {
       throw new BadRequestException('Refund amount cannot be more than the amount paid');
     }
-    const existing = await this.refundModel.exists({
-      paymentId: payment._id,
-      status: { $in: [RefundStatus.PENDING, RefundStatus.REFUNDED] },
-    });
-    if (existing) {
+    // Atomic claim: two requests at the same moment (double click, a re-sent webhook) cannot both refund.
+    if (!(await this.claim(payment))) {
       throw new ConflictException('This booking already has a refund');
     }
 
@@ -94,18 +163,26 @@ export class RefundsService {
   }
 
   /**
-   * Money was taken but the booking was not confirmed (paid after the hold ended,
-   * or wrong amount). The booking stays unconfirmed and the full amount is returned.
+   * Money was taken but the booking was not confirmed (amount mismatch, paid after the hold ended,
+   * or the hotel/airline was deactivated). The booking stays unconfirmed and the full amount is returned.
    */
   async refundUnconfirmedPayment(payment: PaymentDocument, amountReceived: number, reason: string): Promise<void> {
     if (!this.stripe || amountReceived <= 0) return;
-    const existing = await this.refundModel.exists({
-      paymentId: payment._id,
-      status: { $in: [RefundStatus.PENDING, RefundStatus.REFUNDED] },
-    });
-    if (existing) return;
-    const amount = Math.round(amountReceived * 100) / 100;
+    if (!(await this.claim(payment))) return; // already being refunded (e.g. Stripe re-sent the webhook)
+    const amount = round2(amountReceived);
     await this.createRefund(this.stripe, payment, amount, { refundPercent: 100, rule: 'booking not confirmed' }, reason);
+  }
+
+  /**
+   * Marks the payment as being refunded, atomically: only one caller can win, so a payment is never
+   * refunded twice. The flag is cleared only if the refund ends as Failed, so it can be retried.
+   */
+  private async claim(payment: PaymentDocument): Promise<boolean> {
+    const claimed = await this.paymentModel.findOneAndUpdate(
+      { _id: payment._id, refundInProgress: { $ne: true } },
+      { $set: { refundInProgress: true } },
+    );
+    return !!claimed;
   }
 
   /**
@@ -140,21 +217,28 @@ export class RefundsService {
     appliedPolicy: Record<string, unknown> | undefined,
     reason: string | undefined,
   ): Promise<RefundResponseDto> {
-    const refund = await this.refundModel.create({
-      paymentId: payment._id,
-      userId: payment.userId,
-      bookingType: payment.bookingType,
-      bookingId: payment.bookingId,
-      amount,
-      currency: payment.currency,
-      status: RefundStatus.PENDING,
-      reason,
-      appliedPolicy,
-    });
+    let refund: RefundDocument;
+    try {
+      refund = await this.refundModel.create({
+        paymentId: payment._id,
+        userId: payment.userId,
+        bookingType: payment.bookingType,
+        bookingId: payment.bookingId,
+        amount,
+        currency: payment.currency,
+        status: RefundStatus.PENDING,
+        reason,
+        appliedPolicy,
+      });
 
-    if (payment.bookingType === BookingType.FLIGHT) {
-      // Flight bookings have a refund reference in their schema; hotel refunds are found by booking.
-      await this.flightBookingModel.updateOne({ _id: payment.bookingId }, { $set: { refund: refund._id } });
+      if (payment.bookingType === BookingType.FLIGHT) {
+        // Flight bookings have a refund reference in their schema; hotel refunds are found by booking.
+        await this.flightBookingModel.updateOne({ _id: payment.bookingId }, { $set: { refund: refund._id } });
+      }
+    } catch (error) {
+      // Nothing was sent to Stripe: release the claim so the refund can be tried again.
+      await this.paymentModel.updateOne({ _id: payment._id }, { $set: { refundInProgress: false } });
+      throw error;
     }
 
     try {
@@ -216,7 +300,7 @@ export class RefundsService {
     const updated = await this.refundModel.findOneAndUpdate(
       { _id: refund._id, status: RefundStatus.PENDING },
       { $set: { status, processedAt } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!updated) return; // already final (e.g. webhook after the immediate result)
     refund.status = status;
@@ -228,6 +312,9 @@ export class RefundsService {
         payment.status = refund.amount >= payment.amount ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED;
         await payment.save();
       }
+    } else {
+      // Failed: release the claim so the refund can be tried again.
+      await this.paymentModel.updateOne({ _id: refund.paymentId }, { $set: { refundInProgress: false } });
     }
 
     const amountText = `${refund.amount.toFixed(2)} ${refund.currency}`;

@@ -38,8 +38,8 @@ export class PaymentResponseDto {
   paidAt?: Date;
 
   @ApiPropertyOptional({
-    type: RefundResponseDto,
-    description: 'Refund of this booking, if any, with status Pending, Refunded or Failed (PAY-03)',
+    type: () => RefundResponseDto,
+    description: 'PAY-03: refund of this booking, if any (status Pending, Refunded or Failed)',
   })
   refund?: RefundResponseDto;
 }

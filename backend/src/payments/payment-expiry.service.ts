@@ -1,32 +1,24 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PaymentsService } from './payments.service';
 import { RefundsService } from './refunds.service';
 
-const SWEEP_INTERVAL_MS = 60_000;
-
 /**
- * PAY-01: periodically cancels the PaymentIntents of expired booking holds.
- * PAY-03: also re-checks refunds that are still Pending in case a webhook was missed.
+ * PAY-01: when a booking hold expires, its PaymentIntent is cancelled.
+ * Runs every minute, like the FLT-22 / HTL-18 hold-expiry jobs that mark the
+ * booking itself Expired and release the seats or rooms.
+ * PAY-03: also re-checks refunds still Pending in Stripe, in case a webhook was missed.
  */
 @Injectable()
-export class PaymentExpiryService implements OnModuleInit, OnModuleDestroy {
+export class PaymentExpiryService {
   private readonly logger = new Logger(PaymentExpiryService.name);
-  private timer?: NodeJS.Timeout;
 
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly refundsService: RefundsService,
   ) {}
 
-  onModuleInit(): void {
-    this.timer = setInterval(() => void this.sweep(), SWEEP_INTERVAL_MS);
-    this.timer.unref(); // never keeps the process (or tests) alive
-  }
-
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
-  }
-
+  @Cron(CronExpression.EVERY_MINUTE)
   async sweep(): Promise<void> {
     try {
       const count = await this.paymentsService.cancelExpiredPayments();

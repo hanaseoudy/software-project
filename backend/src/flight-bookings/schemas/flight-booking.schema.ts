@@ -1,11 +1,12 @@
+import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types, Schema as MongooseSchema } from 'mongoose';
 import { Passenger, PassengerSchema } from './passenger.schema';
 
 export enum FlightBookingStatus {
-  HELD = 'HELD',
   PENDING_PAYMENT = 'PENDING_PAYMENT',
   CONFIRMED = 'CONFIRMED',
+  COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
   EXPIRED = 'EXPIRED',
 }
@@ -40,7 +41,14 @@ export class FlightBooking extends Document {
   @Prop({ required: true, min: 0 })
   totalPrice: number;
 
-  @Prop({ required: true, default: 'USD' })
+  @Prop({
+    type: String,
+    required: true,
+    uppercase: true,
+    default: PLATFORM_CURRENCY,
+    enum: [PLATFORM_CURRENCY],
+    immutable: true,
+  })
   currency: string;
 
   @Prop({ default: 0, min: 0 })
@@ -52,7 +60,7 @@ export class FlightBooking extends Document {
   @Prop({
     required: true,
     enum: FlightBookingStatus,
-    default: FlightBookingStatus.HELD,
+    default: FlightBookingStatus.PENDING_PAYMENT,
     index: true,
   })
   status: FlightBookingStatus;

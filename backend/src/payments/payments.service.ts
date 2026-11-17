@@ -11,6 +11,8 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Stripe from 'stripe';
+import { PLATFORM_CURRENCY } from '../common/constants/currency.constants';
+import { PoliciesService } from '../policies/policies.service';
 import {
   FlightBooking,
   FlightBookingStatus,
@@ -23,22 +25,23 @@ import {
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentResponseDto, PaymentSessionResponseDto } from './dto/payment-response.dto';
 import { BookingType, PaymentStatus } from './enums/payment.enums';
-import { Payment, PaymentDocument } from './schemas/payment.schema';
 import { RefundsService } from './refunds.service';
+import { Payment, PaymentDocument } from './schemas/payment.schema';
 import { STRIPE_CLIENT } from './stripe.provider';
 
-/**
- * PAY-04: single platform currency. Fixed to USD (the Payment schema default)
- * until the PAY-04 work is merged and provides the configured value.
- */
-export const PLATFORM_CURRENCY = 'USD';
-
-/** Called after PAY-01 confirms a booking; FLT-23 / HTL-17 register these. */
-export type BookingConfirmedHandler = (event: {
+/** Sent to after-confirmation handlers once PAY-01 has confirmed a paid booking. */
+export interface BookingConfirmedEvent {
   bookingType: BookingType;
   bookingId: string;
   paymentId: string;
-}) => Promise<void> | void;
+  paidAt: Date;
+}
+
+/**
+ * Runs after PAY-01 has confirmed the booking (e.g. HTL-17 / FLT-23: booking reference,
+ * seat conversion, notification). The confirmation itself always stays in PAY-01.
+ */
+export type BookingConfirmedHandler = (event: BookingConfirmedEvent) => Promise<void>;
 
 /** The booking fields PAY-01 needs, shared by flight and hotel bookings. */
 interface PayableBooking {
@@ -49,7 +52,18 @@ interface PayableBooking {
   /** Flight bookings only: baggage is kept apart from the seat fares (FLT-21 total = fares + baggage). */
   baggageFees?: number;
   holdExpiresAt?: Date;
-  policiesAcceptedAt?: Date;
+}
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+/**
+ * Amount charged for a booking. Same calculation as the FLT-21 booking summary
+ * (pricing.total = seat fares + FLT-19 baggage fees, each rounded to cents), so the
+ * user is charged exactly the total shown before payment. Hotel bookings have no
+ * baggage fees, so their amount is the HTL-16 reservation total.
+ */
+export function bookingAmount(totalPrice: number, baggageFees = 0): number {
+  return round2(round2(totalPrice) + round2(baggageFees));
 }
 
 @Injectable()
@@ -63,12 +77,17 @@ export class PaymentsService {
     @InjectModel(HotelBooking.name) private hotelBookingModel: Model<HotelBookingDocument>,
     @Inject(STRIPE_CLIENT) private readonly stripe: Stripe | null,
     private readonly config: ConfigService,
+    private readonly policies: PoliciesService,
     private readonly refundsService: RefundsService,
   ) {}
 
   /**
-   * Hook for FLT-23 / HTL-17: run extra confirmation steps (booking reference,
-   * seat conversion, notification) after PAY-01 has set the booking to Confirmed.
+   * Registers a handler that runs after PAY-01 has confirmed a paid booking, e.g. HTL-17:
+   *   payments.onBookingConfirmed(async ({ bookingType, bookingId }) => {
+   *     if (bookingType === BookingType.HOTEL) await confirmation.afterConfirmed(bookingId);
+   *   });
+   * Handlers are called only when PAY-01's atomic confirmation succeeded (still Pending Payment,
+   * paid within the hold, provider active). A failing handler is logged and never undoes it.
    */
   onBookingConfirmed(handler: BookingConfirmedHandler): void {
     this.confirmedHandlers.push(handler);
@@ -149,7 +168,7 @@ export class PaymentsService {
   async findOne(userId: string, paymentId: string): Promise<PaymentResponseDto> {
     const payment = await this.findOwnPayment(userId, paymentId);
     const response = this.toResponse(payment);
-    // PAY-03: the booking's refund status is shown with its payment.
+    // PAY-03: the booking's refund status (Pending, Refunded, Failed) is shown with its payment.
     response.refund = (await this.refundsService.findByBooking(payment.bookingType, payment.bookingId)) ?? undefined;
     if (payment.status === PaymentStatus.FAILED && payment.stripePaymentIntentId && this.stripe) {
       try {
@@ -254,25 +273,17 @@ export class PaymentsService {
       intent.amount_received === this.toMinorUnits(payment.amount) &&
       intent.currency.toUpperCase() === payment.currency;
     // Confirm only a booking that is still Pending Payment and was paid within its hold.
-    const confirmed = amountMatches && (await this.confirmBooking(payment, paidAt));
-    if (!confirmed) {
-      const reason = amountMatches ? 'Paid after the booking hold ended' : 'Paid amount did not match the booking total';
-      this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed: ${reason}`);
-      // PDF 6.4: the booking stays unconfirmed; the money taken is returned in full (PAY-03).
-      await this.refundsService.refundUnconfirmedPayment(payment, intent.amount_received / 100, reason);
-      return;
-    }
-
-    for (const handler of this.confirmedHandlers) {
-      try {
-        await handler({
-          bookingType: payment.bookingType,
-          bookingId: payment.bookingId.toString(),
-          paymentId: payment.id,
-        });
-      } catch (error) {
-        this.logger.error(`Booking-confirmed handler failed: ${(error as Error).message}`);
+    const notConfirmedReason = amountMatches ? await this.confirmBooking(payment, paidAt) : 'amount mismatch';
+    if (notConfirmedReason) {
+      if (!amountMatches) {
+        this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed (amount mismatch)`);
       }
+      // PAY-03 / project description 6.4: money taken without a confirmed booking is refunded in full.
+      await this.refundsService.refundUnconfirmedPayment(
+        payment,
+        intent.amount_received / 100,
+        `Booking not confirmed: ${notConfirmedReason}`,
+      );
     }
   }
 
@@ -298,8 +309,8 @@ export class PaymentsService {
         bookingType,
         bookingId: booking._id,
         bookingModel: this.bookingModelName(bookingType),
-        // FLT-21: the total includes baggage; hotel bookings have no baggage.
-        amount: Math.round((booking.totalPrice + (booking.baggageFees ?? 0)) * 100) / 100,
+        // FLT-21: charge exactly the summary total; hotel bookings have no baggage.
+        amount: bookingAmount(booking.totalPrice, booking.baggageFees),
         currency: PLATFORM_CURRENCY,
         status: PaymentStatus.PENDING,
         expiresAt: booking.holdExpiresAt,
@@ -333,7 +344,68 @@ export class PaymentsService {
     return intent.client_secret!;
   }
 
-  private async confirmBooking(payment: PaymentDocument, paidAt: Date): Promise<boolean> {
+  /**
+   * Confirms the booking, then runs the after-confirmation handlers.
+   * Not confirmed when the provider was deactivated (ACC-15) or the hold ended; the payment
+   * stays recorded as succeeded and is refunded in full (PAY-03).
+   * Returns null when confirmed, otherwise the reason it was not.
+   */
+  private async confirmBooking(payment: PaymentDocument, paidAt: Date): Promise<string | null> {
+    if (!(await this.providerIsActive(payment))) {
+      this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed (provider deactivated)`);
+      return 'provider deactivated';
+    }
+    if (!(await this.confirmBookingStatus(payment, paidAt))) {
+      this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed (hold ended)`);
+      return 'hold ended';
+    }
+
+    const event: BookingConfirmedEvent = {
+      bookingType: payment.bookingType,
+      bookingId: payment.bookingId.toString(),
+      paymentId: payment.id,
+      paidAt,
+    };
+    for (const handler of this.confirmedHandlers) {
+      try {
+        await handler(event);
+      } catch (error) {
+        this.logger.error(`After-confirmation handler failed for payment ${payment.id}: ${(error as Error).message}`);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * ACC-15: a booking is only confirmed while its hotel, or every airline on its flights,
+   * is still active (isActive !== false). A missing provider counts as inactive.
+   */
+  private async providerIsActive(payment: PaymentDocument): Promise<boolean> {
+    if (payment.bookingType === BookingType.FLIGHT) {
+      const booking = await this.flightBookingModel
+        .findById(payment.bookingId)
+        .select('outboundFlight returnFlight')
+        .populate([
+          { path: 'outboundFlight', select: 'airline', populate: { path: 'airline', select: 'isActive' } },
+          { path: 'returnFlight', select: 'airline', populate: { path: 'airline', select: 'isActive' } },
+        ])
+        .lean<{ outboundFlight?: { airline?: { isActive?: boolean } }; returnFlight?: { airline?: { isActive?: boolean } } }>();
+      const legs = [booking?.outboundFlight, booking?.returnFlight].filter(Boolean);
+      return legs.length > 0 && legs.every((leg) => !!leg!.airline && leg!.airline.isActive !== false);
+    }
+    const booking = await this.hotelBookingModel
+      .findById(payment.bookingId)
+      .select('hotel')
+      .populate({ path: 'hotel', select: 'isActive' })
+      .lean<{ hotel?: { isActive?: boolean } }>();
+    return !!booking?.hotel && booking.hotel.isActive !== false;
+  }
+
+  /**
+   * Built-in confirmation: one atomic update, so it can never race the FLT-22 /
+   * HTL-18 expiry jobs (they also only change a booking that is still Pending Payment).
+   */
+  private async confirmBookingStatus(payment: PaymentDocument, paidAt: Date): Promise<boolean> {
     if (payment.bookingType === BookingType.FLIGHT) {
       const res = await this.flightBookingModel.updateOne(
         {
@@ -373,9 +445,9 @@ export class PaymentsService {
     if (!booking.holdExpiresAt || booking.holdExpiresAt.getTime() <= Date.now()) {
       throw new ConflictException('The booking hold has expired');
     }
-    if (!booking.policiesAcceptedAt) {
-      throw new ConflictException('The provider policies must be accepted before payment (PAY-02)');
-    }
+    // PAY-02 / project description 6.4: payment is blocked until the provider policies are accepted.
+    // Called before any PaymentIntent is created, for both a new payment and a retry.
+    await this.policies.assertAccepted(type, bookingId);
     return booking;
   }
 

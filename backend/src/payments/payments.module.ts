@@ -10,6 +10,7 @@ import {
   HotelBookingSchema,
 } from '../hotel-bookings/schemas/hotel-booking.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PoliciesModule } from '../policies/policies.module';
 import { PaymentExpiryService } from './payment-expiry.service';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
@@ -21,18 +22,18 @@ import { stripeProvider } from './stripe.provider';
 
 @Module({
   imports: [
+    AuthModule,
+    PoliciesModule, // PAY-02: assertAccepted() before payment
+    NotificationsModule, // PAY-03 / GEN-01: refund notifications
     MongooseModule.forFeature([
       { name: Payment.name, schema: PaymentSchema },
       { name: Refund.name, schema: RefundSchema },
-      // PAY-01 reads and confirms bookings directly from their schemas.
       { name: FlightBooking.name, schema: FlightBookingSchema },
       { name: HotelBooking.name, schema: HotelBookingSchema },
     ]),
-    AuthModule, // JwtAuthGuard
-    NotificationsModule, // PAY-03 refund notifications (GEN-01)
   ],
   controllers: [PaymentsController, RefundsController],
   providers: [stripeProvider, PaymentsService, RefundsService, PaymentExpiryService],
-  exports: [MongooseModule, PaymentsService, RefundsService],
+  exports: [MongooseModule, PaymentsService, RefundsService], // RefundsService: used by the cancellation tasks
 })
 export class PaymentsModule {}

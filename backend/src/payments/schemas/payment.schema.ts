@@ -1,3 +1,4 @@
+import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types, Schema as MongooseSchema } from 'mongoose';
 import { BookingType, PaymentStatus } from '../enums/payment.enums';
@@ -30,7 +31,14 @@ export class Payment {
   @Prop({ required: true, min: 0 })
   amount: number;
 
-  @Prop({ required: true, uppercase: true, default: 'USD' })
+  @Prop({
+    type: String,
+    required: true,
+    uppercase: true,
+    default: PLATFORM_CURRENCY,
+    enum: [PLATFORM_CURRENCY],
+    immutable: true,
+  })
   currency: string;
 
   @Prop({
@@ -68,6 +76,10 @@ export class Payment {
 
   @Prop({ type: Object })
   policySnapshot?: Record<string, any>;
+
+  /** PAY-03: set atomically while a refund is Pending or Refunded, so a payment is never refunded twice. */
+  @Prop({ default: false })
+  refundInProgress?: boolean;
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);

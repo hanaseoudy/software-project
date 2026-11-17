@@ -22,6 +22,9 @@ export class RoomResponseDto {
   @ApiProperty({ example: 1500.5 })
   pricePerNight!: number;
 
+  @ApiProperty({ example: 'USD', description: 'Platform currency (PAY-04)' })
+  currency!: string;
+
   @ApiProperty({ example: true })
   isActive!: boolean;
 }
