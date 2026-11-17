@@ -1129,7 +1129,6 @@ notification failure does not undo the confirmation; the hook ignores flight
 bookings). They pass, and tsc --noEmit and oxlint show no errors in the changed
 files, on a local merge of this branch with PAY-01 (#72), because PaymentsService
 is not in develop yet. The PR will compile on develop once #72 is merged.
-================================================
 
 Follow-up (2026-11-17): the leader also suggested a small hourly job as a safety
 net. HotelBookingConfirmationService.finalizeMissedConfirmations() (@Cron every
