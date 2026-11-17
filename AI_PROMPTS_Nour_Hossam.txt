@@ -111,6 +111,17 @@ What AI helped with:
 What I did:
 - Pasted and reviewed the code, ran tests (29 passed), lint and build
 - Tested all cases in Postman (suspend, suspend again, suspended login, reactivate, suspend admin, login after reactivate)
+TASK-22 (ACC-15) - Moderator suspension and provider activation controls
+Tool: Claude
+Prompt: Help me implement ACC-15 step by step: admin suspends/reactivates moderators, deactivates/reactivates a hotel or airline (hidden from search, cannot be booked, Confirmed bookings stay valid), and affected parties get an in-app notification.
+What AI helped with:
+- In-app notifications on account suspend/reactivate (ACCOUNT_SUSPENDED / ACCOUNT_REACTIVATED) in admin.service.ts
+- New AdminProvidersService + AdminProvidersController: PATCH /api/admin/providers/:type/:id/deactivate and /reactivate, notifying the provider's assigned moderators (PROVIDER_SUSPENDED / PROVIDER_REACTIVATED)
+- One check in flight-bookings.service.ts so flights of a deactivated airline cannot be booked (hotels already checked isActive)
+- Unit tests (admin-providers.service.spec.ts, updated account-status.spec.ts and admin.service.spec.ts)
+What I did:
+- Pasted and reviewed the code, ran tests (38 passed), lint and build
+- Tested in Postman (deactivate/reactivate airline, 409 repeats, 404 unknown hotel, 400 wrong type, suspend/reactivate moderator) and checked the notifications collection in MongoDB Compass
 Date: 2026-11-17
 Student: Nour Hossam
 Tool: Claude

@@ -3,10 +3,11 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, isValidObjectId } from 'mongoose';
+import { Model, Types, isValidObjectId } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { AccountStatus, User, UserDocument, UserRole } from '../users/schemas/user.schema';
 import {
@@ -19,15 +20,20 @@ import { Airline } from '../airlines/schemas/airline.schema';
 import { Session, SessionDocument } from '../auth/schemas/session.schema';
 import { CreateModeratorDto } from './dto/create-moderator.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/enums/notification.enums';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(ModeratorAssignment.name) private assignmentModel: Model<ModeratorAssignmentDocument>,
     @InjectModel(Hotel.name) private hotelModel: Model<Hotel>,
     @InjectModel(Airline.name) private airlineModel: Model<Airline>,
     @InjectModel(Session.name) private sessionModel: Model<SessionDocument>,
+    private notificationsService: NotificationsService,
   ) {}
 
   async createModerator(dto: CreateModeratorDto) {
@@ -135,6 +141,8 @@ export class AdminService {
 
     await this.sessionModel.updateMany({ user: user._id, revokedAt: null }, { $set: { revokedAt: new Date() } });
 
+    await this.notifyAccount(user._id, NotificationType.ACCOUNT_SUSPENDED, 'Account suspended', 'Your account has been suspended by an administrator. You cannot log in until it is reactivated.');
+
     return { id: user._id, email: user.email, role: user.role, status: AccountStatus.SUSPENDED };
   }
 
@@ -154,7 +162,18 @@ export class AdminService {
       throw new ConflictException('Account status changed, please try again');
     }
 
+    await this.notifyAccount(user._id, NotificationType.ACCOUNT_REACTIVATED, 'Account reactivated', 'Your account has been reactivated. You can log in again.');
+
     return { id: user._id, email: user.email, role: user.role, status: AccountStatus.ACTIVE };
+  }
+
+  /** The status change is already saved, so a failed notification must not turn it into an error. */
+  private async notifyAccount(userId: Types.ObjectId, type: NotificationType, title: string, message: string) {
+    try {
+      await this.notificationsService.create(userId, { type, title, message });
+    } catch (err) {
+      this.logger.warn(`Could not notify account ${String(userId)}: ${String(err)}`);
+    }
   }
 
   private async findManagedAccount(userId: string, action: 'suspended' | 'reactivated') {

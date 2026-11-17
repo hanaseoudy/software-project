@@ -154,6 +154,10 @@ export class FlightBookingsService {
       // FLT-19: free bags vs the cabin allowance (FLT-04), extra bags vs the
       // airline's baggage policy (FLT-08). Each leg of a round trip is charged.
       const airline = await this.airlineModel.findById(flight.airline).lean();
+      // ACC-15: a deactivated airline's flights cannot be booked.
+      if (airline?.isActive === false) {
+        throw new BadRequestException(`Flight ${flight.flightNumber} is not available for booking`);
+      }
       try {
         baggageFees += calculateLegBaggageFees(
           dto.passengers,
