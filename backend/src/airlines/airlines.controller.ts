@@ -1,3 +1,4 @@
+
 // airlines.controller.ts
 import {
   Body,
@@ -36,16 +37,17 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { imageUploadOptions } from '../uploads/image-upload.options';
 import { ImageCategory } from '../uploads/uploads.constants';
 import { SetBaggagePolicyDto } from './dto/set-baggage-policy.dto';
-
+import { SetCancellationPolicyDto } from './dto/set-cancellation-policy.dto';
+ 
 @Controller('airlines')
 export class AirlinesController {
   constructor(private readonly airlines: AirlinesService) {}
-
+ 
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.airlines.findOne(id);
   }
-
+ 
   @ApiOperation({ summary: 'FLT-01: create an airline profile (admin only)' })
   @ApiCookieAuth('access_token')
   @ApiResponse({ status: 201, description: 'Airline created' })
@@ -66,7 +68,7 @@ export class AirlinesController {
   create(@Body() dto: CreateAirlineDto) {
     return this.airlines.create(dto);
   }
-
+ 
   @ApiOperation({
     summary: 'FLT-01: edit own airline profile (airline moderator only)',
   })
@@ -99,7 +101,7 @@ export class AirlinesController {
   ) {
     return this.airlines.update(id, dto, user);
   }
-
+ 
   @ApiOperation({
     summary:
       'FLT-01 / GEN-08: upload own airline logo (airline moderator only)',
@@ -141,7 +143,7 @@ export class AirlinesController {
   ) {
     return this.airlines.setLogo(id, file, user);
   }
-
+ 
   @ApiCookieAuth()
   @Put(':id/baggage-policy')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -181,4 +183,45 @@ export class AirlinesController {
   ) {
     return this.airlines.setBaggagePolicy(id, dto, userId);
   }
+ 
+  @Put(':id/cancellation-policy')
+  @ApiCookieAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Define cancellation policy tiers for an airline (FLT-09)',
+    description:
+      'Sets unique days-before-departure thresholds (>= 0) and refund percentages (0–100%).',
+  })
+  @ApiParam({ name: 'id', description: 'MongoDB ObjectId of the airline' })
+  @ApiResponse({
+    status: 200,
+    description: 'Cancellation policy updated successfully.',
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Bad Request: Invalid airline ID, out-of-range values, or duplicate daysBeforeDeparture thresholds.',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized: Missing or invalid authentication cookie.',
+  })
+  @ApiResponse({
+    status: 403,
+    description:
+      'Forbidden: User is not the assigned moderator for this airline.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Not Found: Airline does not exist.',
+  })
+  async setCancellationPolicy(
+    @Param('id') id: string,
+    @Body() dto: SetCancellationPolicyDto,
+    @CurrentUser() user: AuthPayload,
+  ) {
+    return this.airlines.setCancellationPolicy(id, dto, user);
+  }
 }
+ 

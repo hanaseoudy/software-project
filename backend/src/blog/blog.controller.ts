@@ -117,14 +117,18 @@ export class BlogController {
 
   @Get()
   @ApiOperation({
-    summary: 'Browse published posts (BLG-02)',
+    summary: 'Browse and search published posts (BLG-02, BLG-09)',
     description:
-      'Public, no login needed. Lists published, non-hidden posts newest first with title, author, date, ' +
+      'Public, no login needed. Lists published, non-hidden posts with title, author, date, ' +
       'excerpt, tags, images, like count and comment count. Optional exact tag filter. ' +
-      'Paginated with a fixed page size of 10 (GEN-05); no results returns an empty page. Keyword search is BLG-09.',
+      'Without "search" the posts are listed newest first (BLG-02). ' +
+      'With "search" (BLG-09), matches the keyword (case-insensitive, partial) in the title, the tags or the author name, ' +
+      'ordered by interaction score (likes + comments) descending, newest first as tie-breaker. ' +
+      'Paginated with a fixed page size of 10 (GEN-05); no results returns an empty page.',
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'tag', required: false, type: String, example: 'egypt', description: 'Tag name, 1 to 30 characters' })
+  @ApiQuery({ name: 'search', required: false, type: String, example: 'luxor', description: 'Keyword, 1 to 100 characters' })
   @ApiExtraModels(PaginatedResponseDto, PublicPostSummaryDto)
   @ApiOkResponse({
     description: 'One page of published posts',
@@ -136,12 +140,12 @@ export class BlogController {
     },
   })
   @ApiBadRequestResponse({
-    description: 'Invalid tag or page number',
+    description: 'Invalid tag, search keyword or page number',
     type: ValidationErrorResponseDto,
     example: { message: 'Validation failed', errors: { tag: ['Tag must be at most 30 characters'] } },
   })
   list(@Query() query: ListPostsQueryDto): Promise<PublicPostsPage> {
-    return this.blogService.listPublished(query.tag, query.page ?? 1);
+    return this.blogService.listPublished(query.tag, query.page ?? 1, query.search);
   }
 
   // Declared after GET /posts/mine so "mine" is not treated as an id
