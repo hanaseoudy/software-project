@@ -11,6 +11,8 @@ import { HotelReservationsController } from './hotel-reservations.controller';
 import { HotelReservationsService } from './hotel-reservations.service';
 import { HotelBookingsService } from './hotel-bookings.service';
 import { HotelCompletionService } from './hotel-completion.service';
+import { ReviewRepliesController } from './review-replies.controller';
+import { ReviewRepliesService } from './review-replies.service';
 import { HotelHoldExpiryService } from './hotel-hold-expiry.service';
 import { ReviewsController } from './reviews.controller';
 import { ReviewsService } from './reviews.service';
@@ -30,11 +32,17 @@ import { RoomLock, RoomLockSchema } from './schemas/room-lock.schema';
       { name: RoomLock.name, schema: RoomLockSchema },
     ]),
   ],
-  controllers: [HotelBookingsController, ReviewsController, HotelReservationsController],
+  controllers: [
+    HotelBookingsController,
+    ReviewsController,
+    HotelReservationsController,
+    ReviewRepliesController,
+  ],
   providers: [
     HotelBookingsService,
     HotelReservationsService,
     HotelCancellationService,
+    ReviewRepliesService,
     HotelHoldExpiryService,
     HotelBookingConfirmationService,
     HotelCompletionService,
