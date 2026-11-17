@@ -991,3 +991,27 @@ and tsc passes (only the existing hotels.service.spec errors on develop remain).
 The jobs run on a schedule, so there is no endpoint to test in Swagger or Postman.
 ================================================
 ================================================
+Date: 2026-11-17
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-22, HTL-16/18 - booking creation restricted to registered users (review on PR #44)
+
+Prompt (summary of the conversation):
+The leader asked that booking creation is only allowed for registered users:
+add RolesGuard and @Roles(UserRole.USER) next to JwtAuthGuard on the booking
+creation routes of flight-bookings.controller.ts and hotel-bookings.controller.ts,
+only on those routes (not the whole controllers), so moderator/admin booking
+management stays accessible.
+
+How the output was used:
+Used the generated change after reviewing it. POST /flight-bookings/hold and
+POST /hotel-bookings now have @UseGuards(RolesGuard) and @Roles(UserRole.USER)
+at method level; the class-level JwtAuthGuard still runs first. The existing
+RolesGuard was reused (401 when unauthenticated, 403 for MODERATOR/ADMIN). A 403
+response was added to the Swagger docs of both routes. The summary route was not
+changed.
+
+Verification:
+tsc passes (only the existing hotels.service.spec errors on develop remain).
+Expected: registered user 201, moderator/admin 403, no login 401.
+================================================

@@ -9,14 +9,18 @@ import {
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiCookieAuth,
+  ApiForbiddenResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { UserRole } from '../users/schemas/user.schema';
 import { HoldHotelBookingDto } from './dto/hold-hotel-booking.dto';
 import { HotelBookingsService } from './hotel-bookings.service';
 
@@ -28,6 +32,8 @@ export class HotelBookingsController {
   constructor(private readonly hotelBookingsService: HotelBookingsService) {}
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.USER)
   @ApiOperation({
     summary:
       'HTL-18: atomically hold all selected rooms together for 10 minutes (PENDING_PAYMENT)',
@@ -59,6 +65,9 @@ export class HotelBookingsController {
   })
   @ApiUnauthorizedResponse({
     description: 'Missing or invalid access token',
+  })
+  @ApiForbiddenResponse({
+    description: 'Only registered users can create bookings',
   })
   @ApiNotFoundResponse({
     description: 'Hotel (or one of the rooms) not found or not available',
