@@ -1,4 +1,5 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectModel } from '@nestjs/mongoose';
@@ -7,6 +8,7 @@ import type { Request } from 'express';
 import { ACCESS_COOKIE } from '../../auth/auth.cookies';
 import { Session, SessionDocument } from '../../auth/schemas/session.schema';
 import { AccountStatus, User, UserDocument } from '../../users/schemas/user.schema';
+import { ALLOW_PENDING_PASSWORD_CHANGE_KEY } from '../decorators/allow-pending-password-change.decorator';
 
 export interface AuthPayload {
   sub: string;
@@ -22,7 +24,8 @@ export class JwtAuthGuard implements CanActivate {
     private jwtService: JwtService,
     private config: ConfigService,
     @InjectModel(Session.name) private sessionModel: Model<SessionDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext) {
@@ -57,12 +60,24 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Not authenticated');
     }
 
-    const user = await this.userModel.findById(payload.sub).select('status role').lean();
+    const user = await this.userModel.findById(payload.sub).select('status role mustChangePassword').lean();
     if (!user || user.status !== AccountStatus.ACTIVE) {
       await this.sessionModel.updateOne({ _id: session._id }, { $set: { revokedAt: now } });
       throw new UnauthorizedException('Not authenticated');
     }
+
+    // ACC-13, ACC-07a: a temporary password must be changed before anything else.
+    if (user.mustChangePassword && !this.allowsPendingPasswordChange(context)) {
+      throw new ForbiddenException('You must change your temporary password before continuing');
+    }
     request.user = { sub: payload.sub, sid: payload.sid, role: user.role };
     return true;
+  }
+
+  private allowsPendingPasswordChange(context: ExecutionContext) {
+    return this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_PASSWORD_CHANGE_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
   }
 }
