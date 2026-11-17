@@ -61,10 +61,10 @@ import { FlightBookingsModule } from './flight-bookings/flight-bookings.module';
     UploadsModule,
     AirlinesModule,
     ItinerariesModule,
+    FlightsModule,
     AdminModule,
     ItinerariesModule,
     ReportsModule,
-    FlightsModule,
     FlightBookingsModule,
   ],
 
