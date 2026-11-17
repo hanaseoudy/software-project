@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { HotelsModule } from '../hotels/hotels.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { PaymentsModule } from '../payments/payments.module';
+import { HotelBookingConfirmationService } from './hotel-booking-confirmation.service';
 import { HotelBookingsController } from './hotel-bookings.controller';
 import { HotelBookingsService } from './hotel-bookings.service';
 import { HotelCompletionService } from './hotel-completion.service';
@@ -14,6 +17,8 @@ import { RoomLock, RoomLockSchema } from './schemas/room-lock.schema';
   imports: [
     AuthModule,
     HotelsModule,
+    NotificationsModule,
+    PaymentsModule, // PaymentsService: HTL-17 registers on its booking-confirmed hook
     MongooseModule.forFeature([
       { name: HotelBooking.name, schema: HotelBookingSchema },
       { name: Review.name, schema: ReviewSchema },
@@ -24,8 +29,9 @@ import { RoomLock, RoomLockSchema } from './schemas/room-lock.schema';
   providers: [
     HotelBookingsService,
     HotelHoldExpiryService,
+    HotelBookingConfirmationService,
     HotelCompletionService,
   ],
-  exports: [MongooseModule, HotelBookingsService],
+  exports: [MongooseModule, HotelBookingsService, HotelBookingConfirmationService],
 })
 export class HotelBookingsModule {}

@@ -552,6 +552,8 @@ Invalid or half-given dates return 400 with field errors. I reviewed the code an
 tested it in Postman.
 Verification performed:
 Lint, build and all unit tests passed under Node 24 (165 tests). Postman checks done locally.
+================================================
+================================================
 Date: 2026-11-10
 Student: Sara Gomaa
 Tool: Claude
@@ -563,7 +565,8 @@ validation, ownership checks, error codes, logo upload.
 How the output was used:
 Used the explanations and corrections to write the DTOs, service and
 controller myself. Reviewed and adjusted every snippet before committing.
-
+================================================
+================================================
 Date: 2026-11-08
 Student: Nour Hossam
 Tool: Claude
@@ -587,7 +590,8 @@ Added unit tests for RolesGuard covering no required roles, allowed and
 rejected roles, missing user, controller-level roles and method-level
 overrides. Lint, build, all unit tests (26) and E2E tests passed locally.
 
-
+================================================
+================================================
 
 Date: 2026-11-09
 Student: Mariam Haithem
@@ -649,6 +653,8 @@ tier rules and error format are the same as HTL-10. The two shorter routes are k
 routes for one part only. I reviewed the code and the new tests.
 Verification performed:
 Lint, build and all hotel unit tests passed under Node 24.
+================================================
+================================================
 
 Date: 2026-11-11
 Student: Mariam Haithem
@@ -666,7 +672,8 @@ of the range must not have a confirmed reservation (409). The DELETE route for r
 kept as a documented extra route. I reviewed the code and the new tests.
 Verification performed:
 Lint, build and all hotel unit tests passed under Node 24.
-
+================================================
+================================================
 Date: 2026-11-12
 Student: Kenzy
 Tool: Claude
@@ -681,6 +688,8 @@ Used the explanation to temporarily add a controller and test the service
 reviewer's feedback, the controller and the AuthModule import were removed, so
 the PR only contains the schema, enum and reusable NotificationsService.
 Postman screenshots are attached to the PR as verification only.
+================================================
+================================================
 Date: 2026-11-13
 Student: Nour Hossam
 Tool: Claude
@@ -706,6 +715,8 @@ Verification:
 Added 20 unit tests covering owners, admins, hotel and airline moderators,
 other users, public/private itineraries and list filters; all pass. Lint and
 build passed locally.
+================================================
+================================================
 Date: 2026-11-13
 Student: Nour Hossam
 Tool: Claude
@@ -733,7 +744,8 @@ email, duplicate key, rollback); all pass. Lint and build passed locally.
 Tested in Postman: 201 created, 409 email taken, 404 airline not found,
 400 validation, moderator login with mustChangePassword true, and 403 for a
 non-admin. Swagger shows the endpoint and all responses.
-
+================================================
+================================================
 Student: Sara Gomaa
 Tool: Claude
 Related Requirement: FLT-03
@@ -756,6 +768,8 @@ How the output was used:
   durationMinutes are filled in by the system.
 - Used the suggested regex for the local time format and reviewed it
   before use.
+================================================
+================================================
 Date: 2026-11-13
 Student: Hana Seoudy
 Tool: OpenAI Codex
@@ -786,6 +800,8 @@ USD create/update validation, all four cabin classes, and Airline population fro
 The actual compiled backend entry point started and served /api and Swagger with all
 four airline operations. Flight endpoints do not exist in this checkout; no flight
 controller or AppModule registration was added. No production data was changed.
+================================================
+================================================
 Date: 2026-11-13
 Student: Hana Seoudy
 Tool: OpenAI Codex
@@ -806,7 +822,8 @@ validated; invalid, missing, and null values were rejected in both modes.
 With Jest's --experimental-vm-modules runtime option, 124 unit tests passed and
 the same 58 existing hotel/blog tests failed. All 11 E2E tests passed against a
 disposable local MongoDB. No production database records were modified.
-
+================================================
+================================================
 Date: 2026-11-14
 Student: Hana Seoudy
 Tool: OpenAI Codex
@@ -833,7 +850,8 @@ ownership, validation, Swagger routes, concurrent duplicate comment deletion,
 post cleanup, and transaction rollback after simulated database failures.
 Jest was run with Node's --experimental-vm-modules option.
 No production database records were used. No commit or push was performed.
-
+================================================
+================================================
 Date: 2026-11-13
 Student: Sara Gomaa
 Tool: Gemini
@@ -849,7 +867,8 @@ Used the explanations and code examples to implement AddCabinDto,
 FlightsService.addCabin, and POST /api/flights/:id/cabins in
 FlightsController, and verified the endpoint in Postman. Reviewed and
 adjusted every snippet before committing.
-
+================================================
+================================================
 Date: 2026-11-14
 Student: Mariam Mashoud
 Tool: Claude
@@ -880,7 +899,8 @@ Tested POST /api/flight-bookings/hold in Postman against a test flight with 2
 economy seats: 201 with PENDING_PAYMENT on the first hold, 409 when the seats
 were exhausted. Tested 401 without login, round-trip and future-birth-date 400 errors, validation errors (400) and the documented responses in
 Swagger. The TypeScript build compiles with no errors.
-
+================================================
+================================================
 Date: 2026-11-16
 Student: Seif Allam
 Tool: ChatGPT / Codex (OpenAI)
@@ -924,7 +944,8 @@ Verification:
 - Additional test-inclusive TypeScript check: itinerary files had no errors;
   45 existing errors in hotels.service.spec.ts and one in app.e2e-spec.ts remain.
 - No schema/index migration, Atlas access, unrelated source edits or commits.
-
+================================================
+================================================
 Date: 2026-11-16
 Student: Seif Allam
 Tool: ChatGPT / Codex (OpenAI)
@@ -949,6 +970,8 @@ The exact uncertain-then-definitive-transient regression failed before the fix.
 After the fix, all 14 ITN-07 unit tests and 26 isolated local MongoDB 8.0.20
 replica-set integration tests passed. Build and lint passed; lint retained five
 existing airline/flight warnings. No schema migration, Atlas access or commits.
+================================================
+================================================
 Date: 2026-11-16
 Student: Maya Haitham
 Tool: Claude Code
@@ -963,7 +986,8 @@ The code was generated with Claude Code, then reviewed and built by me (npm run 
 Changed files: backend/src/itineraries/schemas/itinerary.schema.ts (isHidden field, default false),
 backend/src/reports/admin-reports.service.ts (itinerary hiding, restriction removed) and
 backend/src/reports/admin-reports.controller.ts (Swagger text updated).
-
+================================================
+================================================
 Date: 2026-11-13 (updated 2026-11-16)
 Student: Mariam Mashoud
 Tool: Claude
@@ -990,6 +1014,8 @@ charge the user twice. I reviewed the code and the tests.
 Verification:
 npx jest src/flight-bookings: 2 suites, 22 tests passed. tsc and oxlint report no errors in the
 flight-bookings files. Postman screenshots of the hold endpoint are attached to the PR.
+================================================
+================================================
 Date: 2026-11-16
 Student: Mariam Mashoud
 Tool: Claude
@@ -1016,6 +1042,90 @@ Verification:
 6 jest tests for buildBookingSummary pass; tsc --noEmit and oxlint show no
 errors in the changed files. Postman screenshots are attached to the PR.
 ================================================
+Date: 2026-11-17
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: GEN-01-B (TASK-116, bonus) - GEN-01 notifications and moderator invitations by email
+Prompt (summary of the conversation):
+I gave AI the GEN-01-B bonus story (send the GEN-01 notifications, plus moderator invitations, by email via
+SMTP, using a test inbox in development; depends on GEN-01) and asked it to check the project description
+and the dependencies on the latest develop and build it on a new branch from develop.
+
+How the output was used:
+AI checked that GEN-01 (NotificationsService) and ACC-13 (admin creates moderators) are merged in develop.
+It added a MailService (nodemailer, SMTP): it uses SMTP_HOST/PORT/USER/PASS when set (e.g. a Mailtrap test
+inbox); in development without settings it creates a free Ethereal test inbox and logs a preview link for
+each email; in production without settings email is turned off. NotificationsService.create/createForMany
+now also email the same title and message to each user, in the background, so every GEN-01 type (booking
+confirmed, cancelled, refund, flight schedule change, account and provider suspension) is emailed and a
+failed email never removes the in-app notification. AdminService.createModerator now emails the new
+moderator an invitation (role, hotel or airline name, login link, must change password on first login);
+the temporary password is never put in the email. Only placeholders were added to .env.example. I
+reviewed the code.
+Verification performed:
+Backend build and lint passed. 43 tests passed in the mail, notifications and admin suites (25 new: SMTP
+settings, Ethereal test inbox, production off, failures never throw, email content and HTML escaping,
+every notification type, many users, invitation without password, account kept when email fails). Full
+backend suite 595/598 (the 3 failures are in blog.service.spec.ts and also fail on develop). Sent a real
+notification email and a real invitation through SMTP to an Ethereal test inbox; both were received.
+The backend started with MailModule, NotificationsModule and AdminModule loaded.
+================================================
+================================================
+Date: 2026-11-17
+Student: Seif Allam
+Tool: ChatGPT / Codex (OpenAI)
+Related Requirement: ITN-10; dependency ITN-05; GEN-12 currency reference data
+
+Prompt (summary of the conversation):
+Implement itinerary activity creation, partial update and deletion using the
+three official endpoints, authenticated ownership checks, strict field and
+money validation, supported currencies and Swagger documentation. Allow null
+to clear time or cost, with cost removal also clearing currency. Reject empty
+PATCH and unsupported input fields. Preserve images for ITN-12 and store costs
+only on Activity records for ITN-14 compatibility, without FX conversion.
+Create an independent worktree from develop, preserve all ITN-07 work, and
+investigate/test parent-document transaction coordination without importing
+ITN-07 commits or connecting to shared Atlas.
+
+How the output was used:
+Read the mandatory CSV, project PDF and existing schemas/API conventions.
+Created feature/ITN-10-activity-management in a separate worktree from develop
+at a652ddc. Implemented activity DTOs, response mapping, controller/service and
+module registration for the existing Currency schema. Every activity mutation
+writes the owned parent __v before authoritative child reads in one transaction.
+PATCH/DELETE perform discovery-only reads first, then recheck parent/day/activity
+after that write. Transient failures and ambiguous commits have separate bounded
+retry paths, prioritizing uncertainty when both MongoDB error labels occur.
+No Activity schema, existing itinerary service/controller, dependency manifest,
+ITN-12 image management or ITN-18 conversion changes were needed.
+
+Concurrency compatibility and limits:
+Develop has no day-deletion endpoint. Committed integration tests label their
+coordinated day-deletion routine as a protocol fixture. A separate temporary
+probe loaded the actual unmerged ITN-07 service at runtime and passed 30 local
+concurrency trials (10 each for activity create/update/delete versus removeDay),
+with no orphan activities and stable surviving day IDs/numbering. No ITN-07
+source or commits were added to this branch. Future day/reorder writers must
+follow the same parent-write protocol; arbitrary direct database writes are
+outside that guarantee. Tests used a single-node MongoDB 8.0.20 replica set;
+primary failover was not tested.
+
+Verification:
+- Build passed; lint passed with five existing airline/flight warnings.
+- Final focused unit tests: 41 passed across DTO, controller and service suites.
+- Final isolated API integration tests: 45 passed, including actual JWT/session
+  authentication, authorization, partial PATCH, null clearing, zero cost,
+  supported currencies, strict HH:mm (including a trailing-newline regression),
+  dependent-parent races, duplicate deletion and injected database failures.
+- Broader unit suite before the final strict-time regression addition:
+  609 passed, 3 failed in existing BlogService provider-mock tests.
+- Additional test-inclusive type check found no activity errors after correcting
+  a new test type; 45 existing hotel-test errors and one app E2E error remain.
+- Jest used NODE_OPTIONS=--experimental-vm-modules for ESM dependencies.
+- No Atlas access, migrations, unrelated source edits, commits or pushes.
+- Original ITN-07 checkout and its two pending AI-log deletions were preserved.
+================================================
+================================================
 Date: 2026-11-08
 Student: Mariam Mashoud
 Tool: Claude
@@ -1041,8 +1151,6 @@ New unit tests (9) pass, and tsc and oxlint pass. Five other existing test
 suites on develop (app, users, blog) fail on a Jest ES module issue that is
 unrelated to this change. The helper is not wired into the booking services
 yet, so no endpoint was tested in Swagger or Postman.
-================================================
-
 Date: 2026-11-17
 Student: Mariam Mashoud
 Tool: Claude
@@ -1098,3 +1206,86 @@ Verification:
 tsc passes (only the existing hotels.service.spec errors on develop remain).
 Expected: registered user 201, moderator/admin 403, no login 401.
 ================================================
+================================================
+Date: 2026-11-16
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: HTL-17 (TASK-57)
+
+Prompt (summary of the conversation):
+The leader tested HTL-17 together with PAY-01: PAY-01 already sets the hotel
+booking to CONFIRMED on the Stripe webhook and then calls its booking-confirmed
+hook, so my confirmAfterPayment() saw a Confirmed booking, returned early and
+created no reference and no notification. Help me change HTL-17 so PAY-01
+confirms and HTL-17 adds its part afterwards.
+
+How the output was used:
+Replaced confirmAfterPayment() with finalizeConfirmed(bookingId): one
+findOneAndUpdate on { _id, status: CONFIRMED, bookingReference: { $exists:
+false } } that sets the reference (retried on a duplicate key) and sends the
+BOOKING_CONFIRMED notification only if the update matched, so repeated webhooks
+do not notify twice. The service now implements OnModuleInit, injects
+PaymentsService and registers on onBookingConfirmed() for hotel bookings.
+HotelBookingsModule imports PaymentsModule and NotificationsModule and keeps the
+HTL-18 changes. Wrote unit tests for finalizeConfirmed and the hook.
+
+Verification:
+Wrote 8 jest tests for finalizeConfirmed and the hook registration (reference
+added and notification sent; filter matches only CONFIRMED without a reference;
+no notification when nothing matches; invalid id; retry on duplicate key;
+notification failure does not undo the confirmation; the hook ignores flight
+bookings). They pass, and tsc --noEmit and oxlint show no errors in the changed
+files, on a local merge of this branch with PAY-01 (#72), because PaymentsService
+is not in develop yet. The PR will compile on develop once #72 is merged.
+
+Follow-up (2026-11-17): the leader also suggested a small hourly job as a safety
+net. HotelBookingConfirmationService.finalizeMissedConfirmations() (@Cron every
+hour) finds CONFIRMED hotel reservations without a bookingReference (e.g. the
+server restarted right after payment, or the hook failed) and calls
+finalizeConfirmed for each, so it gets its reference and notification. Errors on
+one reservation are logged and do not stop the others. 3 new unit tests cover it.
+develop was merged into the branch (AI_PROMPTS.txt and hotel-bookings.module.ts
+conflicts resolved by keeping both sides). The hook name/shape from PAY-01 (#71)
+still has to be checked once #71 is merged.
+================================================
+================================================
+Date: 2026-11-17
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-01 (TASK-64) - Stripe test payments and verified payment outcomes
+Prompt (summary of the conversation):
+The old PAY-01 branch was built on an older develop. I asked AI to rebuild it from the latest develop,
+check the declared dependencies (FLT-21, HTL-16, FLT-22, HTL-18) and use their code so PAY-01 matches
+the requirement exactly, without depending on unmerged work. PAY-01 was paused until FLT-21 was merged,
+then updated to use it.
+
+How the output was used:
+AI checked the dependencies: FLT-22 and HTL-18 are merged and create the Pending Payment bookings PAY-01
+pays for; HTL-16's rules are in develop (inside the HTL-18 hotel hold) and give the hotel total; FLT-21
+(booking summary) and FLT-19 (baggage fees) are merged. PAY-01 uses Stripe PaymentIntents (clientSecret
+for Stripe Elements, card data never reaches the backend), one payment per booking, booking confirmed
+only after a signature-verified Stripe webhook with a matching amount, retry after failure until the
+hold expires, the PaymentIntent cancelled when the hold expires (every minute, like the FLT-22/HTL-18
+jobs), and only Stripe ID, amount, currency and status stored. It uses the PAY-04 currency constant and
+the Payment schema's bookingModel, and lets HTL-17 / FLT-23 register their own confirmation step. Before
+creating or retrying a PaymentIntent it calls the merged PAY-02 PoliciesService.assertAccepted(), so
+payment is blocked until the policies are accepted (project description 6.4). The flight amount is
+calculated exactly like the FLT-21 summary total (seat fares + FLT-19 baggage fees, each rounded to
+cents), and a unit test checks it against FLT-21's buildBookingSummary(). I reviewed the code.
+Verification performed:
+Backend build and lint passed; 34 payment unit tests passed (including 6 that compare the charged
+amount with FLT-21's buildBookingSummary total); full backend suite 603/606 (the 3 failures are in
+blog.service.spec.ts and also fail on develop without these changes). Started the backend: the 4 payment
+routes from the project description are mapped, POST /api/payments returns 401 without login, and the
+webhook returns 503 when no Stripe test keys are configured.
+Review fixes (2026-11-17, after review comments on PR #71):
+AI rebased PAY-01 on the latest develop and, as the reviewer asked: kept the atomic confirmation in
+PAY-01 and replaced registerBookingConfirmer with onBookingConfirmed(handler), which runs only after the
+booking was confirmed, each handler in try/catch so a failing handler never turns a paid, confirmed
+booking into an error (HTL-17 #90 works unchanged); refused any STRIPE_SECRET_KEY that does not start with
+sk_test_ (project description 6.4, test mode only); and, before confirming, checks that the hotel or every
+airline on the booking is still active (ACC-15, isActive !== false), otherwise the booking is not confirmed
+and the payment stays succeeded so PAY-03 can refund it. Verified: build and lint pass; 45 payment tests
+pass; full backend suite 885/888 (3 blog failures also fail on develop); real Stripe test mode on a local
+test database: payment confirmed the booking, a payment for a deactivated airline was not confirmed, and a
+live key was refused at startup.

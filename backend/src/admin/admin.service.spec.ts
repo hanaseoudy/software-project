@@ -17,17 +17,23 @@ describe('AdminService (ACC-13, ACC-07a)', () => {
     updateOne: jest.fn(),
   };
   const assignmentModel = { create: jest.fn() };
-  const hotelModel = { exists: jest.fn() };
-  const airlineModel = { exists: jest.fn() };
+  const hotelModel = { exists: jest.fn(), findById: jest.fn() };
+  const airlineModel = { exists: jest.fn(), findById: jest.fn() };
   const sessionModel = { updateMany: jest.fn() };
+  const mail = { sendModeratorInvitation: jest.fn() };
   const service = new AdminService(
     userModel as any,
     assignmentModel as any,
     hotelModel as any,
     airlineModel as any,
     sessionModel as any,
-    {} as any,
+{} as any,
+    mail as any,
   );
+  const providerName = (name: string | null) => ({
+    select: () => ({ lean: () => Promise.resolve(name ? { name } : null) }),
+  });
+  const flush = () => new Promise((resolve) => setImmediate(resolve));
 
   const userId = new Types.ObjectId();
   const hotelId = new Types.ObjectId().toString();
@@ -51,6 +57,52 @@ describe('AdminService (ACC-13, ACC-07a)', () => {
     userModel.exists.mockResolvedValue(null);
     userModel.create.mockImplementation(async (data: any) => ({ _id: userId, ...data }));
     assignmentModel.create.mockResolvedValue({});
+    hotelModel.findById.mockReturnValue(providerName('Nile Palace'));
+    airlineModel.findById.mockReturnValue(providerName('EgyptAir'));
+    mail.sendModeratorInvitation.mockResolvedValue(true);
+  });
+
+  describe('moderator invitation email (GEN-01-B)', () => {
+    it('emails a hotel moderator an invitation with the hotel name, without the temporary password', async () => {
+      await service.createModerator(dto());
+      await flush();
+
+      expect(mail.sendModeratorInvitation).toHaveBeenCalledWith({
+        to: 'sara@nilepalace.com',
+        firstName: 'Sara',
+        providerType: ProviderType.HOTEL,
+        providerName: 'Nile Palace',
+      });
+      expect(JSON.stringify(mail.sendModeratorInvitation.mock.calls)).not.toContain('Temp1234');
+    });
+
+    it('uses the airline name for an airline moderator', async () => {
+      await service.createModerator(dto({ providerType: ProviderType.AIRLINE, providerId: airlineId }));
+      await flush();
+
+      expect(mail.sendModeratorInvitation).toHaveBeenCalledWith(
+        expect.objectContaining({ providerType: ProviderType.AIRLINE, providerName: 'EgyptAir' }),
+      );
+    });
+
+    it('still creates the account when the invitation email fails', async () => {
+      mail.sendModeratorInvitation.mockRejectedValue(new Error('SMTP down'));
+
+      const result = await service.createModerator(dto());
+      await flush();
+
+      expect(result.email).toBe('sara@nilepalace.com');
+      expect(userModel.deleteOne).not.toHaveBeenCalled();
+    });
+
+    it('sends no invitation when the account is not created', async () => {
+      userModel.exists.mockResolvedValue({ _id: userId });
+
+      await expect(service.createModerator(dto())).rejects.toBeInstanceOf(ConflictException);
+      await flush();
+
+      expect(mail.sendModeratorInvitation).not.toHaveBeenCalled();
+    });
   });
 
   it('creates a hotel moderator with a hashed temporary password and mustChangePassword', async () => {
