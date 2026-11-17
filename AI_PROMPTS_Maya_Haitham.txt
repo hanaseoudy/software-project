@@ -627,3 +627,19 @@ the only build errors are the missing local nodemailer install from develop). Ch
 admin-providers.service.ts, admin-reports.service.ts, admin.module.ts, reports.module.ts, and (approved) admin.controller.ts
 and admin-providers.controller.ts to pass the admin id. Nothing was left open.
 ================================================
+================================================
+Date: 2026-11-18
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-12
+
+Prompt:
+Implement BLG-12: public GET /api/authors/:id showing the author's name, join date, published posts and
+public itineraries, following the requirement sheet and project PDF.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed in three passes and built by me (no errors in the
+changed files; the only build errors are the missing local nodemailer install from develop). Changed files:
+backend/src/blog (authors.controller.ts, dto/author-page.dto.ts, blog.service.ts, blog.module.ts).
+Open items: public itineraries are capped at 10 without a page parameter; reported in the PR.
+================================================
