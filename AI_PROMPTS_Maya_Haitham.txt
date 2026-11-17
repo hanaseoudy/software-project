@@ -1,0 +1,596 @@
+AI usage log - Maya Haitham
+
+================================================
+Date: 2026-11-02
+Student: Maya Haitham
+Tool: Claude (claude.ai chat) (to be confirmed by Maya)
+Related Requirement: BLG-01 (TASK-7), PR #7
+
+Prompt:
+Create the blog module for our NestJS + MongoDB backend with the Post,
+Comment and Like schemas for BLG-01, and give me the git steps to commit,
+push and open the pull request. (exact prompt to be confirmed by Maya)
+
+How the output was used:
+The AI wrote the blog module (controller, service, module) and the post,
+comment and like schemas. I pasted, built and pushed them (commits
+"feat(blog): create blog module BLG-01" and "feat(blog): add post, comment
+and like schemas BLG-01"). PR #7 was merged on 2026-11-02.
+================================================
+Date: 2026-11-06
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: BLG-02 (TASK-83), PR #17
+
+Prompt:
+Implement BLG-02: browse a paginated list of published posts filterable by
+tag and open a post page, using the requirement text, and give me the git
+steps to commit, push and open the pull request.
+
+How the output was used:
+The AI wrote the public list and detail routes, the service methods and
+ListPostsQueryDto. I pasted, built and pushed them. The leader asked for the
+author's name instead of the id, a fixed page size of 10 and a Postman
+screenshot. PR #17 was closed without merging; BLG-02 was redone in PR #79.
+================================================
+Date: 2026-11-06
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: BLG-03 (TASK-84), PR #18
+
+Prompt:
+Implement BLG-03: list my own posts including drafts with title, status,
+date, like count and comment count, and give me the git steps to commit,
+push and open the pull request.
+
+How the output was used:
+The AI wrote the own-posts route and service method. I pasted, built and
+pushed them. The leader asked to add the authentication guard once it was
+available and to attach a Postman screenshot. PR #18 was closed without
+merging; BLG-03 was redone in PR #73.
+================================================
+Date: 2026-11-06
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: BLG-04 (TASK-85), PR #19
+
+Prompt:
+Implement BLG-04: let an author edit and delete their own posts, and give
+me the git steps to commit, push and open the pull request.
+
+How the output was used:
+The AI wrote UpdatePostDto and the PATCH and DELETE routes with ownership
+checks. I pasted, built and pushed them. The leader said the ownership
+checks were correct and asked to add the authentication guard once it was
+available. PR #19 was closed without merging; the BLG-04 code now on develop
+comes from a different PR.
+================================================
+Date: 2026-11-06
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: BLG-05 (TASK-86), PR #20
+
+Prompt:
+Implement BLG-05: let a user comment on a published post (non-empty, max 500
+characters) shown in chronological order, and give me the git steps to
+commit, push and open the pull request.
+
+How the output was used:
+The AI wrote CreateCommentDto, the comment route and the comment schema
+changes. I pasted, built and pushed them. The leader asked for the
+authentication guard once available and a Postman screenshot, and noted the
+CI failure from the existing spec files. PR #20 was closed without merging;
+BLG-05 was redone in PR #80.
+================================================
+Date: 2026-11-07
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: BLG-06 (TASK-87), PR #28
+
+Prompt:
+Implement BLG-06: let a user like a post once and remove the like, showing
+the like count, and give me the git steps to commit, push and open the pull
+request.
+
+How the output was used:
+The AI wrote the like and unlike routes and service methods. I pasted, built
+and pushed them (commit "feat(blog): single like per user and unlike
+BLG-06"). PR #28 was closed without merging; BLG-06 was redone in PR #76.
+================================================
+Date: 2026-11-07
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: BLG-07 (TASK-88), PR #31
+
+Prompt:
+Implement BLG-07: let a user edit and delete their own comments, and give me
+the git steps to commit, push and open the pull request.
+
+How the output was used:
+The AI wrote UpdateCommentDto and a CommentsController with edit and delete
+routes for the comment author. I pasted, built and pushed them. PR #31 was
+closed without merging; the BLG-07 code now on develop comes from a
+different PR.
+================================================
+Date: 2026-11-07
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: BLG-08 (TASK-89), PR #33
+
+Prompt:
+Implement BLG-08: up to 5 tags (max 30 characters each) on a post, editable
+later, searchable and clickable to list matching posts, and give me the git
+steps to commit, push and open the pull request.
+
+How the output was used:
+The AI wrote the tag DTO rules, the tag routes and service methods. I pasted,
+built and pushed them, and fixed the limit to 5 tags (commit "fix(blog):
+limit tags to 5 per post BLG-08"). The leader asked for schema-level tag
+validation and an authentication guard on tag editing; those review fixes
+are in the 2026-11-10 entry for PR #33. BLG-08 was redone in PR #77.
+================================================
+Date: 2026-11-07
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: GEN-05 (TASK-97), PR #36
+
+Prompt:
+Implement GEN-05: paginate every list longer than 10 rows with a page size
+of 10, and give me the git steps to commit, push and open the pull request.
+
+How the output was used:
+The AI wrote the pagination change (commit "feat(common): pagination with
+page size ten GEN-05"). I pasted, built and pushed it. The leader asked to
+paginate the comments on the post details endpoint too; that review fix is
+in the 2026-11-10 entry for PR #36. GEN-05 was redone in PR #78.
+================================================
+Date: 2026-11-08
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: GEN-02 (TASK-90), PR #35
+
+Prompt:
+Implement GEN-02: show field-level validation messages on all forms,
+including nested fields, and give me the git steps to commit, push and open
+the pull request.
+
+How the output was used:
+The AI wrote common/validation/validation-exception.factory.ts and the
+main.ts change that uses it. I pasted, built and pushed them. The leader
+approved it ("GOOD JOB!!") and PR #35 was merged on 2026-11-08.
+================================================
+Date: 2026-11-08
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: BLG-01 to BLG-08 documentation (Swagger and Postman), PR #40
+
+Prompt:
+Add Swagger descriptions to my blog endpoints and write a Postman collection
+for them, and give me the git steps to commit, push and open the pull
+request.
+
+How the output was used:
+The AI wrote the Swagger descriptions and the Postman collection (commit
+"docs(blog): add Swagger descriptions and Postman collection"). I pasted,
+built and pushed them. Further documentation work is in the 2026-11-10 entry
+for PR #40.
+================================================
+Date: 2026-11-09
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: BLG-01 (TASK-82), PR #16 (an earlier PR #15 was closed)
+
+Prompt:
+Implement BLG-01 create post: required title and content, optional tags,
+saved as draft or published, using the requirement text, and give me the git
+steps to commit, push and open the pull request.
+
+How the output was used:
+The AI wrote CreatePostDto, PostResponseDto, the create route and service
+method and the Post schema changes. I pasted, built and pushed them. After
+the leader's review the tag limit was changed from 10 to 5. The
+authentication guard was left for later because ACC-04 was not merged yet.
+PR #16 was merged on 2026-11-09.
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-08 (post tags), review of PR #33
+
+Prompt:
+Address the team leader's review comments on my BLG-08 PR, only changing
+code I wrote, and document my endpoints with Swagger and a Postman collection.
+
+How the output was used:
+Added a schema-level uniqueness validator for tags (max 5 and 1-30 characters
+were already enforced in post.schema.ts). Confirmed PATCH /posts/:id uses
+JwtAuthGuard and an ownership check. Added TagParamDto to validate the :tag
+parameter of GET /tags/:tag/posts. Registered TagsController and
+CommentsController in BlogModule (they were not mounted). Added Swagger
+decorators to the blog, tags and comments endpoints and created
+postman/BLG-08.postman_collection.json.
+
+Verification:
+npm run build passed. Jest blog specs fail to start with the same ESM
+import error with and without these changes (existing test config issue).
+No database was connected to.
+================================================
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-05 (pagination, page size 10), review of PR #36
+
+Prompt:
+Address the team leader's review comments on my GEN-05 PR, only changing
+code I wrote, and document my endpoints with Swagger and a Postman collection.
+
+How the output was used:
+Paginated the comments returned by GET /posts/:id (page size 10, ?page=N,
+oldest first) using the existing GEN-05 pagination helpers. Added
+PaginatedResponseDto and Swagger decorators to the blog, tags and comments
+endpoints and created postman/GEN-05.postman_collection.json. main.ts was
+not changed (not my code; develop already has the Swagger setup).
+
+Verification:
+npm run build passed. No database was connected to.
+================================================
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-01 to BLG-08 (blog API documentation), PR #40
+
+Prompt:
+Document my blog endpoints with Swagger and Postman (no review comments
+were left on this PR), only changing code I wrote.
+
+How the output was used:
+Added @ApiCookieAuth to the protected post and comment routes and 400
+responses for invalid page/search to the list endpoints. Extended
+docs/postman/blog.postman_collection.json with a login request that stores
+{{token}}, a Cookie header on protected requests, and error cases
+(400/401/403/404/409) for every endpoint.
+
+Verification:
+npm run build passed. No database was connected to.
+================================================
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-09 (post search ranked by interactions and recency; depends on BLG-01)
+
+Prompt:
+Implement BLG-09 end to end on a new branch from develop: a public
+GET /api/posts/search?q=&page= that searches published, visible posts by
+title, tags or author name, ranked by likes + comments then newest first,
+10 per page with a "No results" message, plus Swagger, a Postman collection,
+unit tests and a pull request. Do not modify other team members' code.
+
+How the output was used:
+Added PostSearchController, PostSearchService, post-search.helpers.ts
+(aggregation pipeline with a read-only $lookup on users, regex escaping,
+excerpt builder, pagination), SearchPostsQueryDto and PostSearchResponseDto
+in the blog module. Registered them in BlogModule (search controller first so
+/posts/search is matched before /posts/:id) and added a
+{ status, isHidden, createdAt } index to the post schema. Added
+post-search.helpers.spec.ts and postman/BLG-09.postman_collection.json.
+No frontend changes: the repository has no frontend yet.
+
+Verification:
+The new helper unit tests pass. Existing specs that import @nestjs/testing
+still fail to start (ESM import error in the existing Jest setup; config not
+changed). npm run build passes after npm ci. The endpoint was not run against
+a database.
+================================================
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-10 (post image attachment and removal; depends on BLG-01, GEN-08)
+
+Prompt:
+Implement BLG-10 on a new branch from develop: let a post's author attach
+images under the shared GEN-08 upload rules and remove them, reusing the
+GEN-08 upload code without modifying it, with Swagger, Postman, unit tests
+and a pull request. Do not modify other team members' code.
+
+How the output was used:
+Added PostImagesModule, PostImagesController, PostImagesService and
+post-images.helpers.ts in the blog folder: POST /api/posts/:id/images
+(multipart "images", GEN-08 imageUploadOptions + UploadsService.saveForOwner,
+atomic $push that re-checks the 5-image limit) and
+DELETE /api/posts/:id/images/:imageId (atomic $pull, then
+UploadsService.deleteByUrl). Both are author only (JwtAuthGuard + ownership).
+Registered the module in app.module.ts (one import, one entry). Added
+post-images.helpers.spec.ts and postman/BLG-10.postman_collection.json.
+No frontend changes: the repository has no frontend yet.
+
+Verification:
+npm run build and npm run lint pass. The 4 new helper unit tests pass;
+existing specs that import @nestjs/* still fail to start (ESM import error
+in the existing Jest setup; config not changed). Not run against a database.
+================================================
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-09 (one report per user per content item; depends on ACC-04)
+
+Prompt:
+Implement GEN-09 on a new branch from develop: a new reports module where a
+logged-in user can report a post, comment, review or itinerary with a reason,
+at most once per item (unique index + service check, duplicate key mapped to
+409), plus GET /api/reports/mine, with Swagger, Postman, unit tests and a
+pull request. Other modules' models are read-only.
+
+How the output was used:
+Added backend/src/reports: Report schema (reporter, targetType, targetId,
+reason 5-500, status, action, resolvedBy, resolvedAt, timestamps) with a
+unique { reporter, targetType, targetId } index, CreateReportDto,
+ListReportsQueryDto, response DTOs, ReportsService, ReportsController
+(POST /api/reports, GET /api/reports/mine, JwtAuthGuard) and
+reports.helpers.ts. Post, Comment and Review models are read only to check
+the target exists; itinerary returns 400 "Reporting itinerary is not
+available yet" because no Itinerary model is registered on develop.
+Registered ReportsModule in app.module.ts (one import, one entry). Added
+reports.helpers.spec.ts and postman/GEN-09.postman_collection.json.
+No frontend changes: the repository has no frontend yet.
+
+Verification:
+npm run build and npm run lint pass. The 5 new helper unit tests pass;
+existing specs that import @nestjs/* still fail to start (ESM import error
+in the existing Jest setup; config not changed). Not run against a database.
+================================================
+================================================
+Date: 2026-11-10
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-10 (admin report resolution and content moderation; depends on GEN-09)
+
+Prompt:
+Implement GEN-10 on a new branch from the GEN-09 branch: admin-only routes
+(existing JwtAuthGuard + RolesGuard with @Roles(ADMIN)) to list open reports
+with a report count and content preview, resolve a report by dismissing it,
+hiding or deleting the content (closing all open reports on the same item),
+and hide / unhide / delete posts, comments, reviews and itineraries directly,
+with Swagger, Postman, unit tests and a pull request. Do not edit other team
+members' modules.
+
+How the output was used:
+Added AdminReportsController (GET /api/admin/reports, PATCH
+/api/admin/reports/:id/resolve, PATCH /api/admin/content/:type/:id/hide and
+/unhide, DELETE /api/admin/content/:type/:id), AdminReportsService,
+ContentModerationService, moderation.helpers.ts and admin DTOs to the
+reports module. Posts and comments are moderated (isHidden; a deleted post
+also loses its comments, likes and image files). Reviews and itineraries
+return 400 "Moderation for <type> is not available yet" because their
+modules are not ready (Review uses "hidden", no query filters it, and hotels
+store reviewCount / averageRating; no Itinerary model is registered).
+Added moderation.helpers.spec.ts and postman/GEN-10.postman_collection.json.
+Also fixed the GEN-09 and BLG-10 Postman collections to disable Postman's
+cookie jar so only the explicit Cookie header is sent.
+No frontend changes: the repository has no frontend yet.
+
+Verification:
+npm run build and npm run lint pass. The 14 reports helper unit tests pass;
+existing specs that import @nestjs/* still fail to start (ESM import error
+in the existing Jest setup; config not changed). Not run against a database.
+================================================
+Date: 2026-11-12
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-03, PR #73
+
+Prompt:
+Redo BLG-03 on a fresh branch from develop: list my own posts including
+drafts with title, status, date, like count and comment count. Read the
+requirements sheet and the project PDF first, review in three passes, build,
+commit, push and open the pull request.
+
+How the output was used:
+Claude Code added GET /api/posts/mine (JwtAuthGuard), MyPostSummaryDto and
+the service method (newest first, page size 10). After the leader's note it
+switched to the shared GEN-05 pagination helper (commit "refactor(blog): use
+shared GEN-05 pagination helper for own posts BLG-03"). PR #73 was merged on
+2026-11-12.
+================================================
+Date: 2026-11-12
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-06, PR #76
+
+Prompt:
+Redo BLG-06 on a fresh branch from develop: like a post once and remove the
+like, showing the like count. Read the requirements sheet and the project PDF
+first, review in three passes, build, commit, push and open the pull request.
+
+How the output was used:
+Claude Code added POST and DELETE /api/posts/:id/like (JwtAuthGuard), a
+unique (post, user) like index so a second like returns 409, an atomic
+likesCount update and LikeResponseDto. PR #76 was merged on 2026-11-12.
+================================================
+Date: 2026-11-12
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-08, PR #77
+
+Prompt:
+Redo BLG-08 on a fresh branch from develop: up to 5 tags of max 30
+characters, editable later, searchable and clickable, applying the leader's
+earlier review points. Read the requirements sheet and the project PDF first,
+review in three passes, build, commit, push and open the pull request.
+
+How the output was used:
+Claude Code added tag validation in the DTO, in Mongoose schema validators
+and in the service, PATCH /api/posts/:id for tags (JwtAuthGuard, author
+only), GET /api/tags/:tag/posts with a validated :tag parameter and
+GET /api/tags?search=. PR #77 was merged on 2026-11-12.
+================================================
+Date: 2026-11-12
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-09, PR #81
+
+Prompt:
+Redo BLG-09 on a fresh branch from develop: public keyword search of
+published posts. Read the requirements sheet and the project PDF first,
+review in three passes, build, commit, push and open the pull request.
+
+How the output was used:
+Claude Code added the keyword search to the post list with search-rules.ts
+and PostSearchResponseDto (commit "feat(blog): public post keyword search
+BLG-09"). The leader asked to keep newest-first sorting without a search,
+keep the same response structure, and avoid duplicate DTOs and service
+methods. PR #81 is still open and has no commit after that review.
+================================================
+Date: 2026-11-13
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-05, PR #78
+
+Prompt:
+Redo GEN-05 on a fresh branch from develop: paginate every list with a fixed
+page size of 10. Read the requirements sheet and the project PDF first,
+review in three passes, build, commit, push and open the pull request.
+
+How the output was used:
+Claude Code updated the shared helper in common/pagination so the blog lists
+use a fixed page size of 10, accept only "page" and return { items, total,
+page, pageSize, totalPages }. PR #78 was merged on 2026-11-13.
+================================================
+Date: 2026-11-13
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-02, PR #79
+
+Prompt:
+Redo BLG-02 on a fresh branch from develop: browse published posts filtered
+by tag and open a post page. Read the requirements sheet and the project PDF
+first, review in three passes, build, commit, push and open the pull request.
+
+How the output was used:
+Claude Code added GET /api/posts?tag=&page= and GET /api/posts/:id (public,
+published and non-hidden only, author shown by id and name) with
+PublicPostSummaryDto and PublicPostDetailDto. PR #79 was merged on
+2026-11-13.
+================================================
+Date: 2026-11-13
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-05, PR #80
+
+Prompt:
+Redo BLG-05 on a fresh branch from develop: comment on a published post,
+non-empty and max 500 characters, in chronological order. Read the
+requirements sheet and the project PDF first, review in three passes, build,
+commit, push and open the pull request.
+
+How the output was used:
+Claude Code added POST /api/posts/:id/comments (JwtAuthGuard) with
+comment-rules.ts, the StrictBody decorator, CommentResponseDto, a 500
+character schema limit and an atomic commentsCount update. PR #80 was merged
+on 2026-11-13.
+================================================
+Date: 2026-11-14
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-10, PR #102
+
+Prompt:
+Redo BLG-10 on a fresh branch from develop: attach and remove post images
+under the shared GEN-08 upload rules. Read the requirements sheet and the
+project PDF first, review in three passes, build, commit, push and open the
+pull request.
+
+How the output was used:
+Claude Code added POST /api/posts/:id/images and
+DELETE /api/posts/:id/images/:imageId (author only), reusing the shared
+GEN-08 upload code, with a 5-image limit in the service and the schema. The
+leader asked for a description and Postman and Swagger screenshots. PR #102
+is still open.
+================================================
+Date: 2026-11-14
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-09, PR #103
+
+Prompt:
+Redo GEN-09 on a fresh branch from develop: report a post, comment, review
+or itinerary with a reason, at most once per item. Read the requirements
+sheet and the project PDF first, review in three passes, build, commit, push
+and open the pull request.
+
+How the output was used:
+Claude Code added POST /api/reports (JwtAuthGuard), the Report schema with a
+unique (reporter, contentType, contentId) index and ReportsModule. PR #103
+was merged on 2026-11-14.
+================================================
+Date: 2026-11-15
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-10, PR #108
+
+Prompt:
+Redo GEN-10 on a fresh branch from develop: admin lists open reports and
+resolves each by dismissing, hiding or deleting the content, and hides or
+deletes any post, comment, review or itinerary directly. Read the
+requirements sheet and the project PDF first, review in three passes, build,
+commit, push and open the pull request.
+
+How the output was used:
+Claude Code added GET /api/admin/reports, PATCH /api/admin/reports/:id,
+PATCH /api/admin/content/:type/:id/hide and DELETE /api/admin/content/:type/:id
+(admin only) in the reports module (commit "feat(reports): admin report
+resolution and content moderation GEN-10"). The leader's review fixes are in
+the 2026-11-16 GEN-10 entry.
+================================================
+Date: 2026-11-16
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: BLG-13 (optional), PR #109
+
+Prompt:
+Implement BLG-13 on a fresh branch from develop: PATCH /api/posts/:id/itinerary
+to attach one of my itineraries to my post or remove it with null. Read the
+requirements sheet and the project PDF first, review in three passes, build,
+commit, push and open the pull request.
+
+How the output was used:
+Claude Code added PostItineraryController, PostItineraryService,
+AttachItineraryDto and PostItineraryResponseDto under backend/src/blog
+(author only, own itinerary only, atomic update). The official BLG-13 text
+was not in the repo, so the PDF lines were used. PR #109 was merged on
+2026-11-16.
+================================================
+Date: 2026-11-16
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-10
+Prompt:
+Fix the team leader's review comments on GEN-10: add isHidden to the itinerary schema,
+implement itinerary hiding in AdminReportsService.hideContent(), remove the restriction on
+hiding itineraries, and add the missing AI_PROMPTS entry.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed and built by me (npm run build, 0 errors).
+Changed files: backend/src/itineraries/schemas/itinerary.schema.ts (isHidden field, default false),
+backend/src/reports/admin-reports.service.ts (itinerary hiding, restriction removed) and
+backend/src/reports/admin-reports.controller.ts (Swagger text updated).
+================================================
+================================================
+Date: (to be confirmed by Maya)
+Student: Maya Haitham
+Tool: Claude (claude.ai chat)
+Related Requirement: supporting work for the Claude Code entries above (no single requirement)
+
+Prompt:
+Write the prompts I gave Claude Code for my blog and report tasks, the pull
+request descriptions, and the CLAUDE.md guidance file. (exact prompts to be
+confirmed by Maya)
+
+How the output was used:
+I gave the prompts to Claude Code and used the descriptions in my pull
+requests. CLAUDE.md is a local guidance file and is not committed.
+================================================

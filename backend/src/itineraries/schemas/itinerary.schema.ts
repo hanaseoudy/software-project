@@ -26,6 +26,9 @@ export class Itinerary {
   @Prop({ type: String, enum: ItineraryVisibility, default: ItineraryVisibility.PRIVATE, index: true })
   visibility: ItineraryVisibility;
 
+  @Prop({ type: Boolean, default: false })
+  isHidden: boolean;
+
   // Optional source link; clone must not depend on the original remaining available.
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Itinerary' })
   clonedFromId?: Types.ObjectId;

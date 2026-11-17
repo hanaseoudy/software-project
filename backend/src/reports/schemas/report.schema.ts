@@ -29,3 +29,5 @@ export const ReportSchema = SchemaFactory.createForClass(Report);
 ReportSchema.index({ reporter: 1, contentType: 1, contentId: 1 }, { unique: true });
 // GEN-10: open reports, newest first
 ReportSchema.index({ status: 1, createdAt: -1 });
+// GEN-10: close every open report about a moderated item
+ReportSchema.index({ contentType: 1, contentId: 1, status: 1 });
