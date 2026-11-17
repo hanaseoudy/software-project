@@ -105,6 +105,25 @@ then gets 200.
 Date: 2026-11-17
 Student: Nour Hossam
 Tool: Claude
+Related Requirement: ACC-05 (TASK-12)
+
+Prompt (summary of the conversation):
+The ACC-05 lockout code was already on develop, but the 5th failed login still
+returned the generic "Invalid email or password"; the lockout message only
+appeared on the 6th try. Help me make the 5th failure itself return the
+lockout message, as ACC-05 requires, and add tests for the lockout.
+
+How the output was used:
+recordFailedLogin now returns the lock time when that failure locks the
+account, and login returns 423 with the lockout message right away. The rest
+of the existing logic (5 attempts, 15 minutes, reset on success, atomic lock)
+is unchanged. Updated the Swagger description for 423.
+
+Verification:
+Added 6 unit tests (generic 401 before the 5th failure, 423 on the 5th, 423
+while locked without checking the password, login after the lock expires,
+counter reset, unknown email). All 20 auth tests pass; lint and build pass.
+Postman: 4th wrong password 401, 5th 423, right password while locked 423.
 Related Requirement: ACC-14 (TASK-21)
 
 Prompt (summary of the conversation):
