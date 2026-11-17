@@ -75,7 +75,6 @@ AirlinesController, and test the policy updates. Reviewed and adjusted
 every snippet before committing.
 ================================================
 
-================================================
 Date: 2026-11-17
 Student: Sara Gomaa
 Tool: Claude
@@ -109,3 +108,21 @@ That pointed to a wrong schema or import in the module wiring, not to your data
 or the search logic itself. The open item is the flight and cabin selection step,
 which I asked you about but you haven’t answered yet.
 ================================================
+Date: 2026-11-13
+Student: Sara Gomaa 
+Tool: Gemini
+Related Requirement: FLT-09
+Prompt:
+Asked to explain the FLT-09 cancellation tier lookup rules, generate
+SetCancellationPolicyDto, AirlinesService.setCancellationPolicy, and
+PUT /api/airlines/:id/cancellation-policy aligned with the embedded
+CancellationPolicy and CancellationRule schemas, refactor controller
+decorators to use @Role(UserRole.MODERATOR) and @CurrentUser(), and
+provide Postman test cases for valid tiers, empty rules, duplicate
+thresholds, boundary values, and authorization errors.
+How the output was used:
+Used the explanations and snippets to implement SetCancellationPolicyDto,
+add setCancellationPolicy (with uniqueness checks and descending threshold
+sorting) to AirlinesService, expose and document the protected route in
+AirlinesController, and verify all edge cases in Postman. Reviewed and
+adjusted every snippet before committing.

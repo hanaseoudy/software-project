@@ -76,7 +76,17 @@ export class AuthController {
     description: 'Account is suspended',
     example: { message: 'Account suspended', error: 'Forbidden', statusCode: 403 },
   })
-  @ApiResponse({ status: 423, description: 'Account is already locked after failed login attempts (ACC-05)' })
+  @ApiResponse({
+    status: 423,
+    description: 'Locked for 15 minutes after 5 failed attempts in a row: returned on the 5th failure and on every try while locked (ACC-05)',
+    schema: {
+      example: {
+        statusCode: 423,
+        message: 'Account locked after too many failed login attempts. Try again in 15 minute(s).',
+        error: 'Locked',
+      },
+    },
+  })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const { user, accessToken, refreshToken } = await this.authService.login(dto);
     this.authService.setAuthCookies(res, accessToken, refreshToken);
