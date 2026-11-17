@@ -1235,3 +1235,14 @@ amount with FLT-21's buildBookingSummary total); full backend suite 603/606 (the
 blog.service.spec.ts and also fail on develop without these changes). Started the backend: the 4 payment
 routes from the project description are mapped, POST /api/payments returns 401 without login, and the
 webhook returns 503 when no Stripe test keys are configured.
+Review fixes (2026-11-17, after review comments on PR #71):
+AI rebased PAY-01 on the latest develop and, as the reviewer asked: kept the atomic confirmation in
+PAY-01 and replaced registerBookingConfirmer with onBookingConfirmed(handler), which runs only after the
+booking was confirmed, each handler in try/catch so a failing handler never turns a paid, confirmed
+booking into an error (HTL-17 #90 works unchanged); refused any STRIPE_SECRET_KEY that does not start with
+sk_test_ (project description 6.4, test mode only); and, before confirming, checks that the hotel or every
+airline on the booking is still active (ACC-15, isActive !== false), otherwise the booking is not confirmed
+and the payment stays succeeded so PAY-03 can refund it. Verified: build and lint pass; 45 payment tests
+pass; full backend suite 885/888 (3 blog failures also fail on develop); real Stripe test mode on a local
+test database: payment confirmed the booking, a payment for a deactivated airline was not confirmed, and a
+live key was refused at startup.

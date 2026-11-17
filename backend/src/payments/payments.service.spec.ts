@@ -42,14 +42,47 @@ function makePayment(overrides: Record<string, unknown> = {}) {
   return payment;
 }
 
-function setup(options: { booking?: unknown; stripe?: boolean; webhookSecret?: string } = {}) {
+/**
+ * findById() mock: a plain .lean() returns the booking; .select().populate().lean()
+ * (the ACC-15 provider check) returns the booking with its provider populated.
+ */
+function findByIdMock(booking: unknown, withProvider: unknown) {
+  return jest.fn(() => {
+    let populated = false;
+    const query: any = {
+      select: () => query,
+      populate: () => {
+        populated = true;
+        return query;
+      },
+      lean: () => Promise.resolve(populated ? withProvider : booking),
+    };
+    return query;
+  });
+}
+
+function setup(
+  options: {
+    booking?: unknown;
+    stripe?: boolean;
+    webhookSecret?: string;
+    airlineActive?: boolean;
+    returnAirlineActive?: boolean;
+    hotelActive?: boolean;
+  } = {},
+) {
   const booking = 'booking' in options ? options.booking : makeBooking();
+  const flightWithProvider = {
+    outboundFlight: { airline: { isActive: options.airlineActive ?? true } },
+    ...('returnAirlineActive' in options ? { returnFlight: { airline: { isActive: options.returnAirlineActive } } } : {}),
+  };
+  const hotelWithProvider = { hotel: { isActive: options.hotelActive ?? true } };
   const bookingModel = {
-    findById: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(booking) }),
+    findById: findByIdMock(booking, flightWithProvider),
     updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
   };
   const hotelModel = {
-    findById: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(booking) }),
+    findById: findByIdMock(booking, hotelWithProvider),
     updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
   };
   const paymentModel = {
@@ -276,41 +309,102 @@ describe('PaymentsService (PAY-01)', () => {
       );
     });
 
-    it('lets a registered confirmer (HTL-17 / FLT-23) confirm instead of the built-in step', async () => {
+    const succeeded = { type: 'payment_intent.succeeded', created: 0, data: { object: { id: 'pi_1', amount_received: 12050, currency: 'usd' } } };
+
+    it('runs after-confirmation handlers (HTL-17 / FLT-23) once PAY-01 has confirmed the booking', async () => {
       const { service, stripe, paymentModel, hotelModel } = setup({ webhookSecret: 'whsec' });
       paymentModel.findOne.mockResolvedValue(makePayment({ bookingType: BookingType.HOTEL }));
-      stripe.webhooks.constructEvent.mockReturnValue({
-        type: 'payment_intent.succeeded',
-        created: now,
-        data: { object: { id: 'pi_1', amount_received: 12050, currency: 'usd' } },
-      });
-      const confirmer = jest.fn().mockResolvedValue(true);
-      service.registerBookingConfirmer(BookingType.HOTEL, confirmer);
+      stripe.webhooks.constructEvent.mockReturnValue({ ...succeeded, created: now });
+      const handler = jest.fn().mockResolvedValue(undefined);
+      service.onBookingConfirmed(handler);
 
       await service.handleWebhook(Buffer.from('{}'), 'sig');
 
-      expect(confirmer).toHaveBeenCalledWith({
+      expect(hotelModel.updateOne).toHaveBeenCalled(); // PAY-01 keeps the confirmation
+      expect(handler).toHaveBeenCalledWith({
         bookingType: BookingType.HOTEL,
         bookingId: bookingId.toString(),
         paymentId: 'pay1',
         paidAt: new Date(now * 1000),
       });
-      expect(hotelModel.updateOne).not.toHaveBeenCalled();
     });
 
-    it('keeps the payment recorded as succeeded if a registered confirmer throws', async () => {
-      const { service, stripe, paymentModel } = setup({ webhookSecret: 'whsec' });
+    it('does not run the handlers when the booking was not confirmed (hold ended)', async () => {
+      const { service, stripe, paymentModel, bookingModel } = setup({ webhookSecret: 'whsec' });
+      paymentModel.findOne.mockResolvedValue(makePayment());
+      stripe.webhooks.constructEvent.mockReturnValue({ ...succeeded, created: now });
+      bookingModel.updateOne.mockResolvedValue({ modifiedCount: 0 });
+      const handler = jest.fn();
+      service.onBookingConfirmed(handler);
+
+      await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('a failing handler never turns the paid, confirmed booking into an error', async () => {
+      const { service, stripe, paymentModel, bookingModel } = setup({ webhookSecret: 'whsec' });
       const payment = makePayment();
       paymentModel.findOne.mockResolvedValue(payment);
-      stripe.webhooks.constructEvent.mockReturnValue({
-        type: 'payment_intent.succeeded',
-        created: now,
-        data: { object: { id: 'pi_1', amount_received: 12050, currency: 'usd' } },
-      });
-      service.registerBookingConfirmer(BookingType.FLIGHT, jest.fn().mockRejectedValue(new Error('hold expired')));
+      stripe.webhooks.constructEvent.mockReturnValue({ ...succeeded, created: now });
+      const second = jest.fn().mockResolvedValue(undefined);
+      service.onBookingConfirmed(jest.fn().mockRejectedValue(new Error('notification failed')));
+      service.onBookingConfirmed(second);
 
       await expect(service.handleWebhook(Buffer.from('{}'), 'sig')).resolves.toBeUndefined();
       expect(payment.status).toBe(PaymentStatus.SUCCEEDED);
+      expect(bookingModel.updateOne).toHaveBeenCalled();
+      expect(second).toHaveBeenCalled(); // the other handlers still run
+    });
+
+    describe('deactivated providers (ACC-15)', () => {
+      it('does not confirm a hotel reservation when the hotel was deactivated', async () => {
+        const { service, stripe, paymentModel, hotelModel } = setup({ webhookSecret: 'whsec', hotelActive: false });
+        const payment = makePayment({ bookingType: BookingType.HOTEL });
+        paymentModel.findOne.mockResolvedValue(payment);
+        stripe.webhooks.constructEvent.mockReturnValue({ ...succeeded, created: now });
+        const handler = jest.fn();
+        service.onBookingConfirmed(handler);
+
+        await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+        expect(hotelModel.updateOne).not.toHaveBeenCalled();
+        expect(handler).not.toHaveBeenCalled();
+        expect(payment.status).toBe(PaymentStatus.SUCCEEDED); // kept as paid so it can be refunded
+      });
+
+      it('does not confirm a flight booking when the airline was deactivated', async () => {
+        const { service, stripe, paymentModel, bookingModel } = setup({ webhookSecret: 'whsec', airlineActive: false });
+        paymentModel.findOne.mockResolvedValue(makePayment());
+        stripe.webhooks.constructEvent.mockReturnValue({ ...succeeded, created: now });
+
+        await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+        expect(bookingModel.updateOne).not.toHaveBeenCalled();
+      });
+
+      it('does not confirm a round trip when the return flight airline was deactivated', async () => {
+        const { service, stripe, paymentModel, bookingModel } = setup({
+          webhookSecret: 'whsec',
+          returnAirlineActive: false,
+        });
+        paymentModel.findOne.mockResolvedValue(makePayment());
+        stripe.webhooks.constructEvent.mockReturnValue({ ...succeeded, created: now });
+
+        await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+        expect(bookingModel.updateOne).not.toHaveBeenCalled();
+      });
+
+      it('confirms when the provider is active', async () => {
+        const { service, stripe, paymentModel, bookingModel } = setup({ webhookSecret: 'whsec', returnAirlineActive: true });
+        paymentModel.findOne.mockResolvedValue(makePayment());
+        stripe.webhooks.constructEvent.mockReturnValue({ ...succeeded, created: now });
+
+        await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+        expect(bookingModel.updateOne).toHaveBeenCalled();
+      });
     });
 
     it('does not confirm when the paid amount does not match', async () => {

@@ -28,8 +28,8 @@ import { BookingType, PaymentStatus } from './enums/payment.enums';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
 import { STRIPE_CLIENT } from './stripe.provider';
 
-/** What a booking confirmer receives once Stripe has verified the payment. */
-export interface VerifiedPayment {
+/** Sent to after-confirmation handlers once PAY-01 has confirmed a paid booking. */
+export interface BookingConfirmedEvent {
   bookingType: BookingType;
   bookingId: string;
   paymentId: string;
@@ -37,11 +37,10 @@ export interface VerifiedPayment {
 }
 
 /**
- * Confirms a booking after a verified payment and returns true if it did.
- * FLT-23 / HTL-17 register their own (booking reference, seat conversion,
- * notification); until then PAY-01's built-in confirmation is used.
+ * Runs after PAY-01 has confirmed the booking (e.g. HTL-17 / FLT-23: booking reference,
+ * seat conversion, notification). The confirmation itself always stays in PAY-01.
  */
-export type BookingConfirmer = (payment: VerifiedPayment) => Promise<boolean>;
+export type BookingConfirmedHandler = (event: BookingConfirmedEvent) => Promise<void>;
 
 /** The booking fields PAY-01 needs, shared by flight and hotel bookings. */
 interface PayableBooking {
@@ -69,7 +68,7 @@ export function bookingAmount(totalPrice: number, baggageFees = 0): number {
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
-  private readonly confirmers = new Map<BookingType, BookingConfirmer>();
+  private readonly confirmedHandlers: BookingConfirmedHandler[] = [];
 
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
@@ -81,16 +80,15 @@ export class PaymentsService {
   ) {}
 
   /**
-   * Lets FLT-23 (flights) and HTL-17 (hotels) take over the confirmation step.
-   * Example for HTL-17 (HotelBookingConfirmationService.confirmAfterPayment):
-   *   payments.registerBookingConfirmer(BookingType.HOTEL, async ({ bookingId }) => {
-   *     await confirmation.confirmAfterPayment(bookingId);
-   *     return true;
+   * Registers a handler that runs after PAY-01 has confirmed a paid booking, e.g. HTL-17:
+   *   payments.onBookingConfirmed(async ({ bookingType, bookingId }) => {
+   *     if (bookingType === BookingType.HOTEL) await confirmation.afterConfirmed(bookingId);
    *   });
-   * The confirmer must only confirm a booking that is still Pending Payment within its hold.
+   * Handlers are called only when PAY-01's atomic confirmation succeeded (still Pending Payment,
+   * paid within the hold, provider active). A failing handler is logged and never undoes it.
    */
-  registerBookingConfirmer(type: BookingType, confirmer: BookingConfirmer): void {
-    this.confirmers.set(type, confirmer);
+  onBookingConfirmed(handler: BookingConfirmedHandler): void {
+    this.confirmedHandlers.push(handler);
   }
 
   /**
@@ -266,12 +264,11 @@ export class PaymentsService {
       intent.amount_received === this.toMinorUnits(payment.amount) &&
       intent.currency.toUpperCase() === payment.currency;
     // Confirm only a booking that is still Pending Payment and was paid within its hold.
-    const confirmed = amountMatches && (await this.confirmBooking(payment, paidAt));
-    if (!confirmed) {
-      this.logger.warn(
-        `Payment ${payment.id} succeeded but the booking was not confirmed (${amountMatches ? 'hold ended' : 'amount mismatch'})`,
-      );
+    if (!amountMatches) {
+      this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed (amount mismatch)`);
+      return;
     }
+    await this.confirmBooking(payment, paidAt);
   }
 
   private async onFailed(intent: Stripe.PaymentIntent): Promise<void> {
@@ -331,21 +328,60 @@ export class PaymentsService {
     return intent.client_secret!;
   }
 
-  /** Uses the registered FLT-23 / HTL-17 confirmer, or PAY-01's built-in one. */
+  /**
+   * Confirms the booking, then runs the after-confirmation handlers.
+   * Not confirmed when the provider was deactivated (ACC-15) or the hold ended; the payment
+   * stays recorded as succeeded so it can be refunded (PAY-03).
+   */
   private async confirmBooking(payment: PaymentDocument, paidAt: Date): Promise<boolean> {
-    const confirmer = this.confirmers.get(payment.bookingType);
-    if (!confirmer) return this.confirmBookingStatus(payment, paidAt);
-    try {
-      return await confirmer({
-        bookingType: payment.bookingType,
-        bookingId: payment.bookingId.toString(),
-        paymentId: payment.id,
-        paidAt,
-      });
-    } catch (error) {
-      this.logger.error(`Booking confirmation failed for payment ${payment.id}: ${(error as Error).message}`);
+    if (!(await this.providerIsActive(payment))) {
+      this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed (provider deactivated)`);
       return false;
     }
+    if (!(await this.confirmBookingStatus(payment, paidAt))) {
+      this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed (hold ended)`);
+      return false;
+    }
+
+    const event: BookingConfirmedEvent = {
+      bookingType: payment.bookingType,
+      bookingId: payment.bookingId.toString(),
+      paymentId: payment.id,
+      paidAt,
+    };
+    for (const handler of this.confirmedHandlers) {
+      try {
+        await handler(event);
+      } catch (error) {
+        this.logger.error(`After-confirmation handler failed for payment ${payment.id}: ${(error as Error).message}`);
+      }
+    }
+    return true;
+  }
+
+  /**
+   * ACC-15: a booking is only confirmed while its hotel, or every airline on its flights,
+   * is still active (isActive !== false). A missing provider counts as inactive.
+   */
+  private async providerIsActive(payment: PaymentDocument): Promise<boolean> {
+    if (payment.bookingType === BookingType.FLIGHT) {
+      const booking = await this.flightBookingModel
+        .findById(payment.bookingId)
+        .select('outboundFlight returnFlight')
+        .populate([
+          { path: 'outboundFlight', select: 'airline', populate: { path: 'airline', select: 'isActive' } },
+          { path: 'returnFlight', select: 'airline', populate: { path: 'airline', select: 'isActive' } },
+        ])
+        .lean<{ outboundFlight?: { airline?: { isActive?: boolean } }; returnFlight?: { airline?: { isActive?: boolean } } }>();
+      const legs = [booking?.outboundFlight, booking?.returnFlight].filter(Boolean);
+      return legs.length > 0 && legs.every((leg) => !!leg!.airline && leg!.airline.isActive !== false);
+    }
+    const booking = await this.hotelBookingModel
+      .findById(payment.bookingId)
+      .select('hotel')
+      .populate({ path: 'hotel', select: 'isActive' })
+      .lean<{ hotel?: { isActive?: boolean } }>();
+    return !!booking?.hotel && booking.hotel.isActive !== false;
   }
 
   /**
