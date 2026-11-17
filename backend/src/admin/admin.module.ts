@@ -6,6 +6,7 @@ import { Hotel, HotelSchema } from '../hotels/schemas/hotel.schema';
 import { Airline, AirlineSchema } from '../airlines/schemas/airline.schema';
 import { Session, SessionSchema } from '../auth/schemas/session.schema';
 import { AuthModule } from '../auth/auth.module';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { MailModule } from '../mail/mail.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AdminController } from './admin.controller';
@@ -27,6 +28,7 @@ import { AdminAccountsService } from './admin-accounts.service';
     AuthModule,
     MailModule, // GEN-01-B: moderator invitation email
     NotificationsModule,
+    AuditLogsModule, // GEN-07: audit entries for admin actions
   ],
 controllers: [AdminController, AdminAccountsController, AdminProvidersController],
   providers: [AdminService, AdminAccountsService, AdminProvidersService],

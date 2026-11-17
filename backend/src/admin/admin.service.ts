@@ -23,6 +23,8 @@ import { CreateModeratorDto } from './dto/create-moderator.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/enums/notification.enums';
+import { AuditEntryInput, AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction, AuditTargetType } from '../audit-logs/enums/audit-log.enums';
 
 @Injectable()
 export class AdminService {
@@ -36,9 +38,10 @@ export class AdminService {
     @InjectModel(Session.name) private sessionModel: Model<SessionDocument>,
     private notificationsService: NotificationsService,
     private readonly mail: MailService,
+    private readonly auditLogs: AuditLogsService,
   ) {}
 
-  async createModerator(dto: CreateModeratorDto) {
+  async createModerator(dto: CreateModeratorDto, adminId?: string) {
     await this.assertProviderExists(dto.providerType, dto.providerId);
 
     if (await this.userModel.exists({ email: dto.email })) {
@@ -74,6 +77,15 @@ export class AdminService {
       throw err;
     }
 
+    // GEN-07: never the email or the temporary password
+    this.audit({
+      actorId: adminId ?? '',
+      action: AuditAction.MODERATOR_CREATED,
+      targetType: AuditTargetType.ACCOUNT,
+      targetId: user._id,
+      details: { providerType: dto.providerType, providerId: dto.providerId },
+    });
+
     // GEN-01-B: invitation email (sent in the background; never includes the temporary password).
     void this.sendInvitation(user, dto);
 
@@ -90,7 +102,7 @@ export class AdminService {
   }
 
   /** ACC-07a: set a temporary password; the account must change it at its next login (ACC-08). */
-  async resetPassword(userId: string, dto: ResetPasswordDto) {
+  async resetPassword(userId: string, dto: ResetPasswordDto, adminId?: string) {
     if (!isValidObjectId(userId)) {
       throw new BadRequestException('Invalid user ID');
     }
@@ -115,6 +127,14 @@ export class AdminService {
       },
     );
 
+    // GEN-07: only the target account id, never the temporary password
+    this.audit({
+      actorId: adminId ?? '',
+      action: AuditAction.PASSWORD_RESET,
+      targetType: AuditTargetType.ACCOUNT,
+      targetId: user._id,
+    });
+
     await this.sessionModel.updateMany({ user: user._id, revokedAt: null }, { $set: { revokedAt: new Date() } });
 
     return {
@@ -126,7 +146,7 @@ export class AdminService {
   }
 
   /** ACC-16 (users), ACC-15 (moderators): a suspended account cannot log in; bookings and content are untouched. */
-  async suspendAccount(userId: string) {
+  async suspendAccount(userId: string, adminId?: string) {
     const user = await this.findManagedAccount(userId, 'suspended');
 
     if (user.status === AccountStatus.SUSPENDED) {
@@ -144,6 +164,14 @@ export class AdminService {
       throw new ConflictException('Account status changed, please try again');
     }
 
+    this.audit({
+      actorId: adminId ?? '',
+      action: AuditAction.ACCOUNT_SUSPENDED,
+      targetType: AuditTargetType.ACCOUNT,
+      targetId: user._id,
+      details: { role: user.role },
+    });
+
     await this.sessionModel.updateMany({ user: user._id, revokedAt: null }, { $set: { revokedAt: new Date() } });
 
     await this.notifyAccount(user._id, NotificationType.ACCOUNT_SUSPENDED, 'Account suspended', 'Your account has been suspended by an administrator. You cannot log in until it is reactivated.');
@@ -152,7 +180,7 @@ export class AdminService {
   }
 
   /** ACC-16 (users), ACC-15 (moderators): only a suspended account can be reactivated. */
-  async reactivateAccount(userId: string) {
+  async reactivateAccount(userId: string, adminId?: string) {
     const user = await this.findManagedAccount(userId, 'reactivated');
 
     if (user.status !== AccountStatus.SUSPENDED) {
@@ -167,9 +195,26 @@ export class AdminService {
       throw new ConflictException('Account status changed, please try again');
     }
 
+    this.audit({
+      actorId: adminId ?? '',
+      action: AuditAction.ACCOUNT_REACTIVATED,
+      targetType: AuditTargetType.ACCOUNT,
+      targetId: user._id,
+      details: { role: user.role },
+    });
+
     await this.notifyAccount(user._id, NotificationType.ACCOUNT_REACTIVATED, 'Account reactivated', 'Your account has been reactivated. You can log in again.');
 
     return { id: user._id, email: user.email, role: user.role, status: AccountStatus.ACTIVE };
+  }
+
+  /** GEN-07: the change is already saved; the audit write runs in the background and never fails the action. */
+  private audit(entry: AuditEntryInput) {
+    try {
+      void this.auditLogs.record(entry);
+    } catch (err) {
+      this.logger.warn(`Could not record audit entry ${entry.action}: ${String(err)}`);
+    }
   }
 
   /** The status change is already saved, so a failed notification must not turn it into an error. */

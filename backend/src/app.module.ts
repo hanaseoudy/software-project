@@ -21,6 +21,7 @@ import { ReportsModule } from './reports/reports.module';
 import { AdminModule } from './admin/admin.module';
 import { FlightsModule } from './flights/flights.module';
 import { FlightBookingsModule } from './flight-bookings/flight-bookings.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -61,11 +62,12 @@ import { FlightBookingsModule } from './flight-bookings/flight-bookings.module';
     UploadsModule,
     AirlinesModule,
     ItinerariesModule,
+    FlightsModule,
     AdminModule,
     ItinerariesModule,
     ReportsModule,
-    FlightsModule,
     FlightBookingsModule,
+    AuditLogsModule,
   ],
 
   controllers: [AppController],

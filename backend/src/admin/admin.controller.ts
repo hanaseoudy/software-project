@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -12,6 +12,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../users/schemas/user.schema';
@@ -77,8 +78,8 @@ export class AdminController {
     type: ValidationErrorResponseDto,
     example: { message: 'Validation failed', errors: { email: ['Email is already registered'] } },
   })
-  createModerator(@Body() dto: CreateModeratorDto) {
-    return this.adminService.createModerator(dto);
+  createModerator(@Req() req: AuthenticatedRequest, @Body() dto: CreateModeratorDto) {
+    return this.adminService.createModerator(dto, req.user?.sub);
   }
 
   @Post('users/:id/reset-password')
@@ -114,8 +115,8 @@ export class AdminController {
     description: 'No account with this id',
     example: { message: 'User not found', error: 'Not Found', statusCode: 404 },
   })
-  resetPassword(@Param('id') id: string, @Body() dto: ResetPasswordDto) {
-    return this.adminService.resetPassword(id, dto);
+  resetPassword(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() dto: ResetPasswordDto) {
+    return this.adminService.resetPassword(id, dto, req.user?.sub);
   }
 
   @Patch('accounts/:id/suspend')
@@ -148,8 +149,8 @@ export class AdminController {
     description: 'The account is already suspended or is deactivated',
     example: { message: 'Account is already suspended', error: 'Conflict', statusCode: 409 },
   })
-  suspendAccount(@Param('id') id: string) {
-    return this.adminService.suspendAccount(id);
+  suspendAccount(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.adminService.suspendAccount(id, req.user?.sub);
   }
 
   @Patch('accounts/:id/reactivate')
@@ -178,7 +179,7 @@ export class AdminController {
     description: 'The account is not suspended',
     example: { message: 'Only a suspended account can be reactivated', error: 'Conflict', statusCode: 409 },
   })
-  reactivateAccount(@Param('id') id: string) {
-    return this.adminService.reactivateAccount(id);
+  reactivateAccount(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.adminService.reactivateAccount(id, req.user?.sub);
   }
 }

@@ -4,6 +4,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -17,6 +18,7 @@ import {
   ProviderType,
 } from '../users/schemas/moderatorassignment.schema';
 import { CreateFlightsDto } from './dto/create-flights.dto';
+import { formatFlightWithLocalTimes } from './utils/flight-time.formatter';
 import { AddCabinDto } from './dto/add-cabin.dto';
 import { isValidObjectId } from 'mongoose';
 import { SearchFlightsDto } from './dto/search-flights.dto';
@@ -25,9 +27,12 @@ import {
   AirlineDocument,
   CabinClass,
 } from '../airlines/schemas/airline.schema';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class FlightsService {
+  private readonly logger = new Logger(FlightsService.name);
+
   constructor(
     @InjectModel(Flight.name)
     private readonly flightsModel: Model<FlightDocument>,
@@ -91,7 +96,58 @@ export class FlightsService {
     }
 
     // Populate the references before returning the response
-    return flight.populate(['airline', 'departureAirport', 'arrivalAirport']);
+    const populatedFlight = await flight.populate([
+      'airline',
+      'departureAirport',
+      'arrivalAirport',
+    ]);
+
+    return formatFlightWithLocalTimes(populatedFlight);
+  }
+  /**
+   * FLT-30: Automatically transitions Scheduled flights to Departed
+   * once their departureTime (UTC) has passed.
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async markDepartedFlights(): Promise<void> {
+    const now = new Date();
+    const result = await this.flightsModel.updateMany(
+      {
+        status: FlightStatus.SCHEDULED,
+        departureTime: { $lte: now },
+      },
+      {
+        $set: { status: FlightStatus.DEPARTED },
+      },
+    );
+
+    if (result.modifiedCount > 0) {
+      this.logger.log(
+        `Transitioned ${result.modifiedCount} flight(s) from SCHEDULED to DEPARTED`,
+      );
+    }
+  }
+
+  /**
+   * FLT-30: Ensures a flight is currently Scheduled and has not passed its departure time.
+   * Also lazily syncs the DB status if departureTime just passed before the next cron tick.
+   */
+
+  async assertFlightScheduled(flight: FlightDocument): Promise<void> {
+    if (flight.status === FlightStatus.CANCELLED) {
+      throw new BadRequestException('Cannot modify or book a cancelled flight');
+    }
+
+    if (
+      flight.status === FlightStatus.DEPARTED ||
+      new Date(flight.departureTime) <= new Date()
+    ) {
+      if (flight.status === FlightStatus.SCHEDULED) {
+        flight.status = FlightStatus.DEPARTED;
+        await flight.save();
+      }
+      throw new BadRequestException('Cannot modify or book a departed flight');
+    }
   }
 
   async addCabin(flightId: string, userId: string, dto: AddCabinDto) {
@@ -114,6 +170,8 @@ export class FlightsService {
         'You do not have permission to modify cabins for this flight',
       );
     }
+
+    await this.assertFlightScheduled(flight);
 
     // 4. Rule: Each cabin category used at most once per flight
     const cabinExists = flight.cabins.some(
@@ -142,7 +200,9 @@ export class FlightsService {
       );
     }
 
-    return updated.populate(['airline', 'departureAirport', 'arrivalAirport']);
+    return formatFlightWithLocalTimes(
+      await updated.populate(['airline', 'departureAirport', 'arrivalAirport']),
+    );
   }
 
   // constructor: inject the Airline model next to the Flight model

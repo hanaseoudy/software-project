@@ -10,6 +10,8 @@ import { Hotel } from '../hotels/schemas/hotel.schema';
 import { Airline } from '../airlines/schemas/airline.schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/enums/notification.enums';
+import { AuditEntryInput, AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction } from '../audit-logs/enums/audit-log.enums';
 
 /**
  * ACC-15: an inactive hotel or airline is hidden from search and cannot be booked
@@ -25,17 +27,18 @@ export class AdminProvidersService {
     @InjectModel(Airline.name) private airlineModel: Model<Airline>,
     @InjectModel(ModeratorAssignment.name) private assignmentModel: Model<ModeratorAssignmentDocument>,
     private notificationsService: NotificationsService,
+    private readonly auditLogs: AuditLogsService,
   ) {}
 
-  deactivateProvider(type: ProviderType, id: string) {
-    return this.setActive(type, id, false);
+  deactivateProvider(type: ProviderType, id: string, adminId?: string) {
+    return this.setActive(type, id, false, adminId);
   }
 
-  reactivateProvider(type: ProviderType, id: string) {
-    return this.setActive(type, id, true);
+  reactivateProvider(type: ProviderType, id: string, adminId?: string) {
+    return this.setActive(type, id, true, adminId);
   }
 
-  private async setActive(type: ProviderType, id: string, active: boolean) {
+  private async setActive(type: ProviderType, id: string, active: boolean, adminId?: string) {
     if (!isValidObjectId(id)) {
       throw new BadRequestException('Invalid provider ID');
     }
@@ -63,9 +66,26 @@ export class AdminProvidersService {
       throw new ConflictException(`${label} status changed, please try again`);
     }
 
+    // GEN-07: the target type is the provider type (hotel or airline)
+    this.audit({
+      actorId: adminId ?? '',
+      action: active ? AuditAction.PROVIDER_REACTIVATED : AuditAction.PROVIDER_DEACTIVATED,
+      targetType: type,
+      targetId: provider._id,
+    });
+
     await this.notifyModerators(type, provider._id, provider.name, active);
 
     return { id: provider._id, type, name: provider.name, isActive: active };
+  }
+
+  /** GEN-07: the change is already saved; the audit write runs in the background and never fails the action. */
+  private audit(entry: AuditEntryInput) {
+    try {
+      void this.auditLogs.record(entry);
+    } catch (err) {
+      this.logger.warn(`Could not record audit entry ${entry.action}: ${String(err)}`);
+    }
   }
 
   /** The moderators assigned to this provider are the affected parties. */

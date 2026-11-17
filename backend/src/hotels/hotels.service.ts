@@ -55,6 +55,7 @@ import {
   StatusInterval,
 } from './utils/room-status';
 import { UploadsService } from '../uploads/uploads.service';
+import { DELETED_USER, reviewerName } from './utils/reviewer-name';
 import { ImageCategory } from '../uploads/uploads.constants';
 import { Hotel, HotelDocument } from './schemas/hotel.schema';
 import { Room, RoomDocument } from './schemas/room.schema';
@@ -688,20 +689,17 @@ export class HotelsService {
     if (reviews.length === 0) {
       return [];
     }
-    const users = await this.userModel
+       const users = await this.userModel
       .find({ _id: { $in: reviews.map((r) => r.user) } })
-      .select('firstName lastName')
+      .select('firstName lastName status')
       .lean()
       .exec();
     const names = new Map(
-      users.map((u) => [
-        u._id.toString(),
-        `${u.firstName} ${(u.lastName ?? '').charAt(0)}.`.trim(),
-      ]),
+      users.map((u) => [u._id.toString(), reviewerName(u)]),
     );
     return reviews.map((review) => ({
       id: review._id.toString(),
-      reviewer: names.get(review.user.toString()) ?? 'Guest',
+      reviewer: names.get(review.user.toString()) ?? DELETED_USER,
       rating: review.rating,
       comment: review.comment ?? '',
       createdAt: (
