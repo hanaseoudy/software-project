@@ -98,3 +98,22 @@ Verification performed:
 Unit tests, lint and build passed under Node 24 (3 blog.service.spec tests were
 already failing on develop and are unrelated).
 ================================================
+
+Date: 2026-11-18
+Student: Roaa Mahmoud
+Tool: Claude (Claude Code on claude.ai)
+Related Requirement: HTL-12 (Jira TASK-54)
+Prompt:
+Start my sprint 3 tasks. (My sprint 3 tickets are TASK-54 HTL-12, TASK-59
+HTL-20, TASK-60 HTL-21 and TASK-61 HTL-22; Claude started with HTL-12.)
+How the output was used:
+Claude read the HTL-12 requirement and the existing HTL-11 search, and added the
+price and rating filters and sorting to GET /api/hotels/search: minPrice and
+maxPrice (inclusive, judged on the cheapest free room), minRating (1 to 5, hotels
+with no ratings are excluded when it is set) and sortBy=price|rating with
+sortOrder=asc|desc (unrated hotels last when sorting by rating). It added the
+query validation, the filter and sort step before pagination, and unit tests.
+I will review the changes before the pull request is merged.
+Verification performed:
+Hotel unit tests (410), lint and build passed under Node 24.
+================================================
