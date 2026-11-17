@@ -610,3 +610,20 @@ Changed files: backend/src/audit-logs (module, service, controller, schema, enum
 and the AuditLogsModule registration in backend/src/app.module.ts.
 Open items: the record() calls in the admin, providers and reports modules are left to their owners.
 ================================================
+================================================
+Date: 2026-11-17
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-07
+
+Prompt:
+Fix the team leader's review comment on GEN-07: call AuditLogsService.record() from the admin services
+for moderator creation, password reset, account suspension and reactivation, provider deactivation and
+reactivation, and report resolution and content moderation.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed in three passes and built by me (no errors in the changed files;
+the only build errors are the missing local nodemailer install from develop). Changed files: admin.service.ts,
+admin-providers.service.ts, admin-reports.service.ts, admin.module.ts, reports.module.ts, and (approved) admin.controller.ts
+and admin-providers.controller.ts to pass the admin id. Nothing was left open.
+================================================
