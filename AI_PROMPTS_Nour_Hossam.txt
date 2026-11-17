@@ -124,4 +124,25 @@ Added 6 unit tests (generic 401 before the 5th failure, 423 on the 5th, 423
 while locked without checking the password, login after the lock expires,
 counter reset, unknown email). All 20 auth tests pass; lint and build pass.
 Postman: 4th wrong password 401, 5th 423, right password while locked 423.
+Related Requirement: ACC-14 (TASK-21)
+
+Prompt (summary of the conversation):
+Help me implement ACC-14: an admin views a paginated list of all accounts
+(name, email, role, status, registration date) and can search by name or
+email and filter by role and status. Follow the API contract endpoint
+GET /api/admin/accounts and the team's GEN-05 pagination helper.
+
+How the output was used:
+Used the generated ListAccountsQueryDto, AdminAccountsService and
+AdminAccountsController after reviewing them against ACC-14. Admin only;
+newest first, 10 per page; search matches first name, last name or email
+(case-insensitive, every word must match, special characters treated as
+plain text); role and status are exact filters and can be combined. Only the
+needed columns are read, never the password. Kept in separate files so it
+does not conflict with the ACC-07a PR.
+
+Verification:
+13 new unit tests (service and DTO); all 21 admin tests pass. Lint and build
+passed locally. Postman: full list 200 with pagination, search=sara,
+role=moderator, and an invalid role 400.
 ================================================
