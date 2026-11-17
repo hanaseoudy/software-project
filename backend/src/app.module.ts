@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
+import { PoliciesModule } from './policies/policies.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -13,16 +15,19 @@ import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ItinerariesModule } from './itineraries/itineraries.module';
-import { AirlinesModule } from './airlines/airlines.module';
 import { warnIfDatabaseMissing } from './common/config/mongodb.config';
-import { ScheduleModule } from '@nestjs/schedule';
+import { AirlinesModule } from './airlines/airlines.module';
+import { ReportsModule } from './reports/reports.module';
+import { AdminModule } from './admin/admin.module';
 import { FlightsModule } from './flights/flights.module';
+import { FlightBookingsModule } from './flight-bookings/flight-bookings.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ScheduleModule.forRoot(),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
 
@@ -44,6 +49,7 @@ import { FlightsModule } from './flights/flights.module';
         };
       },
     }),
+    PoliciesModule,
     AirportsModule,
     PaymentsModule,
     BlogModule,
@@ -56,6 +62,10 @@ import { FlightsModule } from './flights/flights.module';
     AirlinesModule,
     ItinerariesModule,
     FlightsModule,
+    AdminModule,
+    ItinerariesModule,
+    ReportsModule,
+    FlightBookingsModule,
   ],
 
   controllers: [AppController],

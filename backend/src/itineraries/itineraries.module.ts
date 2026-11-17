@@ -1,4 +1,3 @@
-
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
@@ -34,6 +33,16 @@ import {
   TransportCostSchema,
 } from './schemas/transport-cost.schema';
 
+import {
+  City,
+  CitySchema,
+} from '../reference-data/schemas/city.schema';
+
+import { Currency, CurrencySchema } from '../reference-data/schemas/currency.schema';
+import { ActivitiesController } from './activities.controller';
+import { ActivitiesService } from './activities.service';
+import { TransportCostsController } from './transport-costs.controller';
+import { TransportCostsService } from './transport-costs.service';
 import { ItinerariesController } from './itineraries.controller';
 import { ItinerariesService } from './itineraries.service';
 
@@ -41,6 +50,7 @@ import { ItinerariesService } from './itineraries.service';
   imports: [
     AuthModule,
     MongooseModule.forFeature([
+      { name: Currency.name, schema: CurrencySchema },
       {
         name: Itinerary.name,
         schema: ItinerarySchema,
@@ -65,9 +75,13 @@ import { ItinerariesService } from './itineraries.service';
         name: TransportCost.name,
         schema: TransportCostSchema,
       },
+      {
+        name: City.name,
+        schema: CitySchema,
+      },
     ]),
   ],
-  controllers: [ItinerariesController],
-  providers: [ItinerariesService],
+  controllers: [ItinerariesController, ActivitiesController, TransportCostsController],
+  providers: [ItinerariesService, ActivitiesService, TransportCostsService],
 })
 export class ItinerariesModule {}

@@ -4,9 +4,9 @@ import { Document, Types, Schema as MongooseSchema } from 'mongoose';
 import { Passenger, PassengerSchema } from './passenger.schema';
 
 export enum FlightBookingStatus {
-  HELD = 'HELD',
   PENDING_PAYMENT = 'PENDING_PAYMENT',
   CONFIRMED = 'CONFIRMED',
+  COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
   EXPIRED = 'EXPIRED',
 }
@@ -60,7 +60,7 @@ export class FlightBooking extends Document {
   @Prop({
     required: true,
     enum: FlightBookingStatus,
-    default: FlightBookingStatus.HELD,
+    default: FlightBookingStatus.PENDING_PAYMENT,
     index: true,
   })
   status: FlightBookingStatus;

@@ -3,17 +3,22 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
   Query,
   Req,
   UnauthorizedException,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
   ApiBody,
+  ApiConsumes,
   ApiCookieAuth,
   ApiCreatedResponse,
   ApiExtraModels,
@@ -34,7 +39,7 @@ import { ValidationErrorResponseDto } from '../auth/dto/validation-error-respons
 import { BlogService } from './blog.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { PostResponseDto } from './dto/post-response.dto';
-import { UpdateTagsDto } from './dto/update-tags.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 import { LikeResponseDto } from './dto/like-response.dto';
 import { ErrorResponseDto } from './dto/error-response.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
@@ -46,6 +51,10 @@ import { ListPostsQueryDto } from './dto/list-posts-query.dto';
 import { PublicPostDetailDto, PublicPostSummaryDto } from './dto/public-post-response.dto';
 import type { PublicPostsPage } from './dto/public-post-response.dto';
 import { PaginatedResponseDto, PaginationQueryDto } from '../common/pagination/pagination';
+import { AttachedImageResponseDto, RemovedImageResponseDto } from './dto/post-image-response.dto';
+import { imageUploadOptions } from '../uploads/image-upload.options';
+import { ImageCategory } from '../uploads/uploads.constants';
+import type { UploadedImage } from '../uploads/uploads.service';
 
 @ApiTags('blog')
 @Controller('posts')
@@ -108,14 +117,18 @@ export class BlogController {
 
   @Get()
   @ApiOperation({
-    summary: 'Browse published posts (BLG-02)',
+    summary: 'Browse and search published posts (BLG-02, BLG-09)',
     description:
-      'Public, no login needed. Lists published, non-hidden posts newest first with title, author, date, ' +
+      'Public, no login needed. Lists published, non-hidden posts with title, author, date, ' +
       'excerpt, tags, images, like count and comment count. Optional exact tag filter. ' +
-      'Paginated with a fixed page size of 10 (GEN-05); no results returns an empty page. Keyword search is BLG-09.',
+      'Without "search" the posts are listed newest first (BLG-02). ' +
+      'With "search" (BLG-09), matches the keyword (case-insensitive, partial) in the title, the tags or the author name, ' +
+      'ordered by interaction score (likes + comments) descending, newest first as tie-breaker. ' +
+      'Paginated with a fixed page size of 10 (GEN-05); no results returns an empty page.',
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'tag', required: false, type: String, example: 'egypt', description: 'Tag name, 1 to 30 characters' })
+  @ApiQuery({ name: 'search', required: false, type: String, example: 'luxor', description: 'Keyword, 1 to 100 characters' })
   @ApiExtraModels(PaginatedResponseDto, PublicPostSummaryDto)
   @ApiOkResponse({
     description: 'One page of published posts',
@@ -127,12 +140,12 @@ export class BlogController {
     },
   })
   @ApiBadRequestResponse({
-    description: 'Invalid tag or page number',
+    description: 'Invalid tag, search keyword or page number',
     type: ValidationErrorResponseDto,
     example: { message: 'Validation failed', errors: { tag: ['Tag must be at most 30 characters'] } },
   })
   list(@Query() query: ListPostsQueryDto): Promise<PublicPostsPage> {
-    return this.blogService.listPublished(query.tag, query.page ?? 1);
+    return this.blogService.listPublished(query.tag, query.page ?? 1, query.search);
   }
 
   // Declared after GET /posts/mine so "mine" is not treated as an id
@@ -157,10 +170,9 @@ export class BlogController {
   @UseGuards(JwtAuthGuard)
   @ApiCookieAuth()
   @ApiOperation({
-    summary: 'Edit my post\'s tags (BLG-08)',
+    summary: 'Edit my post (BLG-04, BLG-08)',
     description:
-      'The author replaces the tags of their own post: up to 5 tags, each 1 to 30 characters, ' +
-      'stored trimmed, lowercase and without duplicates. Other fields are edited under BLG-04.',
+      'The author can update title, content, status and tags. Omitted fields remain unchanged.',
   })
   @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
   @ApiOkResponse({ description: 'Post updated', type: PostResponseDto })
@@ -175,9 +187,23 @@ export class BlogController {
   update(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() dto: UpdateTagsDto,
+    @Body() dto: UpdatePostDto,
   ): Promise<PostResponseDto> {
     return this.blogService.update(this.requireUserId(req), id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Delete my post and its comments and likes (BLG-04)' })
+  @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)' })
+  @ApiResponse({ status: 204, description: 'Post deleted' })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({ description: 'The post belongs to another user' })
+  @ApiNotFoundResponse({ description: 'Invalid post id or post not found' })
+  async remove(@Req() req: AuthenticatedRequest, @Param('id') id: string): Promise<void> {
+    await this.blogService.deletePost(this.requireUserId(req), id);
   }
 
   @Post(':id/like')
@@ -254,6 +280,72 @@ export class BlogController {
     @StrictBody() dto: CreateCommentDto,
   ): Promise<CommentResponseDto> {
     return this.blogService.addComment(this.requireUserId(req), id, dto.text);
+  }
+
+  @Post(':id/images')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('image', imageUploadOptions(ImageCategory.POST)))
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Attach an image to my post (BLG-10, GEN-08)',
+    description:
+      'Author only. Uploads one image in the multipart field "image" and attaches it to the logged-in ' +
+      'user\'s own post, whether draft or published. The image must be JPG or PNG, up to 5 MB; a post can ' +
+      'have at most 5 images. The file is stored on the server and served from the returned URL.',
+  })
+  @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['image'],
+      properties: { image: { type: 'string', format: 'binary', description: 'JPG or PNG image, up to 5 MB' } },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Image attached', type: AttachedImageResponseDto })
+  @ApiResponse({
+    status: 400,
+    description:
+      'No image was provided, the file is not a valid JPG or PNG image, or the post already has 5 images',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Not logged in', type: ErrorResponseDto })
+  @ApiResponse({ status: 403, description: 'The post belongs to another user', type: ErrorResponseDto })
+  @ApiResponse({ status: 404, description: 'Invalid post id or the post does not exist', type: ErrorResponseDto })
+  @ApiResponse({ status: 413, description: 'The image is larger than 5 MB', type: ErrorResponseDto })
+  addImage(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @UploadedFile() file: UploadedImage | undefined,
+  ): Promise<AttachedImageResponseDto> {
+    return this.blogService.addImage(this.requireUserId(req), id, file);
+  }
+
+  @Delete(':id/images/:imageId')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Remove an image from my post (BLG-10)',
+    description:
+      'Author only. Removes the image from the logged-in user\'s own post and deletes the stored file. ' +
+      'Returns the post\'s remaining images.',
+  })
+  @ApiParam({ name: 'id', description: 'Post id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60711' })
+  @ApiParam({ name: 'imageId', description: 'Image id (MongoDB ObjectId)', example: '6650f1c2a1b2c3d4e5f60718' })
+  @ApiResponse({ status: 200, description: 'Image removed', type: RemovedImageResponseDto })
+  @ApiResponse({ status: 401, description: 'Not logged in', type: ErrorResponseDto })
+  @ApiResponse({ status: 403, description: 'The post belongs to another user', type: ErrorResponseDto })
+  @ApiResponse({
+    status: 404,
+    description: 'Invalid post or image id, the post does not exist, or the image is not on this post',
+    type: ErrorResponseDto,
+  })
+  removeImage(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('imageId') imageId: string,
+  ): Promise<RemovedImageResponseDto> {
+    return this.blogService.removeImage(this.requireUserId(req), id, imageId);
   }
 
   // The user id always comes from the authenticated token, never from the body or query

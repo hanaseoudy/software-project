@@ -17,7 +17,7 @@ import { MyPostsPage } from './dto/my-post-response.dto';
 import { PostResponseDto } from './dto/post-response.dto';
 import { PublicAuthorDto, PublicPostDetailDto, PublicPostsPage } from './dto/public-post-response.dto';
 import { TagPostsPage, TagsPage } from './dto/tag-response.dto';
-import { UpdateTagsDto } from './dto/update-tags.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 import { commentTextError } from './comment-rules';
 import { Comment, CommentDocument } from './schemas/comment.schema';
 import { Like, LikeDocument } from './schemas/like.schema';
@@ -25,9 +25,18 @@ import { Post, PostDocument, PostStatus } from './schemas/post.schema';
 import { escapeRegex, normalizeTags } from './tag-rules';
 import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
 import { AccountStatus, User, UserDocument } from '../users/schemas/user.schema';
+import { ImageCategory, MAX_IMAGES } from '../uploads/uploads.constants';
+import { UploadedImage, UploadsService } from '../uploads/uploads.service';
+import { AttachedImageResponseDto, RemovedImageResponseDto } from './dto/post-image-response.dto';
+
+// BLG-10: an image reference stored on a post
+type PostImage = { _id: Types.ObjectId; url: string };
 
 // BLG-02: list rows show the first 200 characters of the body
 const EXCERPT_LENGTH = 200;
+
+// BLG-02, BLG-09: fields read for a public list row (the same with or without search)
+const PUBLIC_LIST_FIELDS = 'title author content tags images likesCount commentsCount createdAt';
 
 // ACC-12: comments of deactivated (or missing) accounts are shown under this name
 const DELETED_USER = 'Deleted user';
@@ -48,6 +57,7 @@ export class BlogService {
     @InjectModel(Like.name) private readonly likeModel: Model<LikeDocument>,
     @InjectModel(Comment.name) private readonly commentModel: Model<CommentDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    private readonly uploads: UploadsService,
   ) {}
 
   // BLG-01: the author always comes from the logged-in user, never from the request body
@@ -97,7 +107,9 @@ export class BlogService {
 
   // BLG-02: public list of published, non-hidden posts, newest first, optional tag filter, page size 10 (GEN-05).
   // ACC-12: posts of deactivated authors are hidden.
-  async listPublished(tag: string | undefined, page = 1): Promise<PublicPostsPage> {
+  // BLG-09: with a search keyword, case-insensitive partial match in the title, the tags or the author name,
+  // ordered by interaction score (likes + comments) descending, newest first as tie-breaker.
+  async listPublished(tag: string | undefined, page = 1, search?: string): Promise<PublicPostsPage> {
     const deactivated = await this.runDb('Could not load the posts', () =>
       this.userModel.distinct('_id', { status: AccountStatus.DEACTIVATED }).exec(),
     );
@@ -105,17 +117,20 @@ export class BlogService {
       ...VISIBLE_POSTS,
       author: { $nin: deactivated },
       ...(tag !== undefined ? { tags: String(tag).trim().toLowerCase() } : {}),
+      ...(search !== undefined ? { $or: await this.searchConditions(search) } : {}),
     };
     const [posts, total] = await this.runDb('Could not load the posts', () =>
       Promise.all([
-        this.postModel
-          .find(filter)
-          .select('title author content tags images likesCount commentsCount createdAt')
-          .sort({ createdAt: -1, _id: -1 })
-          .skip(skipFor(page))
-          .limit(PAGE_SIZE)
-          .lean<(Post & { _id: Types.ObjectId; createdAt: Date })[]>()
-          .exec(),
+        search === undefined
+          ? this.postModel
+              .find(filter)
+              .select(PUBLIC_LIST_FIELDS)
+              .sort({ createdAt: -1, _id: -1 })
+              .skip(skipFor(page))
+              .limit(PAGE_SIZE)
+              .lean<(Post & { _id: Types.ObjectId; createdAt: Date })[]>()
+              .exec()
+          : this.postModel.aggregate<Post & { _id: Types.ObjectId; createdAt: Date }>(this.rankedPage(filter, page)).exec(),
         this.postModel.countDocuments(filter).exec(),
       ]),
     );
@@ -132,6 +147,43 @@ export class BlogService {
       commentsCount: post.commentsCount ?? 0,
     }));
     return paginate(items, total, page);
+  }
+
+  // BLG-09: the keyword is matched literally (regex characters escaped), case-insensitive, anywhere in the title,
+  // any tag or the author's display name ("firstName lastName", as built in loadPublicUsers). Only user ids are read.
+  private async searchConditions(search: string) {
+    const keyword = escapeRegex(search.trim());
+    const authors = await this.runDb('Could not load the posts', () =>
+      this.userModel
+        .distinct('_id', {
+          $expr: {
+            $regexMatch: {
+              input: { $trim: { input: { $concat: [{ $ifNull: ['$firstName', ''] }, ' ', { $ifNull: ['$lastName', ''] }] } } },
+              regex: keyword,
+              options: 'i',
+            },
+          },
+        })
+        .exec(),
+    );
+    return [
+      { title: { $regex: keyword, $options: 'i' } },
+      { tags: { $regex: keyword, $options: 'i' } },
+      { author: { $in: authors } },
+    ];
+  }
+
+  // BLG-09: one page ordered by interaction score (likes + comments) descending, then newest first, then _id.
+  // The score is computed in the pipeline only and is not returned or stored.
+  private rankedPage(filter: PipelineStage.Match['$match'], page: number): PipelineStage[] {
+    return [
+      { $match: filter },
+      { $addFields: { score: { $add: [{ $ifNull: ['$likesCount', 0] }, { $ifNull: ['$commentsCount', 0] }] } } },
+      { $sort: { score: -1, createdAt: -1, _id: -1 } },
+      { $skip: skipFor(page) },
+      { $limit: PAGE_SIZE },
+      { $project: Object.fromEntries(PUBLIC_LIST_FIELDS.split(' ').map((field) => [field, 1])) },
+    ];
   }
 
   // BLG-02: public post page. 404 for an invalid id, a missing, draft or hidden post,
@@ -209,8 +261,8 @@ export class BlogService {
     return user && !user.deactivated ? { id: id.toString(), name: user.name } : { id: null, name: DELETED_USER };
   }
 
-  // BLG-08: the author edits the post's tags later. BLG-04 will extend this with the other fields.
-  async update(userId: string, postId: string, dto: UpdateTagsDto): Promise<PostResponseDto> {
+  // BLG-04, BLG-08: only the author can edit post content and tags.
+  async update(userId: string, postId: string, dto: UpdatePostDto): Promise<PostResponseDto> {
     if (!userId || !isValidObjectId(userId)) {
       throw new UnauthorizedException('Not authenticated');
     }
@@ -224,11 +276,74 @@ export class BlogService {
     if (!post.author.equals(userId)) {
       throw new ForbiddenException('You can only edit your own posts');
     }
+    if (dto.title !== undefined) post.title = dto.title;
+    if (dto.content !== undefined) post.content = dto.content;
+    if (dto.status !== undefined) post.status = dto.status;
     if (dto.tags !== undefined) {
       post.tags = normalizeTags(dto.tags);
     }
     const saved = await this.runDb('Could not update the post', () => post.save());
     return this.toResponse(saved);
+  }
+
+  // BLG-04: delete dependent records atomically with the author's post.
+  async deletePost(userId: string, postId: string): Promise<void> {
+    const author = this.toUserObjectId(userId);
+    const id = this.managementId(postId, 'Post');
+    await this.runDb('Could not delete the post', () =>
+      this.postModel.db.transaction(async (session) => {
+        const post = await this.postModel.findById(id).session(session).exec();
+        if (!post) throw new NotFoundException('Post not found');
+        if (!post.author.equals(author)) throw new ForbiddenException('You can only delete your own posts');
+        await this.postModel.deleteOne({ _id: id, author }, { session }).exec();
+        await this.commentModel.deleteMany({ post: id }, { session }).exec();
+        await this.likeModel.deleteMany({ post: id }, { session }).exec();
+      }),
+    );
+  }
+
+  // BLG-07: ownership belongs to the comment author, not the post author.
+  async updateComment(userId: string, commentId: string, text: unknown): Promise<CommentResponseDto> {
+    const author = this.toUserObjectId(userId);
+    const body = this.toCommentText(text);
+    const id = this.managementId(commentId, 'Comment');
+    const comment = await this.runDb('Could not load the comment', () => this.commentModel.findById(id).exec());
+    if (!comment) throw new NotFoundException('Comment not found');
+    if (!comment.author.equals(author)) throw new ForbiddenException('You can only edit your own comments');
+    const updated = await this.runDb('Could not update the comment', () =>
+      this.commentModel.findOneAndUpdate(
+        { _id: id, author }, { $set: { text: body } }, { new: true, runValidators: true },
+      ).exec(),
+    );
+    if (!updated) throw new NotFoundException('Comment not found');
+    return {
+      id: updated._id.toString(), postId: updated.post.toString(),
+      author: { id: updated.author.toString() }, text: updated.text,
+      createdAt: updated.get('createdAt') as Date,
+    };
+  }
+
+  // A transaction prevents duplicate deletes or failures from corrupting the count.
+  async deleteComment(userId: string, commentId: string): Promise<void> {
+    const author = this.toUserObjectId(userId);
+    const id = this.managementId(commentId, 'Comment');
+    await this.runDb('Could not delete the comment', () =>
+      this.commentModel.db.transaction(async (session) => {
+        const comment = await this.commentModel.findById(id).session(session).exec();
+        if (!comment) throw new NotFoundException('Comment not found');
+        if (!comment.author.equals(author)) throw new ForbiddenException('You can only delete your own comments');
+        await this.commentModel.deleteOne({ _id: id, author }, { session }).exec();
+        await this.postModel.updateOne(
+          { _id: comment.post, commentsCount: { $gt: 0 } },
+          { $inc: { commentsCount: -1 } }, { session },
+        ).exec();
+      }),
+    );
+  }
+
+  private managementId(id: string, entity: string): Types.ObjectId {
+    if (typeof id !== 'string' || !OBJECT_ID_PATTERN.test(id)) throw new NotFoundException(`${entity} not found`);
+    return new Types.ObjectId(id);
   }
 
   // BLG-08: clickable tag. Published, non-hidden posts with the tag, newest first, page size 10 (GEN-05).
@@ -382,6 +497,127 @@ export class BlogService {
       text: comment.text,
       createdAt: comment.get('createdAt') as Date,
     };
+  }
+
+  // BLG-10: the author attaches one image to their own post (draft or published).
+  // GEN-08: the shared UploadsService checks the file (JPG/PNG, max 5 MB) and stores it; at most 5 images per post.
+  async addImage(
+    userId: string,
+    postId: string,
+    file: UploadedImage | undefined,
+  ): Promise<AttachedImageResponseDto> {
+    const post = await this.findOwnPost(userId, postId, 'You can only add images to your own posts');
+    const max = MAX_IMAGES[ImageCategory.POST];
+
+    // Rejects a missing file, an invalid file or a full post before anything is stored
+    const [url] = await this.runDb('Could not store the image', () =>
+      this.uploads.saveForOwner(
+        file ? [file] : undefined,
+        ImageCategory.POST,
+        post.images.map((image) => image.url),
+      ),
+    );
+
+    const imageId = new Types.ObjectId();
+    try {
+      // Atomic: push only while the post still has fewer than 5 images, so concurrent uploads cannot exceed it
+      const updated = await this.runDb('Could not add the image', () =>
+        this.postModel
+          .findOneAndUpdate(
+            { _id: post._id, [`images.${max - 1}`]: { $exists: false } },
+            { $push: { images: { _id: imageId, url } } },
+            { new: true, projection: { _id: 1 } },
+          )
+          .lean()
+          .exec(),
+      );
+      if (!updated) {
+        const exists = await this.runDb('Could not add the image', () =>
+          this.postModel.exists({ _id: post._id }).exec(),
+        );
+        throw exists
+          ? new BadRequestException(`A post can have at most ${max} images`)
+          : new NotFoundException('Post not found');
+      }
+    } catch (error) {
+      // The file was stored but no reference was saved: delete it so no orphan file remains
+      await this.uploads.deleteByUrl(url).catch(() => undefined);
+      throw error;
+    }
+
+    return { id: imageId.toString(), url, postId: post._id.toString() };
+  }
+
+  // BLG-10: the author removes an image from their own post; the stored file is deleted too
+  async removeImage(userId: string, postId: string, imageId: string): Promise<RemovedImageResponseDto> {
+    if (typeof imageId !== 'string' || !OBJECT_ID_PATTERN.test(imageId)) {
+      throw new NotFoundException('Image not found');
+    }
+    const post = await this.findOwnPost(userId, postId, 'You can only remove images from your own posts');
+    const image = post.images.find((item) => item._id.equals(imageId));
+    if (!image) {
+      throw new NotFoundException('Image not found');
+    }
+
+    // Atomic $pull; matches nothing if a concurrent request already removed this image
+    const updated = await this.runDb('Could not remove the image', () =>
+      this.postModel
+        .findOneAndUpdate(
+          { _id: post._id, 'images._id': image._id },
+          { $pull: { images: { _id: image._id } } },
+          { new: true, projection: { images: 1 } },
+        )
+        .lean<{ images: PostImage[] }>()
+        .exec(),
+    );
+    if (!updated) {
+      throw new NotFoundException('Image not found');
+    }
+
+    if (this.uploads.isStoredUrl(ImageCategory.POST, image.url)) {
+      try {
+        await this.uploads.deleteByUrl(image.url);
+      } catch {
+        // The file could not be deleted: restore the reference so the file does not become an orphan
+        const max = MAX_IMAGES[ImageCategory.POST];
+        await this.postModel
+          .updateOne({ _id: post._id, [`images.${max - 1}`]: { $exists: false } }, { $push: { images: image } })
+          .exec()
+          .catch(() => undefined);
+        throw new InternalServerErrorException('Could not remove the image');
+      }
+    }
+
+    return {
+      message: 'Image removed',
+      images: updated.images.map((item) => ({ id: item._id.toString(), url: item.url })),
+    };
+  }
+
+  // BLG-10: load a post for an author-only change. 401 bad user, 404 invalid id or missing post, 403 not the author.
+  private async findOwnPost(
+    userId: string,
+    postId: string,
+    forbiddenMessage: string,
+  ): Promise<{ _id: Types.ObjectId; author: Types.ObjectId; images: PostImage[] }> {
+    const user = this.toUserObjectId(userId);
+    if (typeof postId !== 'string' || !OBJECT_ID_PATTERN.test(postId)) {
+      throw new NotFoundException('Post not found');
+    }
+    const post = await this.runDb('Could not load the post', () =>
+      this.postModel
+        .findById(postId)
+        .select('author images')
+        .lean<{ _id: Types.ObjectId; author: Types.ObjectId; images: PostImage[] }>()
+        .exec(),
+    );
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+    if (!post.author.equals(user)) {
+      throw new ForbiddenException(forbiddenMessage);
+    }
+    return { ...post, images: post.images ?? [] };
   }
 
   // BLG-05: service-level check that never assumes the text is a string (same rules as CreateCommentDto)

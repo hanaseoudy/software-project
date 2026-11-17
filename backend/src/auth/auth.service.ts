@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -18,6 +19,7 @@ import { ModeratorAssignment, ModeratorAssignmentDocument } from '../users/schem
 import { Session, SessionDocument } from './schemas/session.schema';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
@@ -92,7 +94,11 @@ export class AuthService {
     const passwordOk = user ? await bcrypt.compare(dto.password, user.passwordHash) : false;
     if (!user || !passwordOk) {
       if (user) {
-        await this.recordFailedLogin(user);
+        // ACC-05: the 5th consecutive failure locks the account and shows the lockout message right away.
+        const lockedUntil = await this.recordFailedLogin(user);
+        if (lockedUntil) {
+          throw this.accountLocked(lockedUntil);
+        }
       }
       throw this.invalidCredentials();
     }
@@ -206,6 +212,34 @@ async refresh(refreshToken: string | undefined) {
     return this.toAuthUser(user);
   }
 
+  /** ACC-08: change the password after checking the current one; other sessions are logged out. */
+  async changePassword(userId: string, sessionId: string, dto: ChangePasswordDto) {
+    const user = await this.userModel.findById(userId).select('+passwordHash');
+    if (!user || user.status !== AccountStatus.ACTIVE) {
+      throw this.notAuthenticated();
+    }
+
+    if (!(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
+      throw this.passwordError('currentPassword', 'Current password is incorrect');
+    }
+
+    if (await bcrypt.compare(dto.newPassword, user.passwordHash)) {
+      throw this.passwordError('newPassword', 'New password must be different from the current password');
+    }
+
+    await this.userModel.updateOne(
+      { _id: user._id },
+      { $set: { passwordHash: await bcrypt.hash(dto.newPassword, 10), mustChangePassword: false } },
+    );
+
+    await this.sessionModel.updateMany(
+      { user: user._id, _id: { $ne: sessionId }, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+    );
+
+    return { message: 'Password changed' };
+  }
+
   setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
     res.cookie(ACCESS_COOKIE, accessToken, authCookieOptions(this.accessTtl()));
     res.cookie(REFRESH_COOKIE, refreshToken, authCookieOptions(this.refreshTtl(), REFRESH_COOKIE_PATH));
@@ -267,18 +301,15 @@ async refresh(refreshToken: string | undefined) {
 
 
     /** ACC-05: count a failed login; the 5th consecutive failure locks the account for 15 minutes. */
-  private async recordFailedLogin(user: UserDocument) {
+  private async recordFailedLogin(user: UserDocument): Promise<Date | null> {
     await this.userModel.updateOne({ _id: user._id }, { $inc: { failedLoginAttempts: 1 } });
     // Only matches once the count has reached 5, so concurrent failures lock exactly once.
-    await this.userModel.updateOne(
+    const lockedUntil = new Date(Date.now() + LOCK_MINUTES * 60 * 1000);
+    const result = await this.userModel.updateOne(
       { _id: user._id, failedLoginAttempts: { $gte: MAX_FAILED_LOGINS } },
-      {
-        $set: {
-          failedLoginAttempts: 0,
-          lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60 * 1000),
-        },
-      },
+      { $set: { failedLoginAttempts: 0, lockedUntil } },
     );
+    return result.modifiedCount > 0 ? lockedUntil : null;
   }
 
   private async revokeSession(sessionId: string) {
@@ -320,6 +351,13 @@ async refresh(refreshToken: string | undefined) {
     });
   }
 
+  private passwordError(field: string, message: string) {
+    return new BadRequestException({
+      message: 'Validation failed',
+      errors: { [field]: [message] },
+    });
+  }
+
   private invalidCredentials() {
     return new UnauthorizedException('Invalid email or password');
   }
@@ -328,4 +366,3 @@ async refresh(refreshToken: string | undefined) {
     return new UnauthorizedException('Not authenticated');
   }
 }
-

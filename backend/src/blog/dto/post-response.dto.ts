@@ -1,11 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { PostStatus } from '../schemas/post.schema';
 
-class PostImageResponseDto {
+export class PostImageResponseDto {
   @ApiProperty({ example: '6650f1c2a1b2c3d4e5f60718' })
   id!: string;
 
-  @ApiProperty({ example: '/api/posts/images/4f1c....jpg' })
+  @ApiProperty({ example: '/api/uploads/post/3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b.jpg' })
   url!: string;
 }
 
