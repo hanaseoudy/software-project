@@ -101,7 +101,16 @@ Verification:
 temporary password gets 403 on GET /posts/mine, can change the password, and
 then gets 200.
 ================================================
-================================================
+TASK-23 (ACC-16) - Admin suspends and reactivates users
+Tool: Claude
+Prompt: Help me implement ACC-16 step by step: admin can suspend a registered user (they can't log in, bookings stay) and reactivate them later.
+What AI helped with:
+- suspendAccount / reactivateAccount in admin.service.ts (atomic status update, revoke active sessions on suspend, block suspending admins, 409 for invalid status changes)
+- PATCH /api/admin/accounts/:id/suspend and /reactivate routes with Swagger docs
+- Unit tests in account-status.spec.ts
+What I did:
+- Pasted and reviewed the code, ran tests (29 passed), lint and build
+- Tested all cases in Postman (suspend, suspend again, suspended login, reactivate, suspend admin, login after reactivate)
 Date: 2026-11-17
 Student: Nour Hossam
 Tool: Claude
@@ -145,4 +154,3 @@ Verification:
 13 new unit tests (service and DTO); all 21 admin tests pass. Lint and build
 passed locally. Postman: full list 200 with pagination, search=sara,
 role=moderator, and an invalid role 400.
-================================================
