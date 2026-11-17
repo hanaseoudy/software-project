@@ -1,4 +1,3 @@
-
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
@@ -42,6 +41,8 @@ import {
 import { Currency, CurrencySchema } from '../reference-data/schemas/currency.schema';
 import { ActivitiesController } from './activities.controller';
 import { ActivitiesService } from './activities.service';
+import { TransportCostsController } from './transport-costs.controller';
+import { TransportCostsService } from './transport-costs.service';
 import { ItinerariesController } from './itineraries.controller';
 import { ItinerariesService } from './itineraries.service';
 
@@ -80,7 +81,7 @@ import { ItinerariesService } from './itineraries.service';
       },
     ]),
   ],
-  controllers: [ItinerariesController, ActivitiesController],
-  providers: [ItinerariesService, ActivitiesService],
+  controllers: [ItinerariesController, ActivitiesController, TransportCostsController],
+  providers: [ItinerariesService, ActivitiesService, TransportCostsService],
 })
 export class ItinerariesModule {}
