@@ -193,7 +193,7 @@ export class FlightsService {
     }
 
     return formatFlightWithLocalTimes(
-      await flight.populate(['airline', 'departureAirport', 'arrivalAirport']),
+      await updated.populate(['airline', 'departureAirport', 'arrivalAirport']),
     );
   }
 
