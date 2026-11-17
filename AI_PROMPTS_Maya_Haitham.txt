@@ -627,3 +627,19 @@ the only build errors are the missing local nodemailer install from develop). Ch
 admin-providers.service.ts, admin-reports.service.ts, admin.module.ts, reports.module.ts, and (approved) admin.controller.ts
 and admin-providers.controller.ts to pass the admin id. Nothing was left open.
 ================================================
+================================================
+Date: 2026-11-18
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: HTL-24
+
+Prompt:
+Implement HTL-24: public GET /api/hotels/:id/reviews returning a hotel's average rating, number of ratings
+and its reviews newest first with pagination, following the requirement sheet and project PDF.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed in three passes and built by me (no errors in the
+changed files; the only build errors are the missing local nodemailer install from develop). Changed files:
+backend/src/hotels (hotel-details.controller.ts, hotels.service.ts, two new DTO files).
+Open items: the stored average and count are only kept up to date once HTL-23 (#130) merges; reported in the PR.
+================================================
