@@ -594,3 +594,19 @@ How the output was used:
 I gave the prompts to Claude Code and used the descriptions in my pull
 requests. CLAUDE.md is a local guidance file and is not committed.
 ================================================
+================================================
+Date: 2026-11-17
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-07
+
+Prompt:
+Implement GEN-07: audit log schema, an exported audit service with record(), and the
+admin-only GET /api/admin/audit-logs endpoint, following the requirement sheet and project PDF.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed in three passes and built by me (npm run build, 0 errors).
+Changed files: backend/src/audit-logs (module, service, controller, schema, enums, DTOs; placeholders removed)
+and the AuditLogsModule registration in backend/src/app.module.ts.
+Open items: the record() calls in the admin, providers and reports modules are left to their owners.
+================================================
