@@ -673,6 +673,29 @@ kept as a documented extra route. I reviewed the code and the new tests.
 Verification performed:
 Lint, build and all hotel unit tests passed under Node 24.
 ================================================
+Date: 2026-11-12
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-01 (TASK-64) - Stripe test payments and verified payment outcomes
+Prompt (summary of the conversation):
+I gave AI the project description and the PAY-01 story and asked it to implement PAY-01 on branch
+feature/PAY-01-TASK-64-stripe-payments without depending on unfinished teammate work (FLT-21, FLT-22, HTL-16, HTL-18, PAY-02
+are not merged). I then asked it to check its plan against the requirements sheet and list mismatches.
+Decisions I made: also store failureReason and retryCount (sheet says "only" ID, amount, currency,
+status - to confirm with TA); PAY-01 sets the booking to Confirmed and exposes an onBookingConfirmed
+hook for FLT-23 / HTL-17; charge in USD until PAY-04 merges; block payment until policies are
+accepted (PAY-02); a payment that succeeds after the hold ended leaves the booking unconfirmed
+(not defined by the sheet - to ask TA).
+
+How the output was used:
+AI added POST /api/payments, POST /api/payments/:id/retry, GET /api/payments/:id and
+POST /api/payments/webhook (Stripe signature verified, raw body enabled in main.ts), a Stripe client
+provider, a 60-second sweep that cancels PaymentIntents of expired holds, DTOs, Stripe env
+placeholders in .env.example and unit tests. It reads bookings only through the existing schemas on
+develop. I reviewed the code and tests.
+Verification performed:
+Build and lint passed. 18 new payment unit tests passed (run with NODE_OPTIONS=--experimental-vm-modules
+on Node 25 locally).
 ================================================
 Date: 2026-11-12
 Student: Kenzy
@@ -1289,3 +1312,109 @@ and the payment stays succeeded so PAY-03 can refund it. Verified: build and lin
 pass; full backend suite 885/888 (3 blog failures also fail on develop); real Stripe test mode on a local
 test database: payment confirmed the booking, a payment for a deactivated airline was not confirmed, and a
 live key was refused at startup.
+Date: 2026-11-12
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-03 (TASK-66) - Stripe refunds, status tracking and notifications
+Prompt (summary of the conversation):
+I gave AI the PAY-03 story and asked it to check it against the requirements sheet and project
+description before implementing, on branch feature/PAY-03-TASK-66-stripe-refunds (built on my PAY-01
+branch with my GEN-01 notifications merged in). Decisions: the cancellation tasks (FLT-26, HTL-21,
+FLT-06) compute the refund amount from the tiers and pass it with the applied tier, because the sheet
+says the user sees the amount before confirming; refunds reference bookings (no hotel schema change);
+the user is notified once, when Stripe returns the final result.
+
+How the output was used:
+AI added RefundsService.issueRefund (Stripe Refunds API, Pending record, validation that the booking is
+cancelled, amount > 0 and <= paid, one refund per booking), refund.updated / refund.failed handling in
+the existing Stripe webhook (Refunded / Failed, payment marked Refunded or Partially Refunded), an
+in-app notification via NotificationsService, GET /api/refunds/:id, findByBooking for booking details,
+and unit tests. I reviewed the code and tests.
+Verification performed:
+Build and lint passed. 13 new refund tests and the 18 payment tests passed (NODE_OPTIONS=--experimental-vm-modules
+on Node 25 locally).
+
+Date: 2026-11-12
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-01 (TASK-64) - follow-up review against the sheet and project description
+Prompt (summary of the conversation):
+I asked AI whether PAY-01 fully covers the requirements sheet and the project description, and to fix
+whatever did not match 100%.
+
+How the output was used:
+AI fixed: one payment per booking (payment ID = booking ID, atomic PaymentIntent attach) so a double
+click can never charge twice; the flight amount is fares + baggage (FLT-21 total); failureReason and
+retryCount are no longer written, matching "only the Stripe payment ID, amount, currency and status are
+stored" - the failure message is read live from Stripe for GET /api/payments/:id. I reviewed the
+changes and the updated tests.
+Verification performed:
+Build and lint passed; 22 payment unit tests passed.
+
+Date: 2026-11-12
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-03 (TASK-66) - follow-up review against the sheet and project description
+Prompt (summary of the conversation):
+I asked AI whether PAY-03 fully covers the requirements sheet and the project description, and to fix
+whatever did not match 100%.
+
+How the output was used:
+AI added: automatic full refund when money is taken but the booking is not confirmed (paid after the
+hold ended or wrong amount), so the booking stays unconfirmed (PDF 6.4) and no money is kept;
+the booking's refund status (Pending / Refunded / Failed) is returned with GET /api/payments/:id
+(payment ID = booking ID) so users can inspect payment and refund status (PDF 6.4); a re-check of
+refunds still Pending after 10 minutes so none stays Pending if a webhook is missed. I reviewed the
+changes and tests.
+Verification performed:
+Build and lint passed; 39 payment/refund unit tests passed.
+================================================
+Date: 2026-11-18
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-03 (TASK-66) - rebuild on PAY-01 #71 after review (dependencies PAY-01, FLT-09, HTL-10, GEN-01)
+Prompt (summary of the conversation):
+I gave AI the review comments on PR #72, the project description and the PAY-03 dependencies (PAY-01, FLT-09,
+HTL-10, GEN-01) and asked it to rebuild PAY-03 on the merged PAY-01 (#71) and check every point is met.
+
+How the output was used:
+AI merged develop into the PAY-03 branch, kept #71's PAY-01 code (create/retry/webhook/confirmation,
+payment schema, sk_test-only Stripe provider, onBookingConfirmed hook used by HTL-17 #90) and added the
+refund parts on top: RefundsService, RefundsController (GET /api/refunds/:id), refund.updated/refund.failed
+webhook cases, the refund status in GET /api/payments/:id and the every-minute re-check of Pending refunds.
+refundUnconfirmedPayment refunds in full any money taken without a confirmed booking (amount mismatch,
+hold ended, provider deactivated). The double-refund race is fixed with an atomic claim on the payment
+(refundInProgress via findOneAndUpdate), cleared only when the refund fails (or when the refund record could
+not be saved before Stripe was called) so it can be retried. A shared
+refundQuote() uses FLT-09's refundPercentFor with the airline tiers (FLT-09) or the hotel tiers (HTL-10),
+100% for provider-initiated cancellations, and returns the tier used as appliedPolicy; this is documented
+in IssueRefundInput for FLT-26, HTL-21 and FLT-06. Refund results notify the user (GEN-01). I reviewed it.
+Verification performed:
+Backend build and lint passed; 78 payment tests passed (including two simultaneous refunds, a webhook sent
+twice, retry after a failed refund, and the FLT-09/HTL-10 tier calculation); full backend suite 931/934
+(the 3 failures are in blog.service.spec.ts and also fail on develop). Real Stripe test mode on a local test
+database: a payment for a deactivated airline was refunded in full automatically (Refunded, notification
+sent, shown in GET /api/payments/:id and GET /api/refunds/:id); a cancelled booking refunded at the airline's
+80% tier ($199.99 of $249.99) with two simultaneous requests produced exactly one Stripe refund.
+================================================
+Date: 2026-11-18
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-03 (TASK-66) / PAY-01 - duplicate payment_intent.succeeded race (review fix)
+Prompt (summary of the conversation):
+The reviewer found that if Stripe delivers the same payment_intent.succeeded twice at the same moment, both
+calls see the payment as pending: one confirms the booking and the other refunds 100% as "hold ended", and a
+re-sent event after a refund resets the payment from refunded to succeeded. I asked AI to fix it.
+
+How the output was used:
+AI replaced the findOne + save() in onSucceeded with one atomic findOneAndUpdate that only matches a payment
+whose status is pending, failed or expired and sets it to succeeded with paidAt; if nothing matches the event
+is ignored. So only one delivery can confirm or refund, and a handled payment (succeeded, refunded, partially
+refunded) can never be reset. The test mock of findOneAndUpdate behaves like MongoDB's atomic update. I
+reviewed it.
+Verification performed:
+83 payment tests passed (5 new: two simultaneous deliveries confirm once and refund nothing, re-sent events
+leave succeeded/refunded/partially refunded payments unchanged, the exact atomic filter); full backend suite
+937/940 (the 3 failures are in blog.service.spec.ts and also fail on develop); build and lint passed. On a
+real local MongoDB the same signed event delivered twice at the same moment left the booking Confirmed, the
+payment succeeded and no refund; a re-sent event after a refund kept the payment refunded.

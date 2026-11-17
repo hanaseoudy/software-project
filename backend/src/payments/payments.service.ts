@@ -25,6 +25,7 @@ import {
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentResponseDto, PaymentSessionResponseDto } from './dto/payment-response.dto';
 import { BookingType, PaymentStatus } from './enums/payment.enums';
+import { RefundsService } from './refunds.service';
 import { Payment, PaymentDocument } from './schemas/payment.schema';
 import { STRIPE_CLIENT } from './stripe.provider';
 
@@ -77,6 +78,7 @@ export class PaymentsService {
     @Inject(STRIPE_CLIENT) private readonly stripe: Stripe | null,
     private readonly config: ConfigService,
     private readonly policies: PoliciesService,
+    private readonly refundsService: RefundsService,
   ) {}
 
   /**
@@ -166,6 +168,8 @@ export class PaymentsService {
   async findOne(userId: string, paymentId: string): Promise<PaymentResponseDto> {
     const payment = await this.findOwnPayment(userId, paymentId);
     const response = this.toResponse(payment);
+    // PAY-03: the booking's refund status (Pending, Refunded, Failed) is shown with its payment.
+    response.refund = (await this.refundsService.findByBooking(payment.bookingType, payment.bookingId)) ?? undefined;
     if (payment.status === PaymentStatus.FAILED && payment.stripePaymentIntentId && this.stripe) {
       try {
         const intent = await this.stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
@@ -211,8 +215,13 @@ export class PaymentsService {
           { $set: { status: PaymentStatus.EXPIRED } },
         );
         break;
+      case 'refund.updated':
+      case 'refund.failed':
+        // PAY-03: Stripe reports the final refund result.
+        await this.refundsService.handleStripeRefund(event.data.object);
+        break;
       default:
-        break; // other events are not used by PAY-01
+        break; // other events are not used by PAY-01 / PAY-03
     }
   }
 
@@ -252,23 +261,36 @@ export class PaymentsService {
   }
 
   private async onSucceeded(intent: Stripe.PaymentIntent, paidAt: Date): Promise<void> {
-    const payment = await this.paymentModel.findOne({ stripePaymentIntentId: intent.id });
-    if (!payment || payment.status === PaymentStatus.SUCCEEDED) return; // unknown or already handled
-
     // The money has been taken, so the payment is recorded as succeeded either way.
-    payment.status = PaymentStatus.SUCCEEDED;
-    payment.paidAt = paidAt;
-    await payment.save();
+    // One atomic update: if Stripe delivers the same event twice at the same moment, only one call
+    // wins, so a booking is never both confirmed and refunded. A re-sent event after the payment was
+    // already handled (succeeded, refunded, ...) matches nothing, so it can't reset the status.
+    const payment = await this.paymentModel.findOneAndUpdate(
+      {
+        stripePaymentIntentId: intent.id,
+        status: { $in: [PaymentStatus.PENDING, PaymentStatus.FAILED, PaymentStatus.EXPIRED] },
+      },
+      { $set: { status: PaymentStatus.SUCCEEDED, paidAt } },
+      { returnDocument: 'after' },
+    );
+    if (!payment) return; // unknown, or already handled
 
     const amountMatches =
       intent.amount_received === this.toMinorUnits(payment.amount) &&
       intent.currency.toUpperCase() === payment.currency;
     // Confirm only a booking that is still Pending Payment and was paid within its hold.
-    if (!amountMatches) {
-      this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed (amount mismatch)`);
-      return;
+    const notConfirmedReason = amountMatches ? await this.confirmBooking(payment, paidAt) : 'amount mismatch';
+    if (notConfirmedReason) {
+      if (!amountMatches) {
+        this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed (amount mismatch)`);
+      }
+      // PAY-03 / project description 6.4: money taken without a confirmed booking is refunded in full.
+      await this.refundsService.refundUnconfirmedPayment(
+        payment,
+        intent.amount_received / 100,
+        `Booking not confirmed: ${notConfirmedReason}`,
+      );
     }
-    await this.confirmBooking(payment, paidAt);
   }
 
   private async onFailed(intent: Stripe.PaymentIntent): Promise<void> {
@@ -331,16 +353,17 @@ export class PaymentsService {
   /**
    * Confirms the booking, then runs the after-confirmation handlers.
    * Not confirmed when the provider was deactivated (ACC-15) or the hold ended; the payment
-   * stays recorded as succeeded so it can be refunded (PAY-03).
+   * stays recorded as succeeded and is refunded in full (PAY-03).
+   * Returns null when confirmed, otherwise the reason it was not.
    */
-  private async confirmBooking(payment: PaymentDocument, paidAt: Date): Promise<boolean> {
+  private async confirmBooking(payment: PaymentDocument, paidAt: Date): Promise<string | null> {
     if (!(await this.providerIsActive(payment))) {
       this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed (provider deactivated)`);
-      return false;
+      return 'provider deactivated';
     }
     if (!(await this.confirmBookingStatus(payment, paidAt))) {
       this.logger.warn(`Payment ${payment.id} succeeded but the booking was not confirmed (hold ended)`);
-      return false;
+      return 'hold ended';
     }
 
     const event: BookingConfirmedEvent = {
@@ -356,7 +379,7 @@ export class PaymentsService {
         this.logger.error(`After-confirmation handler failed for payment ${payment.id}: ${(error as Error).message}`);
       }
     }
-    return true;
+    return null;
   }
 
   /**

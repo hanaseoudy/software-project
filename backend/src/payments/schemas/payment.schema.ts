@@ -76,6 +76,10 @@ export class Payment {
 
   @Prop({ type: Object })
   policySnapshot?: Record<string, any>;
+
+  /** PAY-03: set atomically while a refund is Pending or Refunded, so a payment is never refunded twice. */
+  @Prop({ default: false })
+  refundInProgress?: boolean;
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
