@@ -4,6 +4,9 @@ import { AuthModule } from '../auth/auth.module';
 import { Airline, AirlineSchema } from '../airlines/schemas/airline.schema';
 import { Airport, AirportSchema } from '../airports/schemas/airport.schema';
 import { Flight, FlightSchema } from '../flights/schemas/flight.schema';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { PaymentsModule } from '../payments/payments.module';
+import { FlightBookingConfirmationService } from './flight-booking-confirmation.service';
 import { FlightBookingsController } from './flight-bookings.controller';
 import { FlightBookingsService } from './flight-bookings.service';
 import { FlightCompletionService } from './flight-completion.service';
@@ -16,6 +19,8 @@ import {
 @Module({
   imports: [
     AuthModule,
+    NotificationsModule,
+    PaymentsModule, // PaymentsService: FLT-23 registers on its booking-confirmed hook
     MongooseModule.forFeature([
       { name: Flight.name, schema: FlightSchema },
       { name: Airline.name, schema: AirlineSchema },
@@ -28,7 +33,8 @@ import {
     FlightBookingsService,
     FlightHoldExpiryService,
     FlightCompletionService,
+    FlightBookingConfirmationService,
   ],
-  exports: [FlightBookingsService],
+  exports: [FlightBookingsService, FlightBookingConfirmationService],
 })
 export class FlightBookingsModule {}

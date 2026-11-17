@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -95,5 +96,45 @@ export class FlightBookingsController {
   @ApiNotFoundResponse({ description: 'Booking not found (or not yours)' })
   summary(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.flightBookingsService.getSummary(req.user!.sub, id);
+  }
+
+  @Get(':id/confirmation')
+  @ApiOperation({
+    summary: 'FLT-23: confirmation page data (booking summary + booking reference)',
+    description:
+      'Only the owner can read it, and only after payment confirmed the booking (CONFIRMED or COMPLETED).',
+  })
+  @ApiParam({ name: 'id', description: 'Flight booking id' })
+  @ApiOkResponse({ description: 'Booking summary with bookingReference (e.g. FLT-7K3M9QXA)' })
+  @ApiBadRequestResponse({ description: 'Invalid booking ID' })
+  @ApiUnauthorizedResponse({ description: 'Not authenticated' })
+  @ApiNotFoundResponse({ description: 'Booking not found (or not yours)' })
+  @ApiConflictResponse({ description: 'Booking is not confirmed yet' })
+  confirmation(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.flightBookingsService.getConfirmation(req.user!.sub, id);
+  }
+
+  @Get(':id/e-ticket')
+  @ApiOperation({ summary: 'FLT-23: download the e-ticket (PDF) of a confirmed booking' })
+  @ApiParam({ name: 'id', description: 'Flight booking id' })
+  @ApiOkResponse({
+    description: 'PDF file',
+    content: { 'application/pdf': { schema: { type: 'string', format: 'binary' } } },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid booking ID' })
+  @ApiUnauthorizedResponse({ description: 'Not authenticated' })
+  @ApiNotFoundResponse({ description: 'Booking not found (or not yours)' })
+  @ApiConflictResponse({ description: 'Booking is not confirmed yet' })
+  async eTicket(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { filename, pdf } = await this.flightBookingsService.getETicket(req.user!.sub, id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    });
+    return new StreamableFile(pdf);
   }
 }
