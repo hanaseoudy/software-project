@@ -1396,3 +1396,25 @@ twice, retry after a failed refund, and the FLT-09/HTL-10 tier calculation); ful
 database: a payment for a deactivated airline was refunded in full automatically (Refunded, notification
 sent, shown in GET /api/payments/:id and GET /api/refunds/:id); a cancelled booking refunded at the airline's
 80% tier ($199.99 of $249.99) with two simultaneous requests produced exactly one Stripe refund.
+================================================
+Date: 2026-11-18
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-03 (TASK-66) / PAY-01 - duplicate payment_intent.succeeded race (review fix)
+Prompt (summary of the conversation):
+The reviewer found that if Stripe delivers the same payment_intent.succeeded twice at the same moment, both
+calls see the payment as pending: one confirms the booking and the other refunds 100% as "hold ended", and a
+re-sent event after a refund resets the payment from refunded to succeeded. I asked AI to fix it.
+
+How the output was used:
+AI replaced the findOne + save() in onSucceeded with one atomic findOneAndUpdate that only matches a payment
+whose status is pending, failed or expired and sets it to succeeded with paidAt; if nothing matches the event
+is ignored. So only one delivery can confirm or refund, and a handled payment (succeeded, refunded, partially
+refunded) can never be reset. The test mock of findOneAndUpdate behaves like MongoDB's atomic update. I
+reviewed it.
+Verification performed:
+83 payment tests passed (5 new: two simultaneous deliveries confirm once and refund nothing, re-sent events
+leave succeeded/refunded/partially refunded payments unchanged, the exact atomic filter); full backend suite
+937/940 (the 3 failures are in blog.service.spec.ts and also fail on develop); build and lint passed. On a
+real local MongoDB the same signed event delivered twice at the same moment left the booking Confirmed, the
+payment succeeded and no refund; a re-sent event after a refund kept the payment refunded.

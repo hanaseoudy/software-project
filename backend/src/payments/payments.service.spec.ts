@@ -85,12 +85,20 @@ function setup(
     findById: findByIdMock(booking, hotelWithProvider),
     updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
   };
-  const paymentModel = {
+  const paymentModel: any = {
     findOne: jest.fn().mockResolvedValue(null),
     findById: jest.fn().mockResolvedValue(null),
     find: jest.fn().mockResolvedValue([]),
     create: jest.fn().mockImplementation(async (data: object) => makePayment({ ...data, stripePaymentIntentId: undefined })),
     updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    // Behaves like MongoDB's atomic findOneAndUpdate on the payment that findOne() returns:
+    // it only matches when the status is in the filter, and the first caller changes it.
+    findOneAndUpdate: jest.fn(async (filter: any, update: any) => {
+      const payment = await paymentModel.findOne(filter);
+      if (!payment || !filter.status.$in.includes(payment.status)) return null;
+      Object.assign(payment, update.$set);
+      return payment;
+    }),
   };
   const stripe = {
     paymentIntents: {
@@ -373,6 +381,65 @@ describe('PaymentsService (PAY-01)', () => {
       expect(payment.status).toBe(PaymentStatus.SUCCEEDED);
       expect(bookingModel.updateOne).toHaveBeenCalled();
       expect(second).toHaveBeenCalled(); // the other handlers still run
+    });
+
+    describe('the same payment_intent.succeeded delivered more than once', () => {
+      const succeededEvent = {
+        type: 'payment_intent.succeeded',
+        created: now,
+        data: { object: { id: 'pi_1', amount_received: 12050, currency: 'usd' } },
+      };
+
+      it('two deliveries at the same moment confirm the booking once and refund nothing', async () => {
+        const { service, stripe, paymentModel, bookingModel, refunds } = setup({ webhookSecret: 'whsec' });
+        const payment = makePayment();
+        paymentModel.findOne.mockResolvedValue(payment);
+        stripe.webhooks.constructEvent.mockReturnValue(succeededEvent);
+        // The second update finds the booking already confirmed.
+        bookingModel.updateOne.mockResolvedValueOnce({ modifiedCount: 1 }).mockResolvedValue({ modifiedCount: 0 });
+
+        await Promise.all([
+          service.handleWebhook(Buffer.from('{}'), 'sig'),
+          service.handleWebhook(Buffer.from('{}'), 'sig'),
+        ]);
+
+        expect(bookingModel.updateOne).toHaveBeenCalledTimes(1);
+        expect(refunds.refundUnconfirmedPayment).not.toHaveBeenCalled();
+        expect(payment.status).toBe(PaymentStatus.SUCCEEDED);
+      });
+
+      it.each([PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED])(
+        'a re-sent event does not change a %s payment',
+        async (status) => {
+          const { service, stripe, paymentModel, bookingModel, refunds } = setup({ webhookSecret: 'whsec' });
+          const payment = makePayment({ status });
+          paymentModel.findOne.mockResolvedValue(payment);
+          stripe.webhooks.constructEvent.mockReturnValue(succeededEvent);
+
+          await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+          expect(payment.status).toBe(status);
+          expect(bookingModel.updateOne).not.toHaveBeenCalled();
+          expect(refunds.refundUnconfirmedPayment).not.toHaveBeenCalled();
+        },
+      );
+
+      it('records the payment with one atomic update limited to pending, failed or expired', async () => {
+        const { service, stripe, paymentModel } = setup({ webhookSecret: 'whsec' });
+        paymentModel.findOne.mockResolvedValue(makePayment());
+        stripe.webhooks.constructEvent.mockReturnValue(succeededEvent);
+
+        await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+        expect(paymentModel.findOneAndUpdate).toHaveBeenCalledWith(
+          {
+            stripePaymentIntentId: 'pi_1',
+            status: { $in: [PaymentStatus.PENDING, PaymentStatus.FAILED, PaymentStatus.EXPIRED] },
+          },
+          { $set: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(now * 1000) } },
+          { returnDocument: 'after' },
+        );
+      });
     });
 
     describe('refunds for money taken without a confirmed booking (PAY-03)', () => {

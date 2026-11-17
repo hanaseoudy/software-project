@@ -261,13 +261,19 @@ export class PaymentsService {
   }
 
   private async onSucceeded(intent: Stripe.PaymentIntent, paidAt: Date): Promise<void> {
-    const payment = await this.paymentModel.findOne({ stripePaymentIntentId: intent.id });
-    if (!payment || payment.status === PaymentStatus.SUCCEEDED) return; // unknown or already handled
-
     // The money has been taken, so the payment is recorded as succeeded either way.
-    payment.status = PaymentStatus.SUCCEEDED;
-    payment.paidAt = paidAt;
-    await payment.save();
+    // One atomic update: if Stripe delivers the same event twice at the same moment, only one call
+    // wins, so a booking is never both confirmed and refunded. A re-sent event after the payment was
+    // already handled (succeeded, refunded, ...) matches nothing, so it can't reset the status.
+    const payment = await this.paymentModel.findOneAndUpdate(
+      {
+        stripePaymentIntentId: intent.id,
+        status: { $in: [PaymentStatus.PENDING, PaymentStatus.FAILED, PaymentStatus.EXPIRED] },
+      },
+      { $set: { status: PaymentStatus.SUCCEEDED, paidAt } },
+      { returnDocument: 'after' },
+    );
+    if (!payment) return; // unknown, or already handled
 
     const amountMatches =
       intent.amount_received === this.toMinorUnits(payment.amount) &&
