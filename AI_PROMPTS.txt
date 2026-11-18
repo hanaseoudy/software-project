@@ -1449,3 +1449,29 @@ Verification:
 New unit tests (17) pass and tsc and oxlint show no errors in the changed files.
 Tested in Postman and Swagger with an admin account (see the PR).
 ================================================
+Date: 2026-11-18
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: BON-01 (Accounts & Admin) - admin analytics: bookings and revenue per provider (bonus)
+
+Prompt (summary of the conversation):
+Help me implement BON-01: the system shall provide an admin analytics dashboard
+showing bookings and revenue per provider over a selected period. Dependency: ACC-17.
+
+How the output was used:
+Used the generated code after reviewing it against BON-01 and the ACC-17 booking
+overview. New admin-only endpoint GET /admin/analytics/providers with optional type
+(flight = airlines, hotel = hotels), from and to (whole days, UTC, by the date the
+booking was created; no dates = all time) and page (10 per page, GEN-05). One row per
+provider with bookings, cancelled, revenue and average booking value, highest revenue
+first, plus a summary of all providers of the selection. Bookings and revenue count
+confirmed and completed bookings only; cancelled bookings are counted separately and
+are not revenue. A flight booking belongs to the airline of its outbound flight, and
+the flight amount is seat fares plus baggage fees (the amount PAY-01 charges). The
+numbers are calculated in the database (aggregation), so no booking is loaded one by
+one. The endpoint only reads data. 401 without login, 403 for non-admins.
+
+Verification:
+New unit tests (16) pass, and tsc and oxlint show no errors in the changed files.
+Tested in Postman (see the PR).
+================================================
