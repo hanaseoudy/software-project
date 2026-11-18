@@ -180,4 +180,13 @@ describe('newestFirst', () => {
     ];
     expect(rows.sort(newestFirst).map((r) => r.id)).toEqual(['c', 'b', 'a']);
   });
+
+  it('puts rows without createdAt (old data) last instead of failing', () => {
+    const rows = [
+      { id: 'x', createdAt: null } as OverviewRow,
+      row('a', '2026-11-01'),
+      { id: 'y', createdAt: null } as OverviewRow,
+    ];
+    expect(rows.sort(newestFirst).map((r) => r.id)).toEqual(['a', 'y', 'x']);
+  });
 });

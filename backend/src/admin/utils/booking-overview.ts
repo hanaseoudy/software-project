@@ -21,7 +21,7 @@ export interface OverviewRow {
   amount: number;
   currency: string;
   status: string;
-  createdAt: Date;
+  createdAt: Date | null;
 }
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -67,7 +67,7 @@ export interface HotelBookingLean {
   totalPrice: number;
   currency: string;
   status: string;
-  createdAt: Date;
+  createdAt?: Date;
 }
 
 export function toHotelRow(b: HotelBookingLean): OverviewRow {
@@ -82,7 +82,7 @@ export function toHotelRow(b: HotelBookingLean): OverviewRow {
     amount: round2(b.totalPrice),
     currency: b.currency,
     status: b.status,
-    createdAt: b.createdAt,
+    createdAt: b.createdAt ?? null,
   };
 }
 
@@ -103,7 +103,7 @@ export interface FlightBookingLean {
   baggageFees?: number;
   currency: string;
   status: string;
-  createdAt: Date;
+  createdAt?: Date;
 }
 
 export function toFlightRow(b: FlightBookingLean): OverviewRow {
@@ -124,12 +124,13 @@ export function toFlightRow(b: FlightBookingLean): OverviewRow {
     amount: round2(round2(b.totalPrice) + round2(b.baggageFees ?? 0)),
     currency: b.currency,
     status: b.status,
-    createdAt: b.createdAt,
+    createdAt: b.createdAt ?? null,
   };
 }
 
 /** Newest first; the id breaks ties so the order is stable between pages. */
 export function newestFirst(a: OverviewRow, b: OverviewRow): number {
-  const diff = b.createdAt.getTime() - a.createdAt.getTime();
+  // Old rows written without timestamps have no createdAt: they count as oldest.
+  const diff = (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0);
   return diff !== 0 ? diff : b.id.localeCompare(a.id);
 }
