@@ -202,3 +202,22 @@ Broader unit suite: 621 passed, with three pre-existing BlogService failures.
 Shared MongoDB Atlas was not modified.
 
 ================================================
+
+Date: 2026-11-19
+Student: Seif Allam
+AI Tool: Codex
+Requirement: ITN-12 — Activity Image Attachment and Removal (ITN-10, GEN-08)
+
+Prompt:
+Inspect the existing activity and GEN-08 upload workflows, then implement owner-only
+activity image attachment and removal using shared storage. Preserve existing image
+URLs and ITN-10 CRUD behavior. Test authorization, media validation, limits,
+transaction failures and cleanup using mocks or an isolated environment.
+
+How the output was used:
+Added the approved activity detail and image routes, Swagger request contracts,
+reuse of GEN-08 validation and storage, transaction-protected image references,
+and post-commit cleanup for unreferenced activity files. Added service and HTTP
+tests covering write retries, uncertain commits, legacy URLs and request validation.
+
+================================================

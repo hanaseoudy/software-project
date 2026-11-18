@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -20,9 +21,13 @@ import {
 import { CreateActivityDto } from './dto/create-activity.dto';
 import { UpdateActivityDto } from './dto/update-activity.dto';
 import { ActivityResponseDto } from './dto/activity-response.dto';
+import { ImageCategory } from '../uploads/uploads.constants';
+import { UploadsService, type UploadedImage } from '../uploads/uploads.service';
 
 @Injectable()
 export class ActivitiesService {
+  private readonly logger = new Logger(ActivitiesService.name);
+
   constructor(
     @InjectModel(Itinerary.name)
     private readonly itineraries: Model<ItineraryDocument>,
@@ -33,6 +38,7 @@ export class ActivitiesService {
     @InjectModel(Currency.name)
     private readonly currencies: Model<CurrencyDocument>,
     @InjectConnection() private readonly connection: Connection,
+    private readonly uploads: UploadsService,
   ) {}
 
   private objectId(id: string, field: string): Types.ObjectId {
@@ -110,7 +116,12 @@ export class ActivitiesService {
           );
         await new Promise((resolve) => setTimeout(resolve, 50 * 2 ** attempt));
       } finally {
-        await session.endSession();
+        await session.endSession().catch((error) => {
+          this.logger.error(
+            'Could not close activity transaction session',
+            error,
+          );
+        });
       }
     }
     throw new ConflictException(
@@ -192,17 +203,30 @@ export class ActivitiesService {
     return { dayId: activity.dayId, itineraryId: day.itineraryId };
   }
 
-  async update(userId: string, id: string, dto: UpdateActivityDto) {
+  async findOne(userId: string, id: string) {
     const activityId = this.objectId(id, 'activity');
-    if (
-      ![dto.name, dto.description, dto.time, dto.cost, dto.currency].some(
-        (value) => value !== undefined,
-      )
-    ) {
-      throw new BadRequestException(
-        'Provide at least one editable activity field',
-      );
-    }
+    const location = await this.locate(activityId);
+    const owned = await this.itineraries.exists({
+      _id: location.itineraryId,
+      userId: new Types.ObjectId(userId),
+    });
+    if (!owned)
+      throw new NotFoundException('Activity or itinerary day not found');
+    const activity = await this.activities.findOne({
+      _id: activityId,
+      dayId: location.dayId,
+    });
+    if (!activity)
+      throw new NotFoundException('Activity or itinerary day not found');
+    return ActivityResponseDto.from(activity);
+  }
+
+  private async withOwnedActivity<T>(
+    userId: string,
+    id: string,
+    work: (activity: ActivityDocument, session: ClientSession) => Promise<T>,
+  ) {
+    const activityId = this.objectId(id, 'activity');
     const location = await this.locate(activityId);
     return this.withParent(userId, location.itineraryId, async (session) => {
       await this.dayExists(location.dayId, location.itineraryId, session);
@@ -211,6 +235,91 @@ export class ActivitiesService {
         .session(session);
       if (!activity)
         throw new NotFoundException('Activity or itinerary day not found');
+      return work(activity, session);
+    });
+  }
+
+  async addImage(userId: string, id: string, image: UploadedImage | undefined) {
+    const category = ImageCategory.ACTIVITY;
+    let storedUrl: string | undefined;
+    try {
+      return await this.withOwnedActivity(
+        userId,
+        id,
+        async (activity, session) => {
+          // A retried transaction loads the latest references but reuses its file.
+          if (storedUrl === undefined) {
+            [storedUrl] = await this.uploads.saveForOwner(
+              image ? [image] : undefined,
+              category,
+              activity.images,
+            );
+          } else {
+            this.uploads.assertWithinLimit(category, activity.images.length, 1);
+          }
+          if (activity.images.includes(storedUrl))
+            throw new ConflictException('Image is already attached');
+          activity.images.push(storedUrl);
+          await activity.save({ session });
+          return { url: storedUrl };
+        },
+      );
+    } catch (error) {
+      if (storedUrl) {
+        if (error instanceof ServiceUnavailableException) {
+          this.logger.warn(
+            `Could not confirm attachment of activity image ${storedUrl}`,
+          );
+        } else {
+          await this.cleanUnreferencedImage(storedUrl);
+        }
+      }
+      throw error;
+    }
+  }
+
+  async removeImage(userId: string, id: string, url: string) {
+    const activity = await this.withOwnedActivity(
+      userId,
+      id,
+      async (current, session) => {
+        if (!current.images.includes(url))
+          throw new NotFoundException('Image attachment not found');
+        current.images = current.images.filter((image) => image !== url);
+        await current.save({ session });
+        return ActivityResponseDto.from(current);
+      },
+    );
+    await this.cleanUnreferencedImage(url);
+    return activity;
+  }
+
+  private async cleanUnreferencedImage(url: string) {
+    if (!this.uploads.isStoredUrl(ImageCategory.ACTIVITY, url)) return;
+    try {
+      // New attachments always get fresh URLs. Keep shared legacy references live.
+      const referenced = await this.activities
+        .exists({ images: url })
+        .read('primary')
+        .readConcern('majority');
+      if (!referenced) await this.uploads.deleteByUrl(url);
+    } catch (error) {
+      this.logger.error(`Could not clean up activity image ${url}`, error);
+    }
+  }
+
+  async update(userId: string, id: string, dto: UpdateActivityDto) {
+    if (
+      ![dto.name, dto.description, dto.time, dto.cost, dto.currency].some(
+        (value) => value !== undefined,
+      )
+    ) {
+      this.objectId(id, 'activity');
+      throw new BadRequestException(
+        'Provide at least one editable activity field',
+      );
+    }
+    return this.withOwnedActivity(userId, id, async (activity, session) => {
       const cost =
         dto.cost === undefined ? activity.cost : (dto.cost ?? undefined);
       // Clearing cost also clears currency, regardless of previous values.
