@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import {
   ApiBadRequestResponse,
@@ -18,6 +18,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
+import { CancelFlightBookingDto } from './dto/cancel-flight-booking.dto';
+import { FlightCancellationService } from './flight-cancellation.service';
 import { HoldFlightBookingDto } from './dto/hold-flight-booking.dto';
 import { FlightBookingsService } from './flight-bookings.service';
 
@@ -26,7 +28,10 @@ import { FlightBookingsService } from './flight-bookings.service';
 @UseGuards(JwtAuthGuard)
 @Controller('flight-bookings')
 export class FlightBookingsController {
-  constructor(private readonly flightBookingsService: FlightBookingsService) {}
+  constructor(
+    private readonly flightBookingsService: FlightBookingsService,
+    private readonly flightCancellationService: FlightCancellationService,
+  ) {}
 
   @Post('hold')
   @UseGuards(RolesGuard)
@@ -136,5 +141,65 @@ export class FlightBookingsController {
       'Content-Disposition': `attachment; filename="${filename}"`,
     });
     return new StreamableFile(pdf);
+  }
+
+  @Get(':id/cancellation-quote')
+  @ApiOperation({
+    summary: 'FLT-26: refund amount the user would get if they cancel now',
+    description:
+      'Computed from the airline cancellation tiers (FLT-09) and the days left until departure. Only for your own CONFIRMED booking before departure.',
+  })
+  @ApiParam({ name: 'id', description: 'Flight booking id' })
+  @ApiOkResponse({
+    description: 'Refund preview',
+    schema: {
+      example: {
+        bookingId: '6afce9de50d54970bd83ecf8',
+        departureTime: '2026-12-05T10:00:00.000Z',
+        paidAmount: 120,
+        currency: 'USD',
+        refundAmount: 60,
+        refundPercent: 50,
+        appliedPolicy: {
+          source: 'FLT-09 airline cancellation tiers',
+          daysRemaining: 4,
+          daysBeforeDeparture: 3,
+          refundPercent: 50,
+        },
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid booking ID' })
+  @ApiUnauthorizedResponse({ description: 'Not authenticated' })
+  @ApiNotFoundResponse({ description: 'Booking not found (or not yours)' })
+  @ApiConflictResponse({
+    description: 'Booking is not confirmed, or the flight already departed',
+  })
+  cancellationQuote(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.flightCancellationService.getQuote(req.user!.sub, id);
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'FLT-26: cancel your own CONFIRMED flight booking before departure (refund by airline tiers)',
+    description:
+      'Send { "confirm": true } after viewing GET :id/cancellation-quote. The booking becomes CANCELLED, its seats return to inventory and a refund is created (PAY-03).',
+  })
+  @ApiParam({ name: 'id', description: 'Flight booking id' })
+  @ApiOkResponse({ description: 'Booking cancelled, with the refund created' })
+  @ApiBadRequestResponse({ description: 'Invalid booking ID or confirm is not true' })
+  @ApiUnauthorizedResponse({ description: 'Not authenticated' })
+  @ApiNotFoundResponse({ description: 'Booking not found (or not yours)' })
+  @ApiConflictResponse({
+    description: 'Booking is not confirmed, or the flight already departed',
+  })
+  cancel(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: CancelFlightBookingDto,
+  ) {
+    return this.flightCancellationService.cancel(req.user!.sub, id, dto);
   }
 }
