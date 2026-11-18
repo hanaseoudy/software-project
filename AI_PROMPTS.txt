@@ -1483,3 +1483,41 @@ Verification:
 New unit tests (18) pass and tsc and oxlint show no errors in the changed files.
 Not tested end to end against Stripe; the refund call is covered with mocks.
 ================================================
+Date: 2026-11-18
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-27 (TASK-43) - confirmed flight change with fare adjustment (bonus)
+
+Prompt (summary of the conversation):
+Help me implement FLT-27: a registered user can change the date or flight of a
+Confirmed flight booking (same route and cabin), paying any fare difference via
+Stripe or receiving a refund of a lower fare, subject to seat availability.
+Dependencies: FLT-26, FLT-22, PAY-01, PAY-03.
+
+How the output was used:
+Used the generated code after reviewing it against FLT-27 and the existing
+payment code. GET /flight-bookings/:id/change-quote and POST
+/flight-bookings/:id/change (confirm: true) work for the owner's CONFIRMED booking
+with a booking reference, before departure. The new flight must fly the same route
+as the one it replaces (the return flight must depart after the outbound arrives),
+be bookable (scheduled, airline active) and have the booked cabin. The whole
+booking is priced again on the final flights with the FLT-22 / FLT-19 rules and
+compared with the current total. Same or lower price: the change is applied at once
+(seats of the new flights are held atomically, then the old seats go back and the
+new ones become booked) and a lower fare is refunded with a new
+RefundsService.issueFareDifferenceRefund (the payment stays Succeeded, so FLT-26
+still works later). Higher price: the new seats are held for 10 minutes, a separate
+Stripe PaymentIntent for the difference is created (PaymentsService.createFarePayment)
+and the booking only changes when the Stripe webhook reports it paid (checked for
+amount and time; otherwise the payment is refunded and the seats released). Unpaid
+changes expire after 10 minutes (cron). A booking can have one change waiting for
+payment at a time (partial unique index). FLT-26 now refunds from the current
+booking total (capped at the original payment). Checked by me: PAY-01 / PAY-03
+behaviour is unchanged (existing tests still pass).
+
+Verification:
+New unit tests (service, utils, payments and refunds additions) pass, and the full
+suite passes on Node 24 except blog.service.spec, which already failed before this
+change. tsc and oxlint show no errors in the changed files. Not tested end to end
+against Stripe (no keys here): the Stripe calls are covered with mocks.
+================================================

@@ -18,10 +18,10 @@ import { PassengerType } from './schemas/passenger.schema';
 import { BaggageRuleError, calculateLegBaggageFees } from './utils/baggage-fees';
 import { buildETicketPdf } from './utils/e-ticket-pdf';
 import { buildBookingSummary } from './utils/booking-summary';
+import { INFANT_FARE_RATIO } from './utils/flight-change';
 import type { SummaryFlight } from './utils/booking-summary';
 
 export const HOLD_DURATION_MS = 10 * 60 * 1000; // FLT-22: 10-minute hold
-const INFANT_FARE_RATIO = 0.1; // infants pay 10% (see Cabin.price comment)
 
 @Injectable()
 export class FlightBookingsService {
