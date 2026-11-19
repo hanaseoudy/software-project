@@ -122,7 +122,7 @@ Go, and make sure everything is as required. (HTL-20 and HTL-22 both depend only
 on HTL-17, so Claude built them together on one branch.)
 How the output was used:
 Claude read the two requirements and the hotel-bookings module and added three
-read-only endpoints: GET /api/hotel-bookings/mine (a guest's reservations
+read-only endpoints: GET /api/hotel-bookings (a guest's reservations
 grouped as upcoming, past or cancelled, 10 per page, with the size of each
 group), GET /api/hotel-bookings/:id (full details of the guest's own
 reservation, 404 for anyone else's) and GET /api/hotels/:id/reservations (the

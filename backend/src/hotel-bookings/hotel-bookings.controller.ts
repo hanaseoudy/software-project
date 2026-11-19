@@ -156,8 +156,7 @@ export class HotelBookingsController {
     return this.reviewsService.create(req.user?.sub, id, dto);
   }
 
-  // "mine" is declared before ":id" so it is never read as a reservation id.
-  @Get('mine')
+  @Get()
   @UseGuards(RolesGuard)
   @Roles(UserRole.USER)
   @ApiOperation({
