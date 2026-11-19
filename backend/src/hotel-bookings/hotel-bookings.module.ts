@@ -5,6 +5,7 @@ import { HotelsModule } from '../hotels/hotels.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { HotelBookingConfirmationService } from './hotel-booking-confirmation.service';
+import { HotelCancellationService } from './hotel-cancellation.service';
 import { HotelBookingsController } from './hotel-bookings.controller';
 import { HotelReservationsController } from './hotel-reservations.controller';
 import { HotelReservationsService } from './hotel-reservations.service';
@@ -33,6 +34,7 @@ import { RoomLock, RoomLockSchema } from './schemas/room-lock.schema';
   providers: [
     HotelBookingsService,
     HotelReservationsService,
+    HotelCancellationService,
     HotelHoldExpiryService,
     HotelBookingConfirmationService,
     HotelCompletionService,
