@@ -68,11 +68,15 @@ function makeBooking(overrides: Record<string, unknown> = {}) {
 function setup() {
   const bookingModel = {
     findOneAndUpdate: jest.fn(),
-    updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    updateOne: jest
+      .fn()
+      .mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
     find: jest.fn(),
   };
   const flightModel = {
-    updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    updateOne: jest
+      .fn()
+      .mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
   };
   const notificationsService = {
     create: jest.fn().mockResolvedValue(undefined),
@@ -108,7 +112,12 @@ describe('FlightBookingConfirmationService.finalizeConfirmed', () => {
     expect(flightModel.updateOne).toHaveBeenCalledTimes(2);
     expect(flightModel.updateOne).toHaveBeenNthCalledWith(
       1,
-      { _id: outbound },
+      {
+        _id: outbound,
+        cabins: {
+          $elemMatch: { cabinClass: 'ECONOMY', heldSeats: { $gte: 2 } },
+        },
+      },
       { $inc: { 'cabins.$[c].heldSeats': -2, 'cabins.$[c].bookedSeats': 2 } },
       {
         arrayFilters: [
@@ -118,7 +127,12 @@ describe('FlightBookingConfirmationService.finalizeConfirmed', () => {
     );
     expect(flightModel.updateOne).toHaveBeenNthCalledWith(
       2,
-      { _id: inbound },
+      expect.objectContaining({
+        _id: inbound,
+        cabins: {
+          $elemMatch: { cabinClass: 'ECONOMY', heldSeats: { $gte: 2 } },
+        },
+      }),
       expect.anything(),
       expect.anything(),
     );
@@ -187,9 +201,9 @@ describe('FlightBookingConfirmationService.finalizeConfirmed', () => {
       setup();
     bookingModel.findOneAndUpdate.mockResolvedValue(makeBooking());
     flightModel.updateOne
-      .mockResolvedValueOnce({ modifiedCount: 1 }) // outbound converted
-      .mockResolvedValueOnce({ modifiedCount: 0 }) // return fails
-      .mockResolvedValueOnce({ modifiedCount: 1 }); // outbound put back
+      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 }) // outbound converted
+      .mockResolvedValueOnce({ matchedCount: 0, modifiedCount: 1 }) // return fails
+      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 }); // outbound put back
 
     await expect(
       service.finalizeConfirmed(bookingId.toString()),
@@ -197,7 +211,12 @@ describe('FlightBookingConfirmationService.finalizeConfirmed', () => {
 
     expect(flightModel.updateOne).toHaveBeenNthCalledWith(
       3,
-      { _id: outbound },
+      {
+        _id: outbound,
+        cabins: {
+          $elemMatch: { cabinClass: 'ECONOMY', bookedSeats: { $gte: 2 } },
+        },
+      },
       { $inc: { 'cabins.$[c].heldSeats': 2, 'cabins.$[c].bookedSeats': -2 } },
       expect.anything(),
     );
@@ -205,6 +224,22 @@ describe('FlightBookingConfirmationService.finalizeConfirmed', () => {
       { _id: bookingId },
       { $unset: { bookingReference: 1 } },
     );
+    expect(notificationsService.create).not.toHaveBeenCalled();
+  });
+
+  it('fails when no held seats match, even though Mongoose still changes updatedAt', async () => {
+    const { service, bookingModel, flightModel, notificationsService } =
+      setup();
+    bookingModel.findOneAndUpdate.mockResolvedValue(makeBooking());
+    // Nothing matched the $elemMatch filter, but modifiedCount is 1 (updatedAt).
+    flightModel.updateOne.mockResolvedValue({
+      matchedCount: 0,
+      modifiedCount: 1,
+    });
+
+    await expect(
+      service.finalizeConfirmed(bookingId.toString()),
+    ).rejects.toThrow('could not convert 2 held seat(s)');
     expect(notificationsService.create).not.toHaveBeenCalled();
   });
 
