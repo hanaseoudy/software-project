@@ -1618,3 +1618,31 @@ Verification:
 New unit tests (23) pass, and tsc and oxlint show no errors in the new files. A
 sample PDF was rendered and checked visually. Tested in Postman (see the PR).
 ================================================
+Date: 2026-11-18
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: BON-02 (TASK-favourites) - hotel and public-itinerary favourites (bonus)
+
+Prompt (summary of the conversation):
+Help me implement BON-02: a registered user can save hotels and public
+itineraries to a favourites list and view it. Dependencies: HTL-11, ITN-21.
+
+How the output was used:
+Used the generated code after reviewing it against BON-02 and the existing hotel
+(HTL-02) and public itinerary (ITN-20) rules. New favourites module with
+PUT /favourites/:type/:id (save; saving twice changes nothing), DELETE
+/favourites/:type/:id and GET /favourites (newest first, 10 per page with GEN-05,
+optional ?type=hotel|itinerary), all for registered users only (401 without
+login, 403 for other roles) and each user only sees and changes their own list. Only
+an active hotel or a Public, non-hidden itinerary can be saved (404 otherwise).
+The list shows name, stars, rating and first photo for hotels and title, countries
+and start date for itineraries. If an item becomes unavailable later (hotel
+deactivated, itinerary made private or hidden, or deleted) it stays in the list as
+available: false without details, so a private itinerary is never leaked and the
+user can still remove it. A unique index (user, type, item) prevents duplicates
+even for two requests at the same time (upsert).
+
+Verification:
+New unit tests (14) pass and tsc and oxlint show no errors in the changed files.
+Tested in Postman (see the PR).
+================================================
