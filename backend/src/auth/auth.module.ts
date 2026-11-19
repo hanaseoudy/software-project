@@ -9,6 +9,7 @@ import { Session, SessionSchema } from './schemas/session.schema';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
+import { PasswordResetService } from './password-reset.service';
 
 @Module({
   imports: [
@@ -18,10 +19,10 @@ import { EmailVerificationService } from './email-verification.service';
       { name: Session.name, schema: SessionSchema },
     ]),
     JwtModule.register({}),
-    MailModule, // ACC-02: verification email
+    MailModule, // ACC-02 verification email, ACC-07 password reset email
   ],
   controllers: [AuthController],
-  providers: [AuthService, EmailVerificationService, JwtAuthGuard],
+  providers: [AuthService, EmailVerificationService, PasswordResetService, JwtAuthGuard],
   exports: [JwtModule, MongooseModule, JwtAuthGuard],
 })
 export class AuthModule {}

@@ -194,3 +194,15 @@ What AI helped with:
 What I did:
 - Pasted and reviewed the code, ran tests (363 passed in auth/common/bookings/users), lint and build
 - Tested in Postman with the Ethereal test inbox: blocked booking, resend, old link rejected, verify, single use, 409 when already verified, booking allowed after verifying
+==================================================
+TASK-115 (ACC-07, Bonus) - Secure email-based password recovery
+==================================================
+Tool: Claude
+Prompt: Help me implement ACC-07 step by step: a user who forgot their password requests a reset link by email; the link expires after 30 minutes, is single-use, is invalidated by a newer request, and the response does not reveal whether the email exists. Use the endpoints from the project PDF (POST /api/auth/forgot-password, POST /api/auth/reset-password).
+What AI helped with:
+- PasswordResetService: random token, only its SHA-256 stored on the user with a 30-minute expiry; a newer request overwrites it; same reply for every email and the email is sent in the background
+- reset-password: atomic update that checks the token and expiry, saves the new bcrypt password, removes the token (single use), clears the login lockout, and logs out every session
+- ForgotPasswordDto, ResetPasswordWithTokenDto (same password rules as registration), Swagger docs, unit tests
+What I did:
+- Pasted and reviewed the code, ran tests (369 passed in auth/common/bookings/users), lint and build
+- Tested in Postman with the Ethereal test inbox: same reply for unknown email, older link rejected after a newer request, weak password rejected, reset works once, old password rejected, new password works
