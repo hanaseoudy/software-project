@@ -3,6 +3,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { Hotel } from '../hotels/schemas/hotel.schema';
+import { RefundsService } from '../payments/refunds.service';
 import { Room } from '../hotels/schemas/room.schema';
 import { ModeratorAssignment } from '../users/schemas/moderatorassignment.schema';
 import { User, UserRole } from '../users/schemas/user.schema';
@@ -33,6 +34,7 @@ describe('HotelReservationsService (HTL-20 / HTL-22)', () => {
   const hotelModel = { find: jest.fn(), findById: jest.fn() };
   const roomModel = { find: jest.fn() };
   const userModel = { find: jest.fn() };
+  const refunds = { findByBooking: jest.fn() };
   const assignmentModel = { exists: jest.fn() };
 
   const userId = new Types.ObjectId();
@@ -86,6 +88,7 @@ describe('HotelReservationsService (HTL-20 / HTL-22)', () => {
         { provide: getModelToken(Room.name), useValue: roomModel },
         { provide: getModelToken(User.name), useValue: userModel },
         { provide: getModelToken(ModeratorAssignment.name), useValue: assignmentModel },
+        { provide: RefundsService, useValue: refunds },
       ],
     }).compile();
     service = moduleRef.get(HotelReservationsService);
@@ -211,6 +214,25 @@ describe('HotelReservationsService (HTL-20 / HTL-22)', () => {
         policiesAcceptedAt: '2026-11-10T09:31:00.000Z',
       });
       expect(details.rooms).toHaveLength(2);
+    });
+
+    it('includes the refund of a cancelled reservation (HTL-21 / PAY-03)', async () => {
+      const cancelled = booking({ status: 'CANCELLED' });
+      const refund = { id: 'rf1', amount: 330, currency: 'USD', status: 'Pending', appliedPolicy: { refundPercent: 50 } };
+      bookingModel.findOne.mockReturnValue({ lean: () => execResult(cancelled) });
+      refunds.findByBooking.mockResolvedValue(refund);
+      lookups();
+      const details = await service.getMine(userId.toString(), cancelled._id.toString(), NOW);
+      expect(details.refund).toEqual(refund);
+      expect(refunds.findByBooking).toHaveBeenCalledWith('hotel', cancelled._id);
+    });
+
+    it('shows refund null when the reservation has no refund', async () => {
+      bookingModel.findOne.mockReturnValue({ lean: () => execResult(booking()) });
+      refunds.findByBooking.mockResolvedValue(null);
+      lookups();
+      const details = await service.getMine(userId.toString(), new Types.ObjectId().toString(), NOW);
+      expect(details.refund).toBeNull();
     });
 
     it('looks the reservation up by id AND owner, and only among real reservations', async () => {

@@ -2,10 +2,16 @@ import { FlightsModule } from '../flights/flights.module';
 import { AirportsModule } from '../airports/airports.module';
 import { ItineraryFlightsController } from './itinerary-flights.controller';
 import { ItineraryFlightsService } from './itinerary-flights.service';
+import { HotelsModule } from '../hotels/hotels.module';
+import { ItineraryHotelsController } from './itinerary-hotels.controller';
+import { ItineraryHotelsService } from './itinerary-hotels.service';
+import { BudgetEntriesController } from './budget-entries.controller';
+import { BudgetEntriesService } from './budget-entries.service';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthModule } from '../auth/auth.module';
+import { UploadsModule } from '../uploads/uploads.module';
 
 import {
   Country,
@@ -58,6 +64,8 @@ import { ItineraryExportService } from './itinerary-export.service';
     AuthModule,
     FlightsModule,
     AirportsModule,
+    HotelsModule,
+    UploadsModule,
     MongooseModule.forFeature([
       { name: Currency.name, schema: CurrencySchema },
       {
@@ -90,7 +98,17 @@ import { ItineraryExportService } from './itinerary-export.service';
       },
     ]),
   ],
-  controllers: [ItineraryFlightsController, PublicItinerariesController, PublicItineraryCloneController, ItinerariesController, ActivitiesController, TransportCostsController, ItineraryExportController],
-  providers: [ItineraryFlightsService, ItinerariesService, ActivitiesService, TransportCostsService, ItineraryExportService],
+ controllers: [
+    ItineraryHotelsController,
+    ItineraryFlightsController,
+    BudgetEntriesController,
+    PublicItinerariesController,
+    PublicItineraryCloneController,
+    ItinerariesController,
+    ActivitiesController,
+    TransportCostsController,
+    ItineraryExportController,
+  ],
+  providers: [ItineraryHotelsService, ItineraryFlightsService, BudgetEntriesService, ItinerariesService, ActivitiesService, TransportCostsService, ItineraryExportService],
 })
 export class ItinerariesModule {}
