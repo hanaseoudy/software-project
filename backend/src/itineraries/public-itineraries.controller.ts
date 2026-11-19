@@ -1,9 +1,15 @@
-import { BadRequestException, Controller, Get, Header, Param, Query, Req } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Controller, Get, Header, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { ApiCookieAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { PaginationQueryDto } from '../common/pagination/pagination';
+import { ACCESS_COOKIE } from '../auth/auth.cookies';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
 import { ItinerariesService } from './itineraries.service';
 import { PublicItineraryDetailDto, PublicItineraryPageDto } from './dto/public-itinerary-response.dto';
+import { PublicItinerarySearchQueryDto } from './dto/public-itinerary-search-query.dto';
+
+// ITN-21: query parameters accepted by the public search
+const SEARCH_PARAMS = ['page', 'keyword', 'minDays', 'maxDays', 'country', 'city'];
 
 // These two guest-readable routes never change the owner controller's JWT guard.
 @ApiTags('itineraries')
@@ -14,15 +20,16 @@ export class PublicItinerariesController {
   @Get('search')
   @Header('Cache-Control', 'no-store')
   @ApiOperation({
-    summary: 'Discover Public, nonhidden itineraries (ITN-20)',
-    description: 'Pagination only, using GEN-05. Keyword/filter search belongs to ITN-21. Each request uses a timestamp-anchored snapshot following a linearizable freshness barrier. Overlapping requests may observe an earlier valid snapshot; completed responses cannot be revoked.',
+    summary: 'Search Public, nonhidden itineraries (ITN-20, ITN-21)',
+    description: 'ITN-21: optional keyword (case-insensitive partial match on title, country name/code, city name/code), duration (minDays/maxDays), country code and city code filters. Paginated using GEN-05. Each request uses a timestamp-anchored snapshot following a linearizable freshness barrier. Overlapping requests may observe an earlier valid snapshot; completed responses cannot be revoked.',
   })
   @ApiOkResponse({ type: PublicItineraryPageDto })
-  @ApiResponse({ status: 400, description: 'Invalid page or unsupported query parameter' })
+  @ApiResponse({ status: 400, description: 'Invalid page or filter value, or unsupported query parameter' })
   @ApiResponse({ status: 503, description: 'Required consistency unavailable or request deadline exceeded; no weaker fallback' })
-  search(@Req() req: Request, @Query() query: PaginationQueryDto) {
-    this.checkQuery(req, ['page']);
-    return this.itineraries.findPublic(query.page ?? 1);
+  search(@Req() req: Request, @Query() query: PublicItinerarySearchQueryDto) {
+    this.checkQuery(req, SEARCH_PARAMS);
+    const { page, keyword, minDays, maxDays, country, city } = query;
+    return this.itineraries.findPublic(page ?? 1, { keyword, minDays, maxDays, country, city });
   }
 
   @Get(':id')
@@ -52,5 +59,29 @@ export class PublicItinerariesController {
       message: 'Validation failed',
       errors: Object.fromEntries(unknown.map(key => [key, ['Unsupported public itinerary query parameter']])),
     });
+  }
+}
+
+// ITN-21: cloning needs a logged-in user. Kept in its own controller so the
+// guest-readable routes above never depend on the JWT guard.
+@ApiTags('itineraries')
+@ApiCookieAuth(ACCESS_COOKIE)
+@UseGuards(JwtAuthGuard)
+@Controller('itineraries/public')
+export class PublicItineraryCloneController {
+  constructor(private readonly itineraries: ItinerariesService) {}
+
+  @Post(':id/clone')
+  @ApiOperation({
+    summary: 'Clone a Public itinerary into my itineraries (ITN-21)',
+    description: 'Registered users only. Copies all days, activities, budget entries and transport costs into a new Private itinerary owned by the caller, crediting the original author. The clone is independent of the original.',
+  })
+  @ApiParam({ name: 'id', description: 'Public itinerary MongoDB ObjectId' })
+  @ApiCreatedResponse({ description: 'The new Private itinerary (same shape as GET /itineraries/:id, plus originalAuthorName)' })
+  @ApiResponse({ status: 400, description: 'Invalid itinerary ID' })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  @ApiResponse({ status: 404, description: 'Public itinerary unavailable' })
+  clone(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.itineraries.clonePublic(req.user!.sub, id);
   }
 }
