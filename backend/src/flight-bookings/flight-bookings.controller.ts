@@ -36,12 +36,14 @@ export class FlightBookingsController {
     private readonly flightChangeService: FlightChangeService,
   ) {}
 
-  @Post('hold')
+  // POST /flight-bookings is the path of the requirements table (FLT-19/FLT-21);
+  // POST /flight-bookings/hold is kept for the existing clients. Same handler.
+  @Post(['', 'hold'])
   @UseGuards(RolesGuard)
   @Roles(UserRole.USER)
   @ApiOperation({
     summary:
-      'FLT-22: atomically hold seats; creates a PENDING_PAYMENT booking valid for 10 minutes',
+      'FLT-19/FLT-21/FLT-22: enter passengers and baggage and atomically hold seats; creates a PENDING_PAYMENT booking valid for 10 minutes (also available as POST /flight-bookings/hold)',
   })
   @ApiCreatedResponse({ description: 'Seats held, booking created' })
   @ApiBadRequestResponse({ description: 'Invalid passengers, trip type or flight' })
