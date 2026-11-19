@@ -1674,3 +1674,25 @@ New unit tests (16) pass, and tsc and oxlint show no errors in the changed files
 Tested in Postman (see the PR).
 ================================================
  
+================================================
+Date: 2026-11-19
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-19 / FLT-21 (review request: POST /api/flight-bookings)
+
+Prompt (summary of the conversation):
+The reviewer (Hana) said the endpoint POST /api/flight-bookings from the requirements
+table does not exist and asked me to add it. In develop the same step (passenger
+details, baggage, seat hold) is POST /api/flight-bookings/hold.
+
+How the output was used:
+Checked in develop that no POST /api/flight-bookings existed, then registered the
+existing handler on both paths (@Post(['', 'hold'])): POST /api/flight-bookings and
+the old POST /api/flight-bookings/hold, with the same body, response, guards and
+role check. No new logic and no change for existing clients. Swagger summary updated.
+
+Verification:
+New controller spec (2 tests): both paths are registered on the one handler, and it
+creates the booking for the logged-in user. Whole flight-bookings test folder passes
+(118 tests). Tested in Postman (see the PR).
+================================================
