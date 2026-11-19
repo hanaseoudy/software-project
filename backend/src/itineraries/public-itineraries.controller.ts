@@ -67,7 +67,7 @@ export class PublicItinerariesController {
 @ApiTags('itineraries')
 @ApiCookieAuth(ACCESS_COOKIE)
 @UseGuards(JwtAuthGuard)
-@Controller('itineraries/public')
+@Controller('itineraries')
 export class PublicItineraryCloneController {
   constructor(private readonly itineraries: ItinerariesService) {}
 

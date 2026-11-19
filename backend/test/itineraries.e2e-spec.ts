@@ -799,7 +799,7 @@ describe('ITN-07 against an isolated local replica set', () => {
     });
     describe('ITN-21 public search, read-only view and clone', () => {
       const clone = (id: string, cookies?: string[]) => {
-        const call = request(http()).post('/api/itineraries/public/' + id + '/clone');
+        const call = request(http()).post('/api/itineraries/' + id + '/clone');
         return cookies ? call.set('Cookie', cookies) : call;
       };
       async function published(title: string, count = 2, expenses = false) {
