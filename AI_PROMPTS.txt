@@ -1505,3 +1505,34 @@ Verification:
 Confirmation service tests pass (12), including a new test where nothing matches but
 modifiedCount is 1 (updatedAt): the confirmation now fails. tsc shows no new errors.
 ================================================
+================================================
+Date: 2026-11-18
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: ACC-17 (TASK-24) - admin read-only booking overview
+
+Prompt (summary of the conversation):
+Help me implement ACC-17: an admin can view a read-only list of all flight and
+hotel bookings (reference, user, provider, dates, amount, status), filterable by
+type, status and date range. Dependencies: FLT-23, HTL-17.
+
+How the output was used:
+Used the generated code after reviewing it against ACC-17 and the existing
+ACC-14 accounts list (same style: admin-only guards, GEN-05 page size 10).
+GET /admin/bookings (admin only, 401/403 otherwise) merges flight bookings and
+hotel reservations, newest first, with the total of both. Filters: type (flight
+or hotel), status (the GEN-11 statuses) and from/to. Each row has type, id,
+reference (null until payment confirmed the booking), user (name, email),
+provider (hotel or airline name), start and end date (check-in/check-out, or
+first departure and last arrival), amount (flights: fares plus baggage fees, the
+amount PAY-01 charges) with currency, status and createdAt. The requirement does
+not say which date the "date range" is about, so from/to filter the date the
+booking was created (whole days, UTC); this is stated in the Swagger description
+and the PR. Nothing is written to the database; only find and count are used.
+The reference of flight bookings is filled by FLT-23 (#140); until it is merged
+the flight rows show a null reference.
+
+Verification:
+New unit tests (17) pass and tsc and oxlint show no errors in the changed files.
+Tested in Postman and Swagger with an admin account (see the PR).
+================================================
