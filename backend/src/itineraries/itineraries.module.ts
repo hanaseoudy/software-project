@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthModule } from '../auth/auth.module';
+import { UploadsModule } from '../uploads/uploads.module';
 
 import {
   Country,
@@ -52,6 +53,7 @@ import { ItineraryExportService } from './itinerary-export.service';
 @Module({
   imports: [
     AuthModule,
+    UploadsModule,
     MongooseModule.forFeature([
       { name: Currency.name, schema: CurrencySchema },
       {

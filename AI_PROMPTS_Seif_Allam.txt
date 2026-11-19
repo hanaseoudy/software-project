@@ -1714,3 +1714,39 @@ Remaining risks: quorum confirmation adds latency and unavailability deliberatel
 The personal AI log was left unchanged throughout source implementation and testing. This is the separately authorized post-verification documentation-only append. All previous entries, including ITN-07, ITN-08, ITN-09, ITN-10 and ITN-16, remain byte-for-byte preserved. Shared AI_PROMPTS.txt was not modified. No commit, push, PR creation or branch/worktree switch occurred.
 
 ================================================
+
+Date: 2026-11-19
+Student: Seif Allam
+AI Tool: Codex
+Requirement: ITN-12 — Activity Image Attachment and Removal (ITN-10, GEN-08)
+
+Prompt:
+Inspect the existing activity and GEN-08 upload workflows, then implement owner-only
+activity image attachment and removal using shared storage. Preserve existing image
+URLs and ITN-10 CRUD behavior. Test authorization, media validation, limits,
+transaction failures and cleanup using mocks or an isolated environment.
+
+How the output was used:
+Added the approved activity detail and image routes, Swagger request contracts,
+reuse of GEN-08 validation and storage, transaction-protected image references,
+and post-commit cleanup for unreferenced activity files. Added service and HTTP
+tests covering write retries, uncertain commits, legacy URLs and request validation.
+
+================================================
+
+Date: 2026-11-19
+Student: Seif Allam
+AI Tool: Codex
+Requirement: ITN-12 pull request review
+
+Prompt:
+Add DELETE /api/activities/:id/images/:imageId using the GEN-08 filename.
+Preserve URL-query deletion and reuse ownership checks, transactions and cleanup.
+Reject invalid or ambiguous filenames and document and test both routes.
+
+How the output was used:
+Added filename-based removal to the existing activity transaction and cleanup flow.
+Added Swagger documentation and regression coverage for authentication, repeated
+removal, unattached filenames, ambiguous references and traversal attempts.
+
+================================================
