@@ -1422,6 +1422,93 @@ payment succeeded and no refund; a re-sent event after a refund kept the payment
 Date: 2026-11-18
 Student: Mariam Mashoud
 Tool: Claude
+Related Requirement: FLT-23 (TASK-40) - flight confirmation, booking reference and PDF e-ticket
+
+Prompt (summary of the conversation):
+Help me implement FLT-23: after successful payment the flight booking is
+Confirmed (done by PAY-01), the held seats become booked seats, a unique booking
+reference is generated, a confirmation page is available, an in-app notification
+with the booking details is sent, and the user can download an e-ticket (PDF).
+Use the onBookingConfirmed hook of PAY-01 (PaymentsService), the same way as HTL-17.
+
+How the output was used:
+Used the generated code after reviewing it against FLT-23 and PAY-01.
+FlightBookingConfirmationService registers on PaymentsService.onBookingConfirmed
+(flight bookings only). finalizeConfirmed gives a CONFIRMED booking without a
+reference a unique FLT-XXXXXXXX reference in one atomic update (so a repeated
+webhook changes nothing), turns the held seats into booked seats on the outbound
+and return flight (infants have no seat), and sends the BOOKING_CONFIRMED
+notification. If the seats cannot be converted, the reference is removed and the
+already converted seats are put back so a retry starts clean. A notification
+failure never undoes the confirmation. An hourly job finishes CONFIRMED bookings
+that still have no reference (server restart or failed hook), as in HTL-17.
+New owner-only endpoints: GET /flight-bookings/:id/confirmation (summary plus
+reference) and GET /flight-bookings/:id/e-ticket (PDF made with pdfkit, added to
+package.json). Both return 409 until the booking is confirmed.
+
+Verification:
+New unit tests (confirmation service, reference generator, PDF) pass together with
+the other flight-bookings tests, and tsc and oxlint show no errors in the changed
+files. Not tested end to end against Stripe; the hook is covered with mocks.
+================================================
+Date: 2026-11-18
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-26 (TASK-42) - user flight cancellation and policy-based refund
+
+Prompt (summary of the conversation):
+Help me implement FLT-26: a registered user cancels their own Confirmed flight
+booking any time before departure, after viewing the refund amount computed from
+the airline tiers (FLT-09) and confirming. The booking becomes Cancelled, its
+seats return to inventory and a refund is created (PAY-03). Cancellation after
+departure is blocked. Dependencies: FLT-23, FLT-09, PAY-03.
+
+How the output was used:
+Used the generated code after reviewing it against FLT-26, FLT-09 and PAY-03.
+GET /flight-bookings/:id/cancellation-quote shows the refund (refundQuote() from
+PAY-03 with the airline cancellationPolicy rules of FLT-09 and the whole days
+left until the outbound flight departs). POST /flight-bookings/:id/cancel needs
+{ "confirm": true } and only works for the owner's CONFIRMED booking before
+departure (409 otherwise). Cancelling is one atomic update (CONFIRMED ->
+CANCELLED, checked with assertBookingTransition from GEN-11), so a second request
+at the same time does nothing; then the seats go back (booked seats, or held seats
+if FLT-23 did not convert them yet; infants have no seat), the refund is created
+with RefundsService.issueRefund (a 0% tier creates none) and a BOOKING_CANCELLED
+notification is sent. If the refund cannot be created, the booking stays cancelled
+and the response carries a warning. The refund follows the tiers of the airline of
+the outbound flight. This PR is based on FLT-23 (#140), which adds the booking
+reference and the held -> booked seat conversion.
+
+Verification:
+New unit tests (18) pass and tsc and oxlint show no errors in the changed files.
+Not tested end to end against Stripe; the refund call is covered with mocks.
+Date: 2026-11-19
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-23 (review fixes on PR #140)
+
+Prompt (summary of the conversation):
+The reviewer (Hana) asked for two changes on PR #140: (1) seat inventory: the
+modifiedCount check always succeeds because Mongoose updates updatedAt, so a booking
+could be confirmed without converting held seats into booked seats (double booking
+risk); use $elemMatch in the update filter and verify matchedCount; (2) e-ticket:
+show the airport name and IATA code instead of the airport database ID.
+
+How the output was used:
+The held->booked update now filters on the flight AND a cabin with enough held seats
+($elemMatch on cabinClass and heldSeats >= seats) and checks matchedCount, so it fails
+(and the earlier conversions are rolled back) when no seat could be converted. The
+rollback filter also requires enough booked seats. The e-ticket prints "airport name
+(IATA code)" for departure and arrival.
+
+Verification:
+Confirmation service tests pass (12), including a new test where nothing matches but
+modifiedCount is 1 (updatedAt): the confirmation now fails. tsc shows no new errors.
+================================================
+================================================
+Date: 2026-11-18
+Student: Mariam Mashoud
+Tool: Claude
 Related Requirement: ACC-17 (TASK-24) - admin read-only booking overview
 
 Prompt (summary of the conversation):
