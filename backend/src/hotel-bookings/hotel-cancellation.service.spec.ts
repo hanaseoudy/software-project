@@ -4,6 +4,8 @@ import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { Hotel } from '../hotels/schemas/hotel.schema';
 import { BookingType } from '../payments/enums/payment.enums';
+import { NotificationType } from '../notifications/enums/notification.enums';
+import { NotificationsService } from '../notifications/notifications.service';
 import { RefundsService } from '../payments/refunds.service';
 import { HotelCancellationService } from './hotel-cancellation.service';
 import { HotelBooking } from './schemas/hotel-booking.schema';
@@ -20,6 +22,7 @@ describe('HotelCancellationService (HTL-21)', () => {
   const bookingModel = { findOne: jest.fn(), updateOne: jest.fn() };
   const hotelModel = { findById: jest.fn() };
   const refunds = { issueRefund: jest.fn() };
+  const notifications = { create: jest.fn() };
 
   const userId = new Types.ObjectId();
   const hotelId = new Types.ObjectId();
@@ -46,6 +49,7 @@ describe('HotelCancellationService (HTL-21)', () => {
     bookingModel.updateOne.mockReturnValue(execResult({ modifiedCount: 1 }));
     hotelModel.findById.mockReturnValue(selectLean({ policies: { cancellationTiers: hotelTiers } }));
     refunds.issueRefund.mockResolvedValue({ id: 'refund1', amount: 330, status: 'pending' });
+    notifications.create.mockResolvedValue({});
   };
   const id = () => new Types.ObjectId().toString();
 
@@ -57,6 +61,7 @@ describe('HotelCancellationService (HTL-21)', () => {
         { provide: getModelToken(HotelBooking.name), useValue: bookingModel },
         { provide: getModelToken(Hotel.name), useValue: hotelModel },
         { provide: RefundsService, useValue: refunds },
+        { provide: NotificationsService, useValue: notifications },
       ],
     }).compile();
     service = moduleRef.get(HotelCancellationService);
@@ -205,6 +210,55 @@ describe('HotelCancellationService (HTL-21)', () => {
       expect(bookingModel.updateOne).toHaveBeenCalled();
       expect(refunds.issueRefund).toHaveBeenCalledWith(expect.objectContaining({ amount: 0 }));
       expect(result).toMatchObject({ status: 'CANCELLED', refundAmount: 0, refund: null, refundError: null });
+    });
+
+    it('sends the guest a BOOKING_CANCELLED notification that mentions the refund', async () => {
+      const b = booking();
+      setup(b);
+      await service.cancel(userId.toString(), b._id.toString(), { expectedRefundAmount: 330 }, NOW);
+      expect(notifications.create).toHaveBeenCalledTimes(1);
+      const [to, input] = notifications.create.mock.calls[0];
+      expect(to).toBe(userId.toString());
+      expect(input.type).toBe(NotificationType.BOOKING_CANCELLED);
+      expect(input.message).toContain('HTL-AAAAAA');
+      expect(input.message).toContain('330.00 USD');
+      expect(input.metadata).toMatchObject({ bookingId: String(b._id), hotelId: String(hotelId), refundAmount: 330 });
+    });
+
+    it('sends the notification even when the refund is 0%', async () => {
+      const b = booking({ checkIn: day('2026-12-11'), checkOut: day('2026-12-12') });
+      setup(b);
+      refunds.issueRefund.mockResolvedValue(null);
+      await service.cancel(userId.toString(), b._id.toString(), { expectedRefundAmount: 0 }, NOW);
+      expect(notifications.create).toHaveBeenCalledTimes(1);
+      expect(notifications.create.mock.calls[0][1].message).toContain('No refund applies');
+    });
+
+    it('sends the notification even when the refund could not be started', async () => {
+      const b = booking();
+      setup(b);
+      refunds.issueRefund.mockRejectedValue(new Error('Stripe is not configured'));
+      await service.cancel(userId.toString(), b._id.toString(), { expectedRefundAmount: 330 }, NOW);
+      expect(notifications.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('still cancels and refunds when the notification fails', async () => {
+      const b = booking();
+      setup(b);
+      notifications.create.mockRejectedValue(new Error('db down'));
+      const result = await service.cancel(userId.toString(), b._id.toString(), { expectedRefundAmount: 330 }, NOW);
+      expect(result.status).toBe('CANCELLED');
+      expect(refunds.issueRefund).toHaveBeenCalled();
+    });
+
+    it('sends no notification when the reservation cannot be cancelled', async () => {
+      const b = booking();
+      setup(b);
+      bookingModel.updateOne.mockReturnValue(execResult({ modifiedCount: 0 }));
+      await expect(
+        service.cancel(userId.toString(), b._id.toString(), { expectedRefundAmount: 330 }, NOW),
+      ).rejects.toThrow('can no longer be cancelled');
+      expect(notifications.create).not.toHaveBeenCalled();
     });
 
     it('returns 409 when the reservation was cancelled or completed in the meantime (atomic update matches nothing)', async () => {

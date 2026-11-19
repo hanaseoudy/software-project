@@ -7,6 +7,8 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, Model, Types } from 'mongoose';
 import { Hotel } from '../hotels/schemas/hotel.schema';
+import { NotificationType } from '../notifications/enums/notification.enums';
+import { NotificationsService } from '../notifications/notifications.service';
 import { BookingType } from '../payments/enums/payment.enums';
 import { RefundsService, refundQuote } from '../payments/refunds.service';
 import {
@@ -51,6 +53,7 @@ export class HotelCancellationService {
     private readonly bookingModel: Model<HotelBooking>,
     @InjectModel(Hotel.name) private readonly hotelModel: Model<Hotel>,
     private readonly refunds: RefundsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async quote(
@@ -118,6 +121,8 @@ export class HotelCancellationService {
       throw new ConflictException('This reservation can no longer be cancelled');
     }
 
+    await this.notifyCancelled(userId, booking, result.amount);
+
     let refund = null;
     let refundError: string | null = null;
     try {
@@ -146,6 +151,38 @@ export class HotelCancellationService {
       refund,
       refundError,
     };
+  }
+
+  /** GEN-01: the guest always gets a BOOKING_CANCELLED notification, even when the refund is 0. */
+  private async notifyCancelled(
+    userId: string,
+    booking: BookingRow,
+    refundAmount: number,
+  ): Promise<void> {
+    const reference = booking.bookingReference ?? String(booking._id);
+    try {
+      await this.notifications.create(userId, {
+        type: NotificationType.BOOKING_CANCELLED,
+        title: 'Hotel reservation cancelled',
+        message:
+          `Your hotel reservation ${reference} is cancelled. ` +
+          (refundAmount > 0
+            ? `A refund of ${refundAmount.toFixed(2)} ${booking.currency} will be sent to your original payment method.`
+            : 'No refund applies under the hotel\'s cancellation policy.'),
+        metadata: {
+          bookingId: String(booking._id),
+          bookingReference: reference,
+          hotelId: String(booking.hotel),
+          checkIn: booking.checkIn,
+          refundAmount,
+        },
+      });
+    } catch (error) {
+      // The reservation is already cancelled; a failed notification must not undo or hide that.
+      this.logger.error(
+        `Cancellation notification for hotel reservation ${String(booking._id)} failed: ${(error as Error).message}`,
+      );
+    }
   }
 
   private async load(userId: string, id: string, now: Date) {
