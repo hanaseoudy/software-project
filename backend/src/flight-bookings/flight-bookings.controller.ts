@@ -70,7 +70,7 @@ export class FlightBookingsController {
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.USER) // check the real enum member name
-  @ApiExtraModels(ListMyBookingsDto) // 👈 Registers the nested DTO schema too
+  @ApiExtraModels(ListMyBookingsDto)
   @ApiCookieAuth()
   @ApiOperation({
     summary: 'List my flight bookings by group (FLT-25)',
@@ -110,7 +110,10 @@ export class FlightBookingsController {
   })
   @ApiResponse({ status: 400, description: 'Invalid group or page value' })
   @ApiResponse({ status: 401, description: 'Not logged in' })
-  @ApiResponse({ status: 403, description: 'Caller is not a registered user' })
+  @ApiResponse({
+    status: 404,
+    description: 'Booking not found, or it belongs to another user',
+  })
   list(@Query() dto: ListMyBookingsDto, @CurrentUser() user: AuthPayload) {
     return this.flightBookingsService.findMine(user.sub, dto);
   }
@@ -135,7 +138,6 @@ export class FlightBookingsController {
   })
   @ApiResponse({ status: 400, description: 'Invalid booking id format' })
   @ApiResponse({ status: 401, description: 'Not logged in' })
-  @ApiResponse({ status: 403, description: 'Caller is not a registered user' })
   @ApiResponse({
     status: 404,
     description: 'Booking not found, or it belongs to another user',

@@ -126,3 +126,21 @@ add setCancellationPolicy (with uniqueness checks and descending threshold
 sorting) to AirlinesService, expose and document the protected route in
 AirlinesController, and verify all edge cases in Postman. Reviewed and
 adjusted every snippet before committing.
+
+================================================
+Date: 2026-11-19
+Student: Sara Gomaa
+Tool: Claude
+Related Requirement: FLT-25
+Prompt:
+Asked how to build "view my flight bookings" (Upcoming, Past, Cancelled and
+details). Pasted my FlightBooking schema and flight bookings service.
+How the output was used:
+- Claude provided the grouping logic, the list and details service methods
+  and the controller. I questioned why the date was missing from the
+  response, and the code was corrected to include the local date and local
+  times per airport time zone.
+- Replaced the duplicate details query with the existing loadOwnedSummary
+  method, and fixed field names (departureTime/arrivalTime) to match my
+  schema.
+================================================
