@@ -1,0 +1,484 @@
+================================================
+Date: 2026-11-03  
+Student: Hana Seoudy  
+Tool: Codex  
+Related Requirement: Project PDF Sections 10 and 11 – GitHub Workflow and AI Usage
+ 
+Prompt:
+Review the existing backend structure and suggest an 
+appropriate GitHub Actions CI workflow for our
+NestJS project. Consider pull requests targeting develop 
+and main, build verification, linting, unit testing, and 
+E2E testing. Analyze the existing Jest configuration issue and explain possible solutions. 
+Identify all proposed file changes before implementation.
+ 
+How the output was used:
+Used Codex to analyze the existing repository, identify CI requirements, 
+and investigate the Jest TS5011 configuration issue.
+Reviewed the proposed changes before approving implementation.
+Codex assisted in configuring GitHub Actions with an isolated 
+MongoDB test environment, updating the Jest test configuration, 
+and addressing ESM compatibility using Node.js flags.
+The CI setup was designed to support automated pull request 
+validation while preserving existing application logic and tests.
+ 
+================================================
+================================================
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: GEN-12 (TASK-107), Project PDF Section 5.1
+ 
+Prompt (summary of the conversation):
+Help me Implement reference-data seeding using the official Google Sheets dataset.
+Preserve the supplied records and identifiers and reuse the existing airport
+schema without modifying teammates' feature code. Include countries, cities,
+airports, supported currencies and the PDF-required attractions. Add the
+package.json seed command, but leave out the proposed new test file.
+ 
+How the output was used:
+Codex created an offline snapshot of the four official dataset tabs, derived
+the seven supported currency codes, and added Country, City, Currency and
+Attraction schemas. It implemented a standalone seed runner with validation,
+a dry-run option, unique indexes and upserts, plus setup documentation.
+The implementation preserves official identifiers and existing MongoDB IDs
+when rerun. Existing unrelated records and fields are not deleted.
+ 
+Verification performed by Codex:
+Build, lint, five existing unit tests and the existing E2E test passed.
+A temporary local MongoDB instance was used to check all 39 reference records,
+repeat-run safety, stable IDs, preservation of unrelated data, invalid-input
+rejection and handling of existing duplicate identifiers. No new test file
+was added, and the shared Atlas database was not modified.
+ 
+The changes are prepared for Hana's review, commit and push.
+================================================
+================================================
+ 
+Date: 2026-11-07
+Student: Hana Seoudy
+Tool: ChatGPT and Codex
+Related Requirement: FLT-02 (TASK-26)
+Prompt (summary of the conversation):
+I asked AI to help me implement FLT-02, which requires a predefined, read-only airport
+list using the official reference data from GEN-12. I wanted to reuse the existing airport 
+schema and make sure only airports from the official dataset were returned. I also asked AI
+to explain the controller and service, help me test the endpoint using Swagger, and guide me through
+ recovering my work after accidentally merging and reverting Pull Requests on GitHub.
+ How the output was used:
+With Codex's help, I created the airport controller, service, module, and response DTO. The service 
+retrieves airports from MongoDB, sorts them by IATA code, and provides a method to validate airport 
+selections for flight creation and search. I also used ChatGPT to understand the implementation, fix 
+incorrect import paths, and recover my changes on a new feature branch without overwriting my teammates' work.
+Verification performed:
+I successfully ran the unit tests and E2E tests after resolving a Jest ES module compatibility issue
+I also tested GET /api/airports through Swagger and received a 200 OK response containing the predefined 
+airport records. The recovered implementation is working and ready for final review, commit, and Pull Request.
+================================================
+================================================
+Date: 2026-11-08
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: GEN-13 (backend validation; shared ObjectId reference schemas)
+ 
+Prompt:
+Verify the report that type: Types.ObjectId in NestJS schema decorators
+produces Mixed fields and prevents automatic string-ID query casting.
+After the issue was confirmed, I approved the fix: "okay fix it".
+ 
+How the output was used:
+Changed 40 reference definitions in 19 schema files to use
+MongooseSchema.Types.ObjectId in @Prop options while retaining
+Types.ObjectId property annotations and existing field options.
+Added regression tests for query casting, existing ObjectId values,
+invalid IDs, and embedded booked-room references. Work is on
+fix/mongoose-objectid-schema, created from the latest origin/develop.
+ 
+Verification:
+Lint passed. All 20 unit tests passed, including 15 new regression tests.
+An additional check of emitted schema modules verified all 40 corrected
+fields are ObjectId paths, cast valid string IDs, and reject invalid IDs.
+The full application build failed because @nestjs/jwt and cookie-parser
+from the existing develop lockfile are not installed locally. E2E tests
+could not start because @nestjs/jwt is missing. Dependency installation
+was declined. No database was connected to or changed; existing stored
+reference values have not been audited or migrated.
+================================================
+================================================
+Date: 2026-11-13
+Student: Hana Seoudy
+Tool: OpenAI Codex
+Related Requirement: FLT-01, FLT-03, PAY-04 (GEN-08 compatibility)
+Prompt (summary):
+Consolidate the duplicate Airline schemas in airlines/schemas/airline.schema.ts.
+Analyze every dependency first, preserve USD baggage currency, update all imports,
+and remove the Flights copy without changing unrelated functionality, the branch,
+or existing work. Verify build, lint, tests, startup, Swagger, and currency validation.
+The proposed six-file change was reviewed and explicitly approved before edits.
+How the output was used:
+Added the existing PLATFORM_CURRENCY baggage field to the Airlines schema, updated
+FlightsModule and the flight CabinClass import, and deleted the duplicate schema.
+Added six schema regression tests. Model/collection names, indexes, other validators,
+authentication, controllers, services, DTOs, and module registration were preserved.
+Verification performed:
+Build passed. Lint passed with the same three pre-existing unused-import warnings.
+The default Jest command has a pre-existing NestJS ESM loading failure. Using
+node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand, the baseline
+had 118 passing and 58 failing tests; after consolidation, 124 passed and the same
+58 failed in hotels.service.spec.ts and blog.service.spec.ts (existing mock/provider
+setup issues). All six new schema tests passed. The E2E suite passed all 11 tests
+before and after, using the same VM-module option and a disposable local MongoDB.
+The compiled schema matched the previous Flights schema's fields, options, and indexes.
+Additional disposable-database checks verified joint AppModule/FlightsModule startup,
+airline creation/editing/logo upload, duplicate rejection, JWT and ownership checks,
+USD create/update validation, all four cabin classes, and Airline population from flights.
+The actual compiled backend entry point started and served /api and Swagger with all
+four airline operations. Flight endpoints do not exist in this checkout; no flight
+controller or AppModule registration was added. No production data was changed.
+================================================
+================================================
+Date: 2026-11-13
+Student: Hana Seoudy
+Tool: OpenAI Codex
+Related Requirement: FLT-03, FLT-04
+Prompt (summary):
+Investigate the reported Cabin.cabinClass schema initialization error without edits.
+Check enum imports, compiled and isolated loading, similar properties, and the
+smallest safe fix. Apply the proposed fix only after explicit approval.
+How the output was used:
+Reproduced the runtime error under isolated transpilation: imported enum metadata
+was Object, while the normal build inferred String and loaded successfully.
+After approval, added type: String to the existing Cabin.cabinClass @Prop options.
+The enum, required validator, stored representation, and other behavior are unchanged.
+Verification performed:
+Build passed. Lint passed with the same three existing unused-import warnings.
+Both compiled and transpile-only schema loading passed. All four cabin classes
+validated; invalid, missing, and null values were rejected in both modes.
+With Jest's --experimental-vm-modules runtime option, 124 unit tests passed and
+the same 58 existing hotel/blog tests failed. All 11 E2E tests passed against a
+disposable local MongoDB. No production database records were modified.
+================================================
+Date: 2026-11-14
+Student: Hana Seoudy
+Tool: OpenAI Codex
+Related Requirement: BLG-04, BLG-07 (dependencies BLG-01, BLG-05; BLG-08 compatibility)
+Prompt:
+Switch to a new branch called feature/BLG-04-BLG-07 from latest develop and
+implement these requirements; install a PDF reader if needed. After reviewing
+the proposed implementation and file list, the user explicitly approved it.
+How the output was used:
+Read the mandatory CSV and project PDF (including Section 11). Created the branch
+from origin/develop ca8a763, preserving local work and retaining both sides of
+an append-only prompt-log conflict. Extended PATCH /api/posts/:id for title,
+content, status and tags, and added author-only DELETE /api/posts/:id.
+Added author-only PATCH and DELETE /api/comments/:id, reusing BLG-05 text rules.
+Added DTOs, Swagger documentation, ownership checks and database transactions
+for post/dependent-record deletion and comment deletion/count updates.
+Existing schemas and unrelated teammate code were preserved.
+Verification performed:
+Build passed. Lint passed with three existing airline unused-import warnings.
+18 new unit tests passed. Full unit suite: 150 passed, 58 failed in existing
+hotels.service.spec.ts and blog.service.spec.ts mock/provider setup.
+All 12 E2E tests passed against a disposable local MongoDB replica set, including
+ownership, validation, Swagger routes, concurrent duplicate comment deletion,
+post cleanup, and transaction rollback after simulated database failures.
+Jest was run with Node's --experimental-vm-modules option.
+No production database records were used. No commit or push was performed.
+================================================
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: GEN-11, FLT-22 (PR #44)
+
+Prompt:
+Review PR #44 and check whether the problems associated with GEN-11
+(booking state transitions) and FLT-22 (booking concurrency) are
+actually fixed, so that merging it leaves those requirements resolved.
+
+How the output was used:
+Used Claude to examine the PR against the requirements sheet and confirm
+the booking state-transition and concurrency behaviour. Reviewed the
+explanation and the affected code myself before merging the PR as team
+leader.
+================================================
+
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: BLG-02, BLG-09 (PR #81)
+
+Prompt:
+Review PR #81 (blog listing and search). The implementation looks
+correct but it has merge conflicts with develop in blog.service.ts,
+blog.controller.ts and the list-posts query DTO. Tell me the steps to
+resolve them without breaking anything on develop.
+
+How the output was used:
+Used Claude to confirm the feature met BLG-02/BLG-09 and to resolve the
+conflicts file by file in GitHub's web editor. Applied each resolution
+myself and had Claude verify the merged files still built before I
+committed the merge.
+================================================
+
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: FLT-09 (PR #96)
+
+Prompt:
+Review PR #96 (airline cancellation tiers). Confirm it meets the
+requirement and show me how to fix the merge conflicts in
+airlines.controller.ts and airlines.service.ts.
+
+How the output was used:
+Used Claude to verify the cancellation-tier logic against FLT-09 and to
+resolve the conflicts. Reviewed and applied the resolved files myself,
+then merged.
+================================================
+
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: HTL-17 (PR #90)
+
+Prompt:
+Review PR #90 (booking confirmation) and explain why its CI keeps
+failing.
+
+How the output was used:
+Used Claude to confirm the confirmation logic met HTL-17 and to trace
+the CI failure to an AI_PROMPTS merge conflict rather than a code
+problem. Resolved it and merged after verifying.
+================================================
+
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: PAY-01 (PR #71)
+
+Prompt:
+Review PR #71. Does it implement the payments and refunds requirement
+(section 6.4) correctly? Also explain how Stripe test mode works -
+keys, webhook, and test cards.
+
+How the output was used:
+Used Claude to review the payment flow against PAY-01 and to understand
+Stripe test mode (the sk_test secret key, the webhook signing secret
+from `stripe listen`, and the 4242 test card). Verified the behaviour
+before merging and before advising the team on their test
+configuration.
+================================================
+
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: PAY-03 (PR #72; coordinated with PAY-01 #71, HTL-17 #90)
+
+Prompt:
+Review PR #72 (Stripe refunds), which was rebuilt on top of #71.
+Confirm the refund logic is correct and check whether it will cause any
+problem on develop. Then write coordinated review comments for #71, #72
+and #90 so they line up correctly.
+
+How the output was used:
+Used Claude to test the rebuilt refunds on a local MongoDB replica with
+a stubbed Stripe client. This surfaced a real defect: a duplicated
+payment_intent.succeeded webhook could confirm a booking and refund it
+at the same time. I reviewed the proposed atomic fix and the retest
+results, passed the finding to the author, and merged only after the
+re-review passed cleanly.
+================================================
+
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: FLT-30, GEN-06 (PR #100)
+
+Prompt:
+Review PR #100 (flight status lifecycle and airport-local times).
+Verify the behaviour, then guide me through resolving the merge
+conflicts in flights.service.ts, flights.controller.ts, add-cabin.dto.ts
+and app.module.ts.
+
+How the output was used:
+Used Claude to run the PR on a local MongoDB replica - confirming the
+departed-flight cron, the add-cabin guard, and correct local departure
+and arrival times - and to resolve the four-file conflict step by step.
+I applied each resolution in GitHub's web editor myself and had Claude
+confirm the merged result built cleanly before I merged.
+================================================
+
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: FLT-11, FLT-12 (PR #123)
+
+Prompt:
+Review PR #123 (flight search) against the one-way/round-trip search
+requirements, and after #100 is merged help me resolve the import
+conflict it leaves in flights.service.ts.
+
+How the output was used:
+Used Claude to test one-way and round-trip search on a local MongoDB
+replica (seat counts, inactive airlines, cancelled flights, infant
+rules and local times) and to resolve the post-#100 import conflict.
+Verified the merged file built before merging.
+================================================
+
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: GEN-07 (PR #126)
+
+Prompt:
+Review PR #126 (admin audit log). Check that the admin actions actually
+record audit entries and that no secrets are stored.
+
+How the output was used:
+Used Claude to exercise every admin action on a local MongoDB replica
+and confirm each wrote exactly one audit entry, that failed actions
+wrote none, and that passwords and emails were not stored. Reviewed the
+results before merging.
+================================================
+
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: ACC-12 (PR #128)
+
+Prompt:
+Review PR #128 (account deactivation). Confirm it blocks deactivation
+while there are upcoming confirmed bookings and that the account cannot
+be used afterwards.
+
+How the output was used:
+Used Claude to test the deactivation edge cases on a local MongoDB
+replica (wrong/missing password, admin forbidden, upcoming hotel and
+flight bookings, session revocation, public itineraries made private).
+Reviewed the findings before merging.
+================================================
+
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: FLT-19, FLT-03, HTL-01, GEN-08 (PR #129)
+
+Prompt:
+Review PR #129 (review fixes): FLT-19 date-of-birth validation, the
+FLT-03 airport error message, and the HTL-01/GEN-08 hotel image upload.
+
+How the output was used:
+Used Claude to verify the strict date-of-birth validation (rejecting
+impossible, future and wrongly formatted dates) and to test hotel image
+upload on a local MongoDB replica (assigned-moderator only, file-type
+and five-image limits, and cleanup after a losing parallel upload).
+Reviewed before merging.
+================================================
+
+================================================
+Date: 2026-11-17
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: ITN-07, ITN-08, ITN-09, ITN-10, ITN-16, ACC-05, ACC-14, ACC-16, ACC-15, GEN-01-B (PRs #114, #125, #127, #118, #120, #119, #117, #122, #124, #121)
+
+Prompt:
+Review each of these PRs for requirement compliance and whether they are
+safe to merge into develop - the itinerary features (day deletion,
+reordering, city grouping, activity management, intercity transport),
+the account admin features (login lockout, account search, user and
+provider/moderator suspension) and the email notifications.
+
+How the output was used:
+Used Claude to check each PR against its requirement and, where needed,
+to build and test it against current develop before merging. Reviewed
+the outcome of each myself and merged as team leader; for a few I also
+had Claude resolve small merge conflicts, which I applied and verified
+before committing.
+================================================
+
+================================================
+Date: 2026-11-18
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: ITN-20 (PR #131)
+
+Prompt:
+Review PR #131 (itinerary Public/Private visibility).
+
+How the output was used:
+Used Claude to test the visibility rules on a local MongoDB replica
+(private by default, owner-only publishing, public read-only access for
+other users, and immediate removal when switched back to private) and
+to run the itinerary E2E suite. The review also flagged that the PR
+targeted main instead of develop and that the public endpoints were far
+more complex than ITN-20 requires and would collide with the later
+ITN-21 search work. I held the merge until the base branch was
+corrected, then merged.
+================================================
+
+================================================
+Date: 2026-11-19
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: GEN-01, ITN-21
+
+Prompt:
+GEN-01 notifications are saved to the database, but there are no routes to
+list them, get the unread count or mark them read, so they are invisible in
+Swagger. ITN-21: public-itineraries.controller.ts only accepts page; check
+keyword and duration filtering. Fix these 2 problems on my current branch,
+keep my uncommitted changes untouched. Keyword search must be
+case-insensitive with partial matches on itinerary titles, full country
+names, country codes, full city names and city codes, alongside duration,
+country, city and pagination filters. No features outside GEN-01/ITN-21.
+
+How the output was used:
+Claude inspected the requirements and code and proposed the changes; I
+approved them before implementation. GEN-01: added a JWT-protected
+NotificationsController (list with unread count, unread count, mark one /
+mark all as read) over the existing service, with a query DTO. ITN-21:
+added a search query DTO (keyword, minDays, maxDays, country, city) and
+extended the public search snapshot pipeline; behaviour without filters is
+unchanged. Unit tests were added for both. Claude flagged that the ITN-20
+E2E case "?minDays=1 -> 400" now conflicts with ITN-21; I had Claude
+replace only that case with "?minDays=0" (invalid under ITN-21, still 400).
+Lint, build, unit and E2E tests were run and reviewed.
+================================================
+
+================================================
+Date: 2026-11-19
+Student: Hana Seoudy
+Tool: Claude
+Related Requirement: ITN-21
+
+Prompt:
+Does this implement ITN-21? I want ITN-21 to be fully implemented
+(read-only public view with author, days, activities and budget, and
+cloning by a registered user).
+
+How the output was used:
+Claude compared the code with ITN-21 and found that the public view lacked
+author, activities and budget, and that cloning did not exist. I approved
+its plan before implementation. The public detail now returns the author's
+name and, per day, activities, budget entries and transport costs
+(allowlisted fields only; day notes and owner id stay private). A new
+login-only POST /api/itineraries/public/:id/clone copies the itinerary,
+days, activities, budget entries and transport costs in one transaction
+into a new Private itinerary that credits the original author and is
+independent of the original. Decisions I approved: clones reuse activity
+image URLs, users may clone their own public itineraries, and the view
+shows budget entries without converted totals (ITN-14/ITN-18). The ITN-20
+field-list assertions were updated for the new fields, and unit and E2E
+tests were added. Lint, build, unit and E2E tests were run and reviewed.
+================================================

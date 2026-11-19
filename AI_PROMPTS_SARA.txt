@@ -126,3 +126,22 @@ add setCancellationPolicy (with uniqueness checks and descending threshold
 sorting) to AirlinesService, expose and document the protected route in
 AirlinesController, and verify all edge cases in Postman. Reviewed and
 adjusted every snippet before committing.
+
+================================================
+Date: 2026-11-18
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-15
+Prompt:
+Asked to review my FlightsService search and findLeg implementation,
+extend SearchFlightsDto with minPrice, maxPrice, sortBy, and sortOrder,
+implement inclusive price range filtering, minPrice > maxPrice validation,
+multi-criteria sorting by lowest matching cabin fare, duration, and
+departureTime, wire in airport-local time formatting, and generate
+Postman test queries.
+How the output was used:
+Used the suggestions and annotated snippets to update SearchFlightsDto
+and FlightsService (search, findLeg, and sortFlights) and verified all
+filtering, sorting, and 400 validation cases in Postman. Reviewed and
+adjusted every snippet before committing.
+================================================

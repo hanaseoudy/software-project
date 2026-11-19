@@ -48,6 +48,9 @@ export interface RefundQuote {
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
+/** appliedPolicy.kind of the refund of a fare difference (FLT-27): the payment itself stays Succeeded. */
+export const FARE_DIFFERENCE_REFUND = 'fare-difference';
+
 /**
  * PAY-03 / project description 6.4: refund amount for a cancellation, following the policy of the booking.
  * Uses FLT-09's refundPercentFor for both flights and hotels, so every cancellation task (FLT-26, HTL-21,
@@ -160,6 +163,44 @@ export class RefundsService {
     }
 
     return this.createRefund(stripe, payment, amount, input.appliedPolicy, input.reason);
+  }
+
+  /**
+   * FLT-27: refund of the lower fare when a user changes a CONFIRMED flight booking to a cheaper one.
+   * The booking stays Confirmed, so this does not use the cancelled-booking rule or the one-refund claim of
+   * issueRefund(), and it leaves the payment as Succeeded (a later cancellation, FLT-26, still works).
+   */
+  async issueFareDifferenceRefund(input: {
+    bookingId: string | Types.ObjectId;
+    amount: number;
+    reason?: string;
+    appliedPolicy?: Record<string, unknown>;
+  }): Promise<RefundResponseDto | null> {
+    const amount = round2(input.amount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new BadRequestException('Refund amount must be zero or positive');
+    }
+    if (amount === 0) return null;
+
+    const stripe = this.requireStripe();
+    const payment = await this.paymentModel.findOne({
+      bookingType: BookingType.FLIGHT,
+      bookingId: new Types.ObjectId(input.bookingId),
+      status: PaymentStatus.SUCCEEDED,
+    });
+    if (!payment?.stripePaymentIntentId) {
+      throw new ConflictException('No successful payment found for this booking');
+    }
+    if (amount > payment.amount) {
+      throw new BadRequestException('Refund amount cannot be more than the amount paid');
+    }
+    return this.createRefund(
+      stripe,
+      payment,
+      amount,
+      { ...input.appliedPolicy, kind: FARE_DIFFERENCE_REFUND },
+      input.reason,
+    );
   }
 
   /**
@@ -308,7 +349,8 @@ export class RefundsService {
 
     if (status === RefundStatus.REFUNDED) {
       const payment = await this.paymentModel.findById(refund.paymentId);
-      if (payment) {
+      // FLT-27: a fare-difference refund keeps the booking, so its payment stays Succeeded.
+      if (payment && refund.appliedPolicy?.kind !== FARE_DIFFERENCE_REFUND) {
         payment.status = refund.amount >= payment.amount ? PaymentStatus.REFUNDED : PaymentStatus.PARTIALLY_REFUNDED;
         await payment.save();
       }

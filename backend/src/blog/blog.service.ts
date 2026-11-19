@@ -15,7 +15,13 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { LikeResponseDto } from './dto/like-response.dto';
 import { MyPostsPage } from './dto/my-post-response.dto';
 import { PostResponseDto } from './dto/post-response.dto';
-import { PublicAuthorDto, PublicPostDetailDto, PublicPostsPage } from './dto/public-post-response.dto';
+import { AuthorPageDto, ItineraryCardDto } from './dto/author-page.dto';
+import {
+  PublicAuthorDto,
+  PublicPostDetailDto,
+  PublicPostsPage,
+  PublicPostSummaryDto,
+} from './dto/public-post-response.dto';
 import { TagPostsPage, TagsPage } from './dto/tag-response.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { commentTextError } from './comment-rules';
@@ -24,7 +30,8 @@ import { Like, LikeDocument } from './schemas/like.schema';
 import { Post, PostDocument, PostStatus } from './schemas/post.schema';
 import { escapeRegex, normalizeTags } from './tag-rules';
 import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
-import { AccountStatus, User, UserDocument } from '../users/schemas/user.schema';
+import { AccountStatus, User, UserDocument, UserRole } from '../users/schemas/user.schema';
+import { Itinerary, ItineraryDocument, ItineraryVisibility } from '../itineraries/schemas/itinerary.schema';
 import { ImageCategory, MAX_IMAGES } from '../uploads/uploads.constants';
 import { UploadedImage, UploadsService } from '../uploads/uploads.service';
 import { AttachedImageResponseDto, RemovedImageResponseDto } from './dto/post-image-response.dto';
@@ -58,6 +65,8 @@ export class BlogService {
     @InjectModel(Comment.name) private readonly commentModel: Model<CommentDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     private readonly uploads: UploadsService,
+    // BLG-12: read-only, for the author's public itineraries (registered in BlogModule for BLG-13)
+    @InjectModel(Itinerary.name) private readonly itineraryModel: Model<ItineraryDocument>,
   ) {}
 
   // BLG-01: the author always comes from the logged-in user, never from the request body
@@ -135,7 +144,16 @@ export class BlogService {
       ]),
     );
     const users = await this.loadPublicUsers(posts.map((post) => post.author));
-    const items = posts.map((post) => ({
+    const items = posts.map((post) => this.toPublicPostSummary(users, post));
+    return paginate(items, total, page);
+  }
+
+  // BLG-02: one row of a public post list (GET /api/posts and the BLG-12 author page share it)
+  private toPublicPostSummary(
+    users: Map<string, PublicUser>,
+    post: Post & { _id: Types.ObjectId; createdAt: Date },
+  ): PublicPostSummaryDto {
+    return {
       id: post._id.toString(),
       title: post.title,
       author: this.toPublicAuthor(users, post.author),
@@ -145,8 +163,86 @@ export class BlogService {
       images: (post.images ?? []).map((image) => image.url),
       likesCount: post.likesCount ?? 0,
       commentsCount: post.commentsCount ?? 0,
+    };
+  }
+
+  // BLG-12: public author page with the display name, join date, published posts (same items as GET /api/posts,
+  // newest first, page size 10) and up to 10 public itineraries (ITN-20). ACC-12: a deactivated author is not shown;
+  // a suspended author stays visible (ACC-16). Moderator and admin accounts have no author page.
+  async getAuthorPage(authorId: unknown, page: unknown = 1): Promise<AuthorPageDto> {
+    if (typeof authorId !== 'string' || !OBJECT_ID_PATTERN.test(authorId)) {
+      throw new BadRequestException({ message: 'Validation failed', errors: { id: ['Author id must be a valid id'] } });
+    }
+    if (typeof page !== 'number' || !Number.isSafeInteger(page) || page < 1) {
+      throw new BadRequestException({ message: 'Validation failed', errors: { page: ['Page must be at least 1'] } });
+    }
+    const user = await this.runDb('Could not load the author', () =>
+      this.userModel
+        .findById(authorId)
+        .select('firstName lastName role status createdAt')
+        .lean<{
+          _id: Types.ObjectId;
+          firstName?: string;
+          lastName?: string;
+          role?: UserRole;
+          status?: AccountStatus;
+          createdAt: Date;
+        }>()
+        .exec(),
+    );
+    // The schema default role is "user", so a document without a role counts as a user
+    if (!user || (user.role ?? UserRole.USER) !== UserRole.USER || user.status === AccountStatus.DEACTIVATED) {
+      throw new NotFoundException('Author not found');
+    }
+
+    const postFilter = { ...VISIBLE_POSTS, author: user._id };
+    const [posts, total, itineraries] = await this.runDb('Could not load the author page', () =>
+      Promise.all([
+        this.postModel
+          .find(postFilter)
+          .select(PUBLIC_LIST_FIELDS)
+          .sort({ createdAt: -1, _id: -1 })
+          .skip(skipFor(page))
+          .limit(PAGE_SIZE)
+          .lean<(Post & { _id: Types.ObjectId; createdAt: Date })[]>()
+          .exec(),
+        this.postModel.countDocuments(postFilter).exec(),
+        // PDF 6.5: private itineraries are accessible only to their owners; GEN-10 hidden ones are not shown
+        this.itineraryModel
+          .find({ userId: user._id, visibility: ItineraryVisibility.PUBLIC, isHidden: { $ne: true } })
+          .select('title countryIds startDate updatedAt')
+          .sort({ updatedAt: -1, _id: -1 })
+          .limit(PAGE_SIZE)
+          .lean<{ _id: Types.ObjectId; title: string; countryIds?: string[]; startDate: Date; updatedAt: Date }[]>()
+          .exec(),
+      ]),
+    );
+
+    // The author is already loaded, so the name is resolved once without another query
+    const name = this.publicName(user);
+    const users = new Map<string, PublicUser>([[user._id.toString(), { name, deactivated: false }]]);
+    const publicItineraries: ItineraryCardDto[] = itineraries.map((itinerary) => ({
+      id: itinerary._id.toString(),
+      title: itinerary.title,
+      countries: itinerary.countryIds ?? [],
+      // A calendar date (YYYY-MM-DD), as the itinerary module shows it
+      startDate:
+        itinerary.startDate instanceof Date && !Number.isNaN(itinerary.startDate.getTime())
+          ? itinerary.startDate.toISOString().slice(0, 10)
+          : '',
+      updatedAt: itinerary.updatedAt,
     }));
-    return paginate(items, total, page);
+    return {
+      authorId: user._id.toString(),
+      name,
+      joinDate: user.createdAt,
+      posts: paginate(
+        posts.map((post) => this.toPublicPostSummary(users, post)),
+        total,
+        page,
+      ),
+      publicItineraries,
+    };
   }
 
   // BLG-09: the keyword is matched literally (regex characters escaped), case-insensitive, anywhere in the title,
@@ -248,11 +344,16 @@ export class BlogService {
       users.map((user) => [
         user._id.toString(),
         {
-          name: `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim(),
+          name: this.publicName(user),
           deactivated: user.status === AccountStatus.DEACTIVATED,
         },
       ]),
     );
+  }
+
+  // Public display name: first and last name only
+  private publicName(user: { firstName?: string; lastName?: string }): string {
+    return `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim();
   }
 
   // ACC-12: deactivated or missing accounts are shown as "Deleted user" without an id

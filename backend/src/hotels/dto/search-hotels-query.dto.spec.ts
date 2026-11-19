@@ -68,4 +68,43 @@ describe('SearchHotelsQueryDto', () => {
   it('rejects a country that is not an id', async () => {
     expect(await failing({ ...valid, country: 'egypt' })).toEqual(['country']);
   });
+
+  describe('HTL-12 filters and sorting', () => {
+    const errorsFor = async (query: Record<string, unknown>) =>
+      (await validate(plainToInstance(SearchHotelsQueryDto, { ...valid, ...query }))).flatMap(
+        (e) => Object.values(e.constraints ?? {}),
+      );
+
+    it('accepts the filters and turns them into numbers', async () => {
+      const raw = { minPrice: '100.5', maxPrice: '300', minRating: '3.5', sortBy: 'price', sortOrder: 'desc' };
+      expect(await errorsFor(raw)).toEqual([]);
+      const dto = plainToInstance(SearchHotelsQueryDto, { ...valid, ...raw });
+      expect(dto.minPrice).toBe(100.5);
+      expect(dto.maxPrice).toBe(300);
+      expect(dto.minRating).toBe(3.5);
+    });
+
+    it('defaults the sort order to asc and needs none of the filters', async () => {
+      expect(plainToInstance(SearchHotelsQueryDto, valid).sortOrder).toBe('asc');
+      expect(await errorsFor({})).toEqual([]);
+    });
+
+    it.each(['-1', 'abc', '', 'Infinity'])('rejects "%s" as a price', async (value) => {
+      expect(await errorsFor({ minPrice: value })).toEqual(['Minimum price must be a number of 0 or more']);
+      expect(await errorsFor({ maxPrice: value })).toEqual(['Maximum price must be a number of 0 or more']);
+    });
+
+    it.each(['0', '0.9', '5.1', '6', 'abc', ''])('rejects "%s" as a minimum rating', async (value) => {
+      expect(await errorsFor({ minRating: value })).toEqual(['Minimum rating must be a number from 1 to 5']);
+    });
+
+    it.each(['1', '5'])('accepts %s as a minimum rating', async (value) => {
+      expect(await errorsFor({ minRating: value })).toEqual([]);
+    });
+
+    it('rejects an unknown sort field and an unknown sort order', async () => {
+      expect(await errorsFor({ sortBy: 'stars' })).toEqual(['Sort by must be price or rating']);
+      expect(await errorsFor({ sortOrder: 'up' })).toEqual(['Sort order must be asc or desc']);
+    });
+  });
 });
