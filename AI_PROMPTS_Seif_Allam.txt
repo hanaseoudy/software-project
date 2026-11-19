@@ -1714,3 +1714,19 @@ Remaining risks: quorum confirmation adds latency and unavailability deliberatel
 The personal AI log was left unchanged throughout source implementation and testing. This is the separately authorized post-verification documentation-only append. All previous entries, including ITN-07, ITN-08, ITN-09, ITN-10 and ITN-16, remain byte-for-byte preserved. Shared AI_PROMPTS.txt was not modified. No commit, push, PR creation or branch/worktree switch occurred.
 
 ================================================
+
+================================================
+ITN-25 — Hotel Search from Itinerary City-Group Dates
+Date: 2026-11-19; Student: Seif Allam; AI tool: OpenAI Codex
+Prompts (summaries, not verbatim): Inspect PDF itinerary/hotel endpoints, ITN-09 grouping, HTL-11 availability/filters, GEN-12 city identifiers and authorization; propose an exact file list and wait for approval. Then implement the approved ten-file design, run focused/regression/isolated integration tests, build, lint and diff checks. No shared Atlas, shared prompt log, commit, push or PR.
+Used AI assistance to implement GET /api/itineraries/:id/hotels with groupFirstDayId, guests, rooms, page and existing HTL-12 filters, preserving HotelSearchPageDto and GEN-05 pagination.
+Reused groupConsecutiveDays from ITN-09; derived UTC check-in from the first day and checkout from the day after the last. A read-only primary snapshot validates owned itinerary/day order/current first-day boundaries and maps GEN-12 cityId to City._id before delegating once to HotelSearchService.search().
+Exported the existing hotel search service and imported HotelsModule into ItinerariesModule without circular dependencies. Hotel availability logic, existing group calculations, schemas and dependencies remain unchanged. Client destination/date overrides rejected; nonowners receive 404 even for Public itineraries.
+PDF section 8.8 page 9 lists /api/itineraries/:id/hotels under ITN-09; mandatory CSV assigns its behavior to ITN-25. Used the official PDF path and ITN-25 requirement ID.
+Focused tests: 63 unit tests passed. Itinerary + hotel-search/filter/DTO regressions: 401 unit tests passed in 19 suites, including the 63 new tests. Isolated itinerary integration regressions: 174 tests passed in 2 suites, including all 41 new ITN-25 tests. No failures or skips.
+Tests cover canonical city mapping, one/multiple days, repeated visits, leap/month/year boundaries, current groups after reorder/city/start-date edits, stale group references, auth/ownership, count/filter validation, empty results, blocked/booked/held/inactive/insufficient rooms, direct HTL-11 response parity, read-only behavior and wire-level snapshot/session cleanup.
+Backend build passed. Lint passed with six pre-existing unused-import warnings in unchanged files. git diff --check passed. Installed only the worktree lockfile dependencies (680 packages); no manifest changes or system dependencies. A Windows npm.cmd regex quoting issue was corrected by invoking Jest directly for the combined unit suites.
+Used only mocks and a dedicated disposable localhost MongoDB replica set with unique temporary databases and an existing mongod binary; no shared Atlas access. Test-owned database processes/data were cleaned up.
+Limits: past group dates are rejected by HTL-11. Overlapping edits may complete after the group snapshot; subsequent requests recalculate. Hotel availability retains HTL-11 consistency and does not reserve rooms. The selection must remain a current first-day boundary; otherwise refresh groups. No booking creation or itinerary mutation.
+Only the approved ten files changed, including this worktree-local personal log. All prior entries preserved. Shared AI_PROMPTS.txt and other worktrees unchanged. No commit, push or PR.
+================================================
