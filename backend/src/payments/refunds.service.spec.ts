@@ -183,6 +183,47 @@ describe('RefundsService (PAY-03)', () => {
     });
   });
 
+  describe('issueFareDifferenceRefund (FLT-27)', () => {
+    it('refunds the lower fare of a Confirmed booking and keeps the payment Succeeded', async () => {
+      const { service, stripe, refundModel, getCreated, payment, isClaimed } = setup({
+        cancelled: false, // the booking stays Confirmed
+        stripeStatus: 'succeeded',
+      });
+      refundModel.findOneAndUpdate.mockImplementation(async () => getCreated());
+
+      const result = await service.issueFareDifferenceRefund({ bookingId, amount: 40, reason: 'cheaper flight' });
+
+      expect(stripe.refunds.create).toHaveBeenCalledWith(
+        expect.objectContaining({ payment_intent: 'pi_1', amount: 4000 }),
+      );
+      expect(result).toMatchObject({ amount: 40, status: RefundStatus.REFUNDED });
+      expect(getCreated().appliedPolicy).toMatchObject({ kind: 'fare-difference' });
+      // a later cancellation (FLT-26) must still find a Succeeded, unclaimed payment
+      expect(payment.status).toBe(PaymentStatus.SUCCEEDED);
+      expect(isClaimed()).toBe(false);
+    });
+
+    it('issues nothing for 0', async () => {
+      const { service, stripe } = setup();
+      await expect(service.issueFareDifferenceRefund({ bookingId, amount: 0 })).resolves.toBeNull();
+      expect(stripe.refunds.create).not.toHaveBeenCalled();
+    });
+
+    it('cannot refund more than was paid', async () => {
+      const { service } = setup({ cancelled: false });
+      await expect(service.issueFareDifferenceRefund({ bookingId, amount: 500 })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('needs a successful payment', async () => {
+      const { service } = setup({ cancelled: false, payment: null });
+      await expect(service.issueFareDifferenceRefund({ bookingId, amount: 10 })).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+  });
+
   describe('refundUnconfirmedPayment', () => {
     it('returns the full amount of a payment whose booking was not confirmed, even though it is not cancelled', async () => {
       const { service, stripe, refundModel, payment } = setup({ cancelled: false });

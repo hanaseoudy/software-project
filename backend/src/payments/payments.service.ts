@@ -43,6 +43,20 @@ export interface BookingConfirmedEvent {
  */
 export type BookingConfirmedHandler = (event: BookingConfirmedEvent) => Promise<void>;
 
+/** FLT-27: set on the PaymentIntent of a fare difference, so the webhook can tell it from a booking payment. */
+export const FARE_PAYMENT_PURPOSE = 'flight-change';
+
+/** Sent to FLT-27 once the fare difference of a flight change has been paid. */
+export interface FarePaidEvent {
+  changeId: string;
+  paymentIntentId: string;
+  /** Amount Stripe received, in major units. */
+  amountReceived: number;
+  currency: string;
+  paidAt: Date;
+}
+export type FarePaidHandler = (event: FarePaidEvent) => Promise<void>;
+
 /** The booking fields PAY-01 needs, shared by flight and hotel bookings. */
 interface PayableBooking {
   _id: Types.ObjectId;
@@ -70,6 +84,7 @@ export function bookingAmount(totalPrice: number, baggageFees = 0): number {
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
   private readonly confirmedHandlers: BookingConfirmedHandler[] = [];
+  private readonly farePaidHandlers: FarePaidHandler[] = [];
 
   constructor(
     @InjectModel(Payment.name) private paymentModel: Model<PaymentDocument>,
@@ -91,6 +106,62 @@ export class PaymentsService {
    */
   onBookingConfirmed(handler: BookingConfirmedHandler): void {
     this.confirmedHandlers.push(handler);
+  }
+
+  /**
+   * FLT-27: registers the handler that applies a flight change once its fare difference is paid.
+   * Called from the webhook for PaymentIntents created by createFarePayment(); a failing handler is logged.
+   */
+  onFarePaid(handler: FarePaidHandler): void {
+    this.farePaidHandlers.push(handler);
+  }
+
+  /**
+   * FLT-27: PaymentIntent for the extra fare of a flight change. It is separate from the booking's
+   * own payment (a booking has exactly one Payment, which stays as it was paid).
+   */
+  async createFarePayment(input: {
+    amount: number;
+    changeId: string;
+    bookingId: string;
+  }): Promise<{ paymentIntentId: string; clientSecret: string }> {
+    const stripe = this.requireStripe();
+    const intent = await stripe.paymentIntents.create({
+      amount: this.toMinorUnits(input.amount),
+      currency: PLATFORM_CURRENCY.toLowerCase(),
+      automatic_payment_methods: { enabled: true },
+      metadata: {
+        purpose: FARE_PAYMENT_PURPOSE,
+        changeId: input.changeId,
+        bookingType: BookingType.FLIGHT,
+        bookingId: input.bookingId,
+      },
+    });
+    return { paymentIntentId: intent.id, clientSecret: intent.client_secret! };
+  }
+
+  /**
+   * FLT-27: cancels an unpaid fare PaymentIntent. Returns false when the money is already moving
+   * (succeeded / processing): the webhook decides then.
+   */
+  async cancelFarePayment(paymentIntentId: string): Promise<boolean> {
+    if (!this.stripe) return true;
+    const intent = await this.stripe.paymentIntents.retrieve(paymentIntentId);
+    if (intent.status === 'succeeded' || intent.status === 'processing') return false;
+    if (intent.status !== 'canceled') {
+      await this.stripe.paymentIntents.cancel(intent.id);
+    }
+    return true;
+  }
+
+  /** FLT-27: gives a paid fare difference back when the change could not be applied. */
+  async refundFarePayment(paymentIntentId: string, amount: number, changeId: string): Promise<void> {
+    const stripe = this.requireStripe();
+    await stripe.refunds.create({
+      payment_intent: paymentIntentId,
+      amount: this.toMinorUnits(amount),
+      metadata: { purpose: FARE_PAYMENT_PURPOSE, changeId },
+    });
   }
 
   /**
@@ -201,6 +272,10 @@ export class PaymentsService {
 
     switch (event.type) {
       case 'payment_intent.succeeded':
+        if (event.data.object.metadata?.purpose === FARE_PAYMENT_PURPOSE) {
+          await this.onFareSucceeded(event.data.object, new Date(event.created * 1000));
+          break;
+        }
         await this.onSucceeded(event.data.object, new Date(event.created * 1000));
         break;
       case 'payment_intent.payment_failed':
@@ -290,6 +365,25 @@ export class PaymentsService {
         intent.amount_received / 100,
         `Booking not confirmed: ${notConfirmedReason}`,
       );
+    }
+  }
+
+  private async onFareSucceeded(intent: Stripe.PaymentIntent, paidAt: Date): Promise<void> {
+    const changeId = intent.metadata?.changeId;
+    if (!changeId) return;
+    const event: FarePaidEvent = {
+      changeId,
+      paymentIntentId: intent.id,
+      amountReceived: intent.amount_received / 100,
+      currency: intent.currency.toUpperCase(),
+      paidAt,
+    };
+    for (const handler of this.farePaidHandlers) {
+      try {
+        await handler(event);
+      } catch (error) {
+        this.logger.error(`Fare payment handler failed for change ${changeId}: ${(error as Error).message}`);
+      }
     }
   }
 
