@@ -13,6 +13,8 @@ import {
   ModeratorAssignment,
   ProviderType,
 } from '../users/schemas/moderatorassignment.schema';
+import { BookingType } from '../payments/enums/payment.enums';
+import { RefundsService } from '../payments/refunds.service';
 import { User } from '../users/schemas/user.schema';
 import {
   HotelReservationDto,
@@ -64,6 +66,7 @@ export class HotelReservationsService {
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(ModeratorAssignment.name)
     private readonly assignmentModel: Model<ModeratorAssignment>,
+    private readonly refunds: RefundsService,
   ) {}
 
   /** Which stored reservations belong to a status (a finished Confirmed stay is Completed). */
@@ -162,11 +165,16 @@ export class HotelReservationsService {
       .exec();
     if (!booking) throw notFound;
 
-    const [summary] = await this.toSummaries([booking], now);
+    const [[summary], refund] = await Promise.all([
+      this.toSummaries([booking], now),
+      // PAY-03: the latest refund of this reservation (null when it was never cancelled or nothing was refunded)
+      this.refunds.findByBooking(BookingType.HOTEL, booking._id),
+    ]);
     return {
       ...summary,
       createdAt: (booking.createdAt ?? new Date(0)).toISOString(),
       policiesAcceptedAt: booking.policiesAcceptedAt?.toISOString() ?? null,
+      refund,
     };
   }
 
