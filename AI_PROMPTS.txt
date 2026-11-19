@@ -1451,3 +1451,26 @@ New unit tests (confirmation service, reference generator, PDF) pass together wi
 the other flight-bookings tests, and tsc and oxlint show no errors in the changed
 files. Not tested end to end against Stripe; the hook is covered with mocks.
 ================================================
+Date: 2026-11-19
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-23 (review fixes on PR #140)
+
+Prompt (summary of the conversation):
+The reviewer (Hana) asked for two changes on PR #140: (1) seat inventory: the
+modifiedCount check always succeeds because Mongoose updates updatedAt, so a booking
+could be confirmed without converting held seats into booked seats (double booking
+risk); use $elemMatch in the update filter and verify matchedCount; (2) e-ticket:
+show the airport name and IATA code instead of the airport database ID.
+
+How the output was used:
+The held->booked update now filters on the flight AND a cabin with enough held seats
+($elemMatch on cabinClass and heldSeats >= seats) and checks matchedCount, so it fails
+(and the earlier conversions are rolled back) when no seat could be converted. The
+rollback filter also requires enough booked seats. The e-ticket prints "airport name
+(IATA code)" for departure and arrival.
+
+Verification:
+Confirmation service tests pass (12), including a new test where nothing matches but
+modifiedCount is 1 (updatedAt): the confirmation now fails. tsc shows no new errors.
+================================================
