@@ -124,4 +124,17 @@ export class FlightsController {
   search(@Query() query: SearchFlightsDto) {
     return this.flights.search(query);
   }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get flight details by ID (FLT-17)' })
+  @ApiParam({ name: 'id', description: 'MongoDB ObjectId of the flight' })
+  @ApiResponse({
+    status: 200,
+    description: 'Flight details retrieved successfully.',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid flight ID format.' })
+  @ApiResponse({ status: 404, description: 'Flight not found.' })
+  async findOne(@Param('id') id: string) {
+    return this.flights.findOne(id);
+  }
 }

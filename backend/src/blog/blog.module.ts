@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { AuthorsController } from './authors.controller';
 import { BlogController } from './blog.controller';
 import { CommentsController } from './comments.controller';
 import { BlogService } from './blog.service';
@@ -25,7 +26,7 @@ import { PostItineraryService } from './post-itinerary.service';
     AuthModule,
     UploadsModule, // BLG-10: shared GEN-08 image storage
   ],
-  controllers: [BlogController, TagsController, CommentsController, PostItineraryController],
+  controllers: [BlogController, TagsController, CommentsController, PostItineraryController, AuthorsController],
   providers: [BlogService, PostItineraryService],
 })
 export class BlogModule {}
