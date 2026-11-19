@@ -160,7 +160,7 @@ export class BudgetEntriesController {
   @ApiOperation({
     summary: 'Get owned itinerary budget totals (ITN-14, ITN-18)',
     description:
-      'Budget entries, costed activities and intercity transport count once each in a primary snapshot. Set convert=preferred to include reconciled totals in the current profile currency and the provider rate date. Missing required FX pairs return 503. Invalid legacy amounts or unsafe totals return 409.',
+      'Budget entries, costed activities, intercity transport and active ITN-27 booking allocations count once each in a primary snapshot. Direct flight reservations plus baggage use INTERCITY_TRANSPORT; full hotel stays use ACCOMMODATION. Inactive links contribute zero; original prices/payments are never changed. Set convert=preferred to include reconciled totals in the current profile currency and the provider rate date. Missing required FX pairs return 503. Invalid legacy amounts or unsafe totals return 409.',
   })
   @ApiParam({ name: 'id' })
   @ApiQuery({ name: 'convert', required: false, enum: ['preferred'] })
