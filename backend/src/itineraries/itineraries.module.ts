@@ -1,3 +1,7 @@
+import { FlightsModule } from '../flights/flights.module';
+import { AirportsModule } from '../airports/airports.module';
+import { ItineraryFlightsController } from './itinerary-flights.controller';
+import { ItineraryFlightsService } from './itinerary-flights.service';
 import { HotelsModule } from '../hotels/hotels.module';
 import { ItineraryHotelsController } from './itinerary-hotels.controller';
 import { ItineraryHotelsService } from './itinerary-hotels.service';
@@ -58,6 +62,8 @@ import { ItineraryExportService } from './itinerary-export.service';
 @Module({
   imports: [
     AuthModule,
+    FlightsModule,
+    AirportsModule,
     HotelsModule,
     UploadsModule,
     MongooseModule.forFeature([
@@ -92,8 +98,9 @@ import { ItineraryExportService } from './itinerary-export.service';
       },
     ]),
   ],
-controllers: [
+ controllers: [
     ItineraryHotelsController,
+    ItineraryFlightsController,
     BudgetEntriesController,
     PublicItinerariesController,
     PublicItineraryCloneController,
@@ -102,6 +109,6 @@ controllers: [
     TransportCostsController,
     ItineraryExportController,
   ],
-  providers: [ItineraryHotelsService, BudgetEntriesService, ItinerariesService, ActivitiesService, TransportCostsService, ItineraryExportService],
+  providers: [ItineraryHotelsService, ItineraryFlightsService, BudgetEntriesService, ItinerariesService, ActivitiesService, TransportCostsService, ItineraryExportService],
 })
 export class ItinerariesModule {}

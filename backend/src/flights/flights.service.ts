@@ -6,9 +6,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { fromZonedTime } from 'date-fns-tz';
 import { Flight, FlightDocument, FlightStatus } from './schemas/flight.schema';
 import { Airport, AirportDocument } from '../airports/schemas/airport.schema';
@@ -212,6 +213,27 @@ export class FlightsService {
   // constructor: inject the Airline model next to the Flight model
 
   async search(dto: SearchFlightsDto) {
+    return this.searchRoutes(dto);
+  }
+
+  // ITN-26: all destination airports participate in each leg's single query.
+  // Legacy search keeps its original unpaginated, single-airport contract.
+  async searchToAirports(dto: Omit<SearchFlightsDto, 'arrivalAirport'>, arrivalCodes: readonly string[]) {
+    const codes = [...new Set(arrivalCodes)].filter(code => code !== dto.departureAirport);
+    const result = await this.searchRoutes({ ...dto, arrivalAirport: codes[0] ?? '' }, codes);
+    const unique = (flights: any[]) => {
+      const byId = new Map<string, any>();
+      for (const flight of flights) {
+        const id = flight._id?.toString();
+        if (!id || !isValidObjectId(id)) throw new ServiceUnavailableException('Flight search returned an invalid identifier');
+        if (!byId.has(id)) byId.set(id, flight);
+      }
+      return [...byId.values()];
+    };
+    return { outbound: unique(result.outbound), ...(result.return === undefined ? {} : { return: unique(result.return) }) };
+  }
+
+  private async searchRoutes(dto: SearchFlightsDto, arrivalCodes?: readonly string[]) {
     const { adults, children = 0, infants = 0 } = dto;
 
     if (infants > adults) {
@@ -236,19 +258,19 @@ export class FlightsService {
 
     const outboundRaw = await this.findLeg(
       dto.departureAirport,
-      dto.arrivalAirport,
+      arrivalCodes ?? dto.arrivalAirport,
       dto.departureDate,
       seatsNeeded,
       party,
       dto.cabinClass,
       priceRange,
     );
-    const outbound = this.sortFlights(outboundRaw, dto.sortBy, dto.sortOrder); // ADDED (FLT-15)
+    const outbound = this.sortFlights(outboundRaw, dto.sortBy, dto.sortOrder, arrivalCodes !== undefined); // ADDED (FLT-15)
 
     if (!dto.returnDate) return { outbound };
 
     const returningRaw = await this.findLeg(
-      dto.arrivalAirport,
+      arrivalCodes ?? dto.arrivalAirport,
       dto.departureAirport,
       dto.returnDate,
       seatsNeeded,
@@ -257,7 +279,7 @@ export class FlightsService {
       priceRange,
     );
 
-    const returning = this.sortFlights(returningRaw, dto.sortBy, dto.sortOrder); // ADDED (FLT-15)
+    const returning = this.sortFlights(returningRaw, dto.sortBy, dto.sortOrder, arrivalCodes !== undefined); // ADDED (FLT-15)
 
     return { outbound, return: returning };
   }
@@ -299,24 +321,38 @@ export class FlightsService {
   }
 
   private async findLeg(
-    fromCode: string,
-    toCode: string,
+    fromCode: string | readonly string[],
+    toCode: string | readonly string[],
     localDate: string,
     seatsNeeded: number,
     party: { adults: number; children: number; infants: number },
     cabinClass?: CabinClass,
     priceRange?: { minPrice?: number; maxPrice?: number },
   ) {
-    const [from, to] = await Promise.all([
-      this.airportModel.findOne({ iataCode: fromCode }),
-      this.airportModel.findOne({ iataCode: toCode }),
-    ]);
-    if (!from || !to) throw new BadRequestException('Unknown airport code');
-
+    let departure: Types.ObjectId | { $in: Types.ObjectId[] }, arrival: Types.ObjectId | { $in: Types.ObjectId[] };
+    if (typeof fromCode === 'string' && typeof toCode === 'string') {
+      // Preserve legacy lookup/validation semantics exactly.
+      const [from, to] = await Promise.all([
+        this.airportModel.findOne({ iataCode: fromCode }),
+        this.airportModel.findOne({ iataCode: toCode }),
+      ]);
+      if (!from || !to) throw new BadRequestException('Unknown airport code');
+      departure = from._id; arrival = to._id;
+    } else {
+      const fromCodes = typeof fromCode === 'string' ? [fromCode] : [...fromCode];
+      const toCodes = typeof toCode === 'string' ? [toCode] : [...toCode];
+      if (!fromCodes.length || !toCodes.length) return [];
+      const allCodes = [...new Set([...fromCodes, ...toCodes])];
+      const airports = await this.airportModel.find({ iataCode: { $in: allCodes } }).lean();
+      const byCode = new Map(airports.map(airport => [airport.iataCode, airport._id]));
+      if (allCodes.some(code => !byCode.has(code))) throw new BadRequestException('Unknown airport code');
+      departure = { $in: fromCodes.map(code => byCode.get(code)!) };
+      arrival = { $in: toCodes.map(code => byCode.get(code)!) };
+    }
     const flights = await this.flightsModel
       .find({
-        departureAirport: from._id,
-        arrivalAirport: to._id,
+        departureAirport: departure,
+        arrivalAirport: arrival,
         departureLocalDate: localDate,
         status: FlightStatus.SCHEDULED,
         departureTime: { $gt: new Date() },
@@ -366,6 +402,7 @@ export class FlightsService {
     flights: any[],
     sortBy: FlightSortBy = FlightSortBy.DEPARTURE_TIME,
     sortOrder: SortFlightOrder = SortFlightOrder.ASC,
+    stableTies = false,
   ) {
     const dir = sortOrder === SortFlightOrder.DESC ? -1 : 1;
 
@@ -392,7 +429,7 @@ export class FlightsService {
           new Date(b.departureTime).getTime();
       }
 
-      return diff * dir;
+      return diff * dir || (stableTies ? String(a._id).localeCompare(String(b._id)) : 0);
     });
   }
 
