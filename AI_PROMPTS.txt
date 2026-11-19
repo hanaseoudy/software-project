@@ -1618,4 +1618,3 @@ Verification:
 New unit tests (23) pass, and tsc and oxlint show no errors in the new files. A
 sample PDF was rendered and checked visually. Tested in Postman (see the PR).
 ================================================
-=======
