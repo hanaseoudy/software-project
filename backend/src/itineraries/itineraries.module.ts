@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthModule } from '../auth/auth.module';
+import { UploadsModule } from '../uploads/uploads.module';
 
 import {
   Country,
@@ -46,12 +47,15 @@ import { ActivitiesService } from './activities.service';
 import { TransportCostsController } from './transport-costs.controller';
 import { TransportCostsService } from './transport-costs.service';
 import { ItinerariesController } from './itineraries.controller';
-import { PublicItinerariesController } from './public-itineraries.controller';
+import { PublicItinerariesController, PublicItineraryCloneController } from './public-itineraries.controller';
 import { ItinerariesService } from './itineraries.service';
+import { ItineraryExportController } from './itinerary-export.controller';
+import { ItineraryExportService } from './itinerary-export.service';
 
 @Module({
   imports: [
     AuthModule,
+    UploadsModule,
     MongooseModule.forFeature([
       { name: Currency.name, schema: CurrencySchema },
       {
@@ -84,7 +88,15 @@ import { ItinerariesService } from './itineraries.service';
       },
     ]),
   ],
-  controllers: [BudgetEntriesController, PublicItinerariesController, ItinerariesController, ActivitiesController, TransportCostsController],
-  providers: [BudgetEntriesService, ItinerariesService, ActivitiesService, TransportCostsService],
+  controllers: [
+    BudgetEntriesController,
+    PublicItinerariesController,
+    PublicItineraryCloneController,
+    ItinerariesController,
+    ActivitiesController,
+    TransportCostsController,
+    ItineraryExportController,
+  ],
+  providers: [BudgetEntriesService, ItinerariesService, ActivitiesService, TransportCostsService, ItineraryExportService],
 })
 export class ItinerariesModule {}

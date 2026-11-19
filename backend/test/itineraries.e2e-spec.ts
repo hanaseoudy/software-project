@@ -767,10 +767,10 @@ describe('ITN-07 against an isolated local replica set', () => {
       const before = await snapshot(id);
       const result = await detail(id).expect(200);
       expect(result.headers['cache-control']).toBe('no-store');
-      expect(Object.keys(result.body).sort()).toEqual(['countryIds', 'dayCount', 'days', 'id', 'startDate', 'title', 'visibility']);
+      expect(Object.keys(result.body).sort()).toEqual(['author', 'countryIds', 'dayCount', 'days', 'id', 'startDate', 'title', 'visibility']);
       expect(result.body.days.map((day: { id: string }) => day.id)).toEqual([days[0], days[3], days[1], days[2]].map(day => day._id.toString()));
       expect(result.body.days.map((day: { date: string }) => day.date)).toEqual(['2028-02-28', '2028-02-29', '2028-03-01', '2028-03-02']);
-      for (const day of result.body.days) expect(Object.keys(day).sort()).toEqual(['cityId', 'date', 'dayNumber', 'id']);
+      for (const day of result.body.days) expect(Object.keys(day).sort()).toEqual(['activities', 'budgetEntries', 'cityId', 'date', 'dayNumber', 'id', 'transportCosts']);
       expect(JSON.stringify(result.body)).not.toContain('secret');
       expect(await snapshot(id)).toBe(before);
       const etag = result.headers.etag ?? '"previous-response"';
@@ -796,8 +796,85 @@ describe('ITN-07 against an isolated local replica set', () => {
       for (const item of [...first.body.items, ...second.body.items]) expect(Object.keys(item).sort()).toEqual(['countryIds', 'dayCount', 'id', 'startDate', 'title', 'visibility']);
       for (const id of [hidden.id, legacy.id, ordinary.id]) await detail(id).expect(404);
     });
-    it.each(['?q=Egypt', '?cityId=CAI', '?minDays=1', '?visibility=PRIVATE', '?page=0', '?page=1.5', '?page=abc'])('rejects unsupported filters or invalid pagination %s', async query => {
+    it.each(['?q=Egypt', '?cityId=CAI', '?minDays=0', '?visibility=PRIVATE', '?page=0', '?page=1.5', '?page=abc'])('rejects unsupported filters or invalid pagination %s', async query => {
       await search(query).expect(400);
+    });
+    describe('ITN-21 public search, read-only view and clone', () => {
+      const clone = (id: string, cookies?: string[]) => {
+        const call = request(http()).post('/api/itineraries/' + id + '/clone');
+        return cookies ? call.set('Cookie', cookies) : call;
+      };
+      async function published(title: string, count = 2, expenses = false) {
+        const data = await fixture(count, expenses);
+        await models().parent.updateOne({ _id: data.id }, { $set: { title } });
+        await visibility(data.id, 'PUBLIC').expect(200);
+        return data;
+      }
+      const ids = (body: { items: { id: string }[] }) => body.items.map(item => item.id).sort();
+
+      it('searches by keyword (title, country name/code, city name/code), duration, country and city', async () => {
+        const nile = await published('Nile Adventure', 3), short = await published('Short Stop', 1);
+        await models().day.updateOne({ _id: nile.days[2]._id }, { $set: { cityId: 'GIZ' } });
+        for (const keyword of ['nile ADV', 'giza', 'giz']) expect(ids((await search('?keyword=' + encodeURIComponent(keyword)).expect(200)).body)).toEqual([nile.id]);
+        for (const keyword of ['egypt', 'eg', 'cairo', 'CAI']) expect(ids((await search('?keyword=' + keyword).expect(200)).body)).toEqual([nile.id, short.id].sort());
+        expect(ids((await search('?minDays=2').expect(200)).body)).toEqual([nile.id]);
+        expect(ids((await search('?maxDays=1').expect(200)).body)).toEqual([short.id]);
+        expect(ids((await search('?city=giz').expect(200)).body)).toEqual([nile.id]);
+        expect(ids((await search('?country=eg&keyword=short').expect(200)).body)).toEqual([short.id]);
+        expect((await search('?keyword=.*').expect(200)).body.total).toBe(0);
+        await search('?minDays=3&maxDays=2').expect(400);
+      });
+
+      it('shows author, activities and budget read-only', async () => {
+        const { id } = await published('Budget Trip', 1, true);
+        const before = await snapshot(id);
+        const { body } = await detail(id).expect(200);
+        expect(body.author).toEqual({ name: 'Test User' });
+        expect(body.days[0].activities).toEqual([expect.objectContaining({ name: 'Museum', description: 'Ticket', cost: 0.1, currency: 'USD', images: [] })]);
+        expect(body.days[0].budgetEntries).toEqual([expect.objectContaining({ category: 'ACTIVITIES', amount: 0.2, currency: 'USD' })]);
+        expect(body.days[0].transportCosts).toEqual([expect.objectContaining({ mode: 'FLIGHT', fromCityId: 'CAI', toCityId: 'BER', amount: 7, currency: 'EUR' })]);
+        expect(JSON.stringify(body)).not.toContain('original-1');
+        expect(await snapshot(id)).toBe(before);
+      });
+
+      it('lets a registered user clone a public itinerary into an independent private copy that credits the author', async () => {
+        const { id, days } = await published('Clone Me', 2, true);
+        await clone(id).expect(401);
+        const response = await clone(id, otherAuth).expect(201);
+        const copy = response.body;
+        expect(copy).toMatchObject({ title: 'Clone Me', countryIds: ['EG'], startDate: '2028-02-28', visibility: 'PRIVATE', dayCount: 2, originalAuthorName: 'Test User' });
+        expect(copy.id).not.toBe(id);
+        const stored = (await models().parent.findById(copy.id).lean())!;
+        expect(stored.userId.toString()).not.toBe(owner);
+        expect(stored.clonedFromId!.toString()).toBe(id);
+        expect(stored.originalAuthorId!.toString()).toBe(owner);
+        const copyDays = await models().day.find({ itineraryId: copy.id }).sort({ dayNumber: 1 }).lean();
+        expect(copyDays.map(day => day.cityId)).toEqual(['CAI', 'CAI']);
+        expect(copyDays.every(day => !days.some(original => original._id.equals(day._id)))).toBe(true);
+        expect(copyDays.every(day => day.notes === undefined)).toBe(true);
+        const inCopy = { dayId: { $in: copyDays.map(day => day._id) } };
+        expect(await models().activity.countDocuments(inCopy)).toBe(2);
+        expect(await models().budget.countDocuments(inCopy)).toBe(2);
+        expect(await models().transport.countDocuments(inCopy)).toBe(2);
+        await detail(copy.id).expect(404);
+        await request(http()).get('/api/itineraries/' + copy.id).set('Cookie', otherAuth).expect(200);
+
+        // Independent: changing or deleting the original leaves the clone untouched.
+        const copyBefore = await snapshot(copy.id);
+        await models().activity.updateMany({ dayId: { $in: days.map(day => day._id) } }, { $set: { name: 'Changed' } });
+        await request(http()).delete('/api/itineraries/' + id).set('Cookie', auth).expect(200);
+        expect(await snapshot(copy.id)).toBe(copyBefore);
+      });
+
+      it('refuses to clone private, hidden, missing or invalid itineraries', async () => {
+        const privateOne = await fixture(1);
+        const hidden = await published('Hidden', 1);
+        await models().parent.updateOne({ _id: hidden.id }, { $set: { isHidden: true } });
+        const before = await models().parent.countDocuments();
+        for (const id of [privateOne.id, hidden.id, oid().toString()]) await clone(id, otherAuth).expect(404);
+        await clone('bad', otherAuth).expect(400);
+        expect(await models().parent.countDocuments()).toBe(before);
+      });
     });
     it('preserves moderation hiding, owner identity and associated records during a mixed visibility PATCH', async () => {
       const { id, days } = await fixture(2, true), parent = models().parent;
@@ -970,7 +1047,7 @@ describe('ITN-07 against an isolated local replica set', () => {
         await parent.init(); await day.init();
         const id = oid();
         await parent.collection.insertOne({ _id: id, userId: oid(), title: 'Quorum fixture', countryIds: ['EG'], startDate: new Date('2028-02-28T00:00:00Z'), visibility: ItineraryVisibility.PUBLIC }, { writeConcern: { w: 'majority' } });
-        const reader = new ItinerariesService(parent as never, {} as never, day as never, {} as never, {} as never, {} as never, isolated, {} as never);
+        const reader = new ItinerariesService(parent as never, {} as never, day as never, { collection: { name: 'activities' } } as never, { collection: { name: 'budgetentries' } } as never, { collection: { name: 'transportcosts' } } as never, isolated, {} as never, { collection: { name: 'users' } } as never);
         const module = await Test.createTestingModule({ controllers: [PublicItinerariesController], providers: [{ provide: ItinerariesService, useValue: reader }] }).compile();
         publicApp = module.createNestApplication(); publicApp.setGlobalPrefix('api');
         publicApp.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true })); await publicApp.init();

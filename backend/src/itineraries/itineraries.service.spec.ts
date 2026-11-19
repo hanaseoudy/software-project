@@ -19,7 +19,7 @@ describe('ITN-07 transaction retry policy', () => {
     session = { startTransaction: jest.fn(), commitTransaction: jest.fn().mockResolvedValue(undefined), abortTransaction: jest.fn().mockResolvedValue(undefined), endSession: jest.fn().mockResolvedValue(undefined), inTransaction: jest.fn().mockReturnValue(true) };
     connection = { startSession: jest.fn().mockResolvedValue(session) };
     const parent = { findOneAndUpdate: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(id) }) }) };
-    service = new ItinerariesService(parent as never, {} as never, {} as never, {} as never, {} as never, {} as never, connection as never, {} as never);
+    service = new ItinerariesService(parent as never, {} as never, {} as never, {} as never, {} as never, {} as never, connection as never, {} as never, {} as never);
   });
   it('bounds transient transaction retries and returns 409', async () => {
     const work = jest.fn().mockRejectedValue(labelled('TransientTransactionError'));
@@ -156,7 +156,7 @@ describe('ITN-08 reorderDay', () => {
       }),
     };
     parentModel = { findOneAndUpdate: jest.fn(() => ({ lean: async () => parent })) };
-    service = new ItinerariesService(parentModel as never, {} as never, model as never, {} as never, {} as never, {} as never, { startSession: async () => session } as never, {} as never);
+    service = new ItinerariesService(parentModel as never, {} as never, model as never, {} as never, {} as never, {} as never, { startSession: async () => session } as never, {} as never, {} as never);
   });
   const reorder = (day: string, newPosition: number) => service.reorderDay(owner, itineraryId.toString(), day, { newPosition });
   it.each([[3, 2, [0, 3, 1, 2]], [0, 4, [1, 2, 3, 0]], [2, 1, [2, 0, 1, 3]]] as const)('moves index %s to position %s without collisions', async (index, position, order) => {
@@ -309,7 +309,7 @@ describe('ITN-09 read-only group snapshots', () => {
     const source = (name: string) => ({ collection: { name } });
     service = new ItinerariesService(parentModel as never, {} as never, dayModel as never,
       source('activities') as never, source('budgetentries') as never, source('transportcosts') as never,
-      connection as never, cityModel as never);
+      connection as never, cityModel as never, {} as never);
   });
   const read = () => service.findGroups(owner, id.toString());
   it('uses one snapshot session for every read and aggregation, without writes or transactions', async () => {
@@ -425,7 +425,7 @@ describe('ITN-20 visibility updates', () => {
     connection = { startSession: jest.fn().mockResolvedValue(session) };
     parent = { findById: jest.fn().mockResolvedValue(document), findOneAndUpdate: jest.fn((filter, update) => update.$inc ? { lean: async () => ({ _id: id }) } : Promise.resolve({ ...update.$set, _id: id })) };
     const countries = { find: jest.fn(() => ({ lean: async () => [{ code: 'EG' }] })) };
-    service = new ItinerariesService(parent as never, countries as never, {} as never, {} as never, {} as never, {} as never, connection as never, {} as never);
+    service = new ItinerariesService(parent as never, countries as never, {} as never, {} as never, {} as never, {} as never, connection as never, {} as never, {} as never);
   });
   it.each([ItineraryVisibility.PUBLIC, ItineraryVisibility.PRIVATE])('commits %s with the shared parent write and only allowed supplied fields', async visibility => {
     const dto = { visibility, title: 'Changed', countryIds: ['EG'], startDate: '2028-02-29', userId: 'attacker', isHidden: false };
@@ -501,7 +501,9 @@ describe('ITN-20 public read consistency and allowlists', () => {
       runCursorCommand: jest.fn().mockReturnValue(cursor),
     } };
     connection.getClient.mockReturnValue({ startSession: connection.startSession });
-    service = new ItinerariesService({ collection: { name: 'itineraries' } } as never, {} as never, { collection: { name: 'itinerarydays' } } as never, {} as never, {} as never, {} as never, connection as never, {} as never);
+    service = new ItinerariesService({ collection: { name: 'itineraries' } } as never, {} as never, { collection: { name: 'itinerarydays' } } as never,
+      { collection: { name: 'activities' } } as never, { collection: { name: 'budgetentries' } } as never, { collection: { name: 'transportcosts' } } as never,
+      connection as never, {} as never, { collection: { name: 'users' } } as never);
   });
   afterEach(() => jest.restoreAllMocks());
   it('pins the detail snapshot to reply.operationTime and rechecks outside the snapshot', async () => {
@@ -515,7 +517,8 @@ describe('ITN-20 public read consistency and allowlists', () => {
       expect(options.timeoutMS).toBeLessThanOrEqual(5000);
     }
     expect(connection.db.runCursorCommand.mock.calls[0][0].readConcern).toEqual({ level: 'snapshot', atClusterTime: stamp });
-    expect(result).toEqual({ id: id.toString(), title: 'Public trip', countryIds: ['EG'], startDate: '2028-02-28', visibility: 'PUBLIC', dayCount: 1, days: [{ id: 'day', dayNumber: 1, cityId: 'CAI', date: '2028-02-28' }] });
+    expect(result).toEqual({ id: id.toString(), title: 'Public trip', countryIds: ['EG'], startDate: '2028-02-28', visibility: 'PUBLIC', dayCount: 1, author: { name: null },
+      days: [{ id: 'day', dayNumber: 1, cityId: 'CAI', date: '2028-02-28', activities: [], budgetEntries: [], transportCosts: [] }] });
     expect(cursor.close).toHaveBeenCalledTimes(1);
     expect(session.endSession).toHaveBeenCalledTimes(1);
   });
@@ -531,6 +534,30 @@ describe('ITN-20 public read consistency and allowlists', () => {
     expect(result).toMatchObject({ total: 11, page: 2, pageSize: 10, totalPages: 2 });
     expect(Object.keys(result.items[0]).sort()).toEqual(['countryIds', 'dayCount', 'id', 'startDate', 'title', 'visibility']);
     expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+  it('ITN-21: returns author name, activities (timed first), budget entries and transport costs with allowlisted fields only', async () => {
+    cursor.toArray.mockResolvedValueOnce([{ ...item(), authorUser: [{ firstName: 'Sara', lastName: 'Ali', email: 'secret' }],
+      days: [{ id: 'day', dayNumber: 1, cityId: 'CAI', date: '2028-02-28', notes: 'secret',
+        activities: [
+          { id: 'a2', name: 'Museum', description: 'Visit', images: [], dayId: 'secret' },
+          { id: 'a1', name: 'Tour', description: 'Walk', time: '09:00', cost: 10, currency: 'EGP', images: ['/api/uploads/x.jpg'], __v: 0 },
+        ],
+        budgetEntries: [{ id: 'b1', category: 'FOOD', description: 'Lunch', amount: 5, currency: 'EGP', dayId: 'secret' }],
+        transportCosts: [{ id: 't1', mode: 'TRAIN', fromCityId: 'cairo', toCityId: 'alexandria', amount: 20, currency: 'EGP', createdAt: 'secret' }],
+      }] }]);
+    const result = await service.findPublicOne(id.toString());
+    expect(result.author).toEqual({ name: 'Sara Ali' });
+    expect(result.days[0]).toEqual({ id: 'day', dayNumber: 1, cityId: 'CAI', date: '2028-02-28',
+      activities: [
+        { id: 'a1', name: 'Tour', description: 'Walk', time: '09:00', cost: 10, currency: 'EGP', images: ['/api/uploads/x.jpg'] },
+        { id: 'a2', name: 'Museum', description: 'Visit', time: undefined, cost: undefined, currency: undefined, images: [] },
+      ],
+      budgetEntries: [{ id: 'b1', category: 'FOOD', description: 'Lunch', amount: 5, currency: 'EGP' }],
+      transportCosts: [{ id: 't1', mode: 'TRAIN', fromCityId: 'cairo', toCityId: 'alexandria', amount: 20, currency: 'EGP' }],
+    });
+    expect(JSON.stringify(result)).not.toContain('secret');
+    const lookups = JSON.stringify(connection.db.runCursorCommand.mock.calls[0][0].pipeline);
+    for (const from of ['activities', 'budgetentries', 'transportcosts', 'users']) expect(lookups).toContain(`"from":"${from}"`);
   });
   it('returns empty discovery results', async () => {
     cursor.toArray.mockResolvedValueOnce([{ items: [], meta: [] }]);
@@ -582,5 +609,63 @@ describe('ITN-20 public read consistency and allowlists', () => {
     await expect(service.findPublicOne('bad')).rejects.toMatchObject({ status: 400 });
     for (const page of [0, -1, 1.5, NaN, Infinity]) await expect(service.findPublic(page)).rejects.toMatchObject({ status: 400 });
     expect(connection.startSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('ITN-21 public search filters', () => {
+  const stamp = new mongo.Timestamp({ t: 10, i: 1 });
+  let service: ItinerariesService;
+  let connection: { getClient: jest.Mock; db: { command: jest.Mock; runCursorCommand: jest.Mock } };
+  let cursor: { toArray: jest.Mock; close: jest.Mock };
+  const pipelineFor = async (filters: Record<string, unknown>) => {
+    await service.findPublic(1, filters);
+    return connection.db.runCursorCommand.mock.calls[0][0].pipeline as Record<string, any>[];
+  };
+  beforeEach(() => {
+    cursor = { toArray: jest.fn().mockResolvedValue([{ items: [], meta: [] }]), close: jest.fn().mockResolvedValue(undefined) };
+    connection = { getClient: jest.fn().mockReturnValue({ startSession: () => ({ endSession: jest.fn() }) }), db: {
+      command: jest.fn().mockResolvedValue({ operationTime: stamp, cursor: { firstBatch: [] } }),
+      runCursorCommand: jest.fn().mockReturnValue(cursor),
+    } };
+    service = new ItinerariesService({ collection: { name: 'itineraries' } } as never, { collection: { name: 'countries' } } as never,
+      { collection: { name: 'itinerarydays' } } as never, {} as never, {} as never, {} as never, connection as never, { collection: { name: 'cities' } } as never, {} as never);
+  });
+
+  it('keeps the plain discovery pipeline unchanged without filters', async () => {
+    const pipeline = await pipelineFor({});
+    expect(pipeline).toHaveLength(3);
+    expect(Object.keys(pipeline[1])).toEqual(['$sort']);
+  });
+
+  it('filters by exact country code without looking up days', async () => {
+    const pipeline = await pipelineFor({ country: 'EG' });
+    expect(pipeline[1]).toEqual({ $match: { countryIds: 'EG' } });
+    expect(JSON.stringify(pipeline)).not.toContain('searchDays');
+  });
+
+  it('filters by city code (exact, case-insensitive) and duration in days', async () => {
+    const pipeline = await pipelineFor({ city: 'cairo', minDays: 2, maxDays: 5 });
+    expect(pipeline[1].$lookup).toMatchObject({ from: 'itinerarydays', as: 'searchDays' });
+    expect(pipeline).toContainEqual({ $match: { 'searchDays.cityId': { $regex: '^cairo$', $options: 'i' } } });
+    expect(pipeline).toContainEqual({ $match: { $expr: { $and: [
+      { $gte: [{ $size: '$searchDays' }, 2] }, { $lte: [{ $size: '$searchDays' }, 5] },
+    ] } } });
+    expect(pipeline).toContainEqual({ $project: { searchDays: 0, searchCountries: 0, searchCities: 0 } });
+  });
+
+  it('matches the keyword in title, country name/code and city name/code, with regex characters escaped', async () => {
+    const pipeline = await pipelineFor({ keyword: 'egy.pt' });
+    expect(pipeline).toContainEqual({ $lookup: { from: 'countries', localField: 'countryIds', foreignField: 'code', as: 'searchCountries' } });
+    expect(pipeline).toContainEqual({ $lookup: { from: 'cities', localField: 'searchDays.cityId', foreignField: 'cityId', as: 'searchCities' } });
+    const pattern = { $regex: 'egy\\.pt', $options: 'i' };
+    expect(pipeline).toContainEqual({ $match: { $or: [
+      { title: pattern }, { countryIds: pattern }, { 'searchCountries.name': pattern },
+      { 'searchDays.cityId': pattern }, { 'searchCities.name': pattern },
+    ] } });
+  });
+
+  it('rejects minDays greater than maxDays before reading the database', async () => {
+    await expect(service.findPublic(1, { minDays: 5, maxDays: 2 })).rejects.toMatchObject({ status: 400 });
+    expect(connection.getClient).not.toHaveBeenCalled();
   });
 });
