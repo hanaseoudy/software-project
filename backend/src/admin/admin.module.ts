@@ -18,6 +18,8 @@ import { AdminProvidersController } from './admin-providers.controller';
 import { AdminProvidersService } from './admin-providers.service';
 import { AdminBookingsController } from './admin-bookings.controller';
 import { AdminBookingsService } from './admin-bookings.service';
+import { AdminAnalyticsController } from './admin-analytics.controller';
+import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminAccountsController } from './admin-accounts.controller';
 import { AdminAccountsService } from './admin-accounts.service';
 
@@ -38,7 +40,7 @@ import { AdminAccountsService } from './admin-accounts.service';
     NotificationsModule,
     AuditLogsModule, // GEN-07: audit entries for admin actions
   ],
-  controllers: [AdminController, AdminAccountsController, AdminProvidersController, AdminBookingsController],
-  providers: [AdminService, AdminAccountsService, AdminProvidersService, AdminBookingsService],
+  controllers: [AdminController, AdminAccountsController, AdminProvidersController, AdminBookingsController, AdminAnalyticsController],
+  providers: [AdminService, AdminAccountsService, AdminProvidersService, AdminBookingsService, AdminAnalyticsService],
 })
 export class AdminModule {}
