@@ -75,6 +75,8 @@ function makeBooking(overrides: Record<string, unknown> = {}) {
     outboundFlight: outbound,
     returnFlight: inbound,
     passengers: [{ type: 'ADULT' }, { type: 'CHILD' }, { type: 'INFANT' }],
+    totalPrice: 120,
+    baggageFees: 0,
     ...overrides,
   };
 }
@@ -110,14 +112,12 @@ function setup(
       ),
   };
   const refundsService = {
-    issueRefund: jest
-      .fn()
-      .mockResolvedValue({
-        id: 'r1',
-        amount: 60,
-        currency: 'USD',
-        status: 'pending',
-      }),
+    issueRefund: jest.fn().mockResolvedValue({
+      id: 'r1',
+      amount: 60,
+      currency: 'USD',
+      status: 'pending',
+    }),
   };
   const notificationsService = {
     create: jest.fn().mockResolvedValue(undefined),
@@ -162,6 +162,26 @@ describe('FlightCancellationService.getQuote', () => {
       refundAmount: 60,
       refundPercent: 50,
     });
+  });
+
+  it('refunds from the current total after a cheaper flight change (FLT-27)', async () => {
+    const { service } = setup({
+      booking: makeBooking({ totalPrice: 80 }), // paid 120, changed to a flight of 80 (40 already refunded)
+    });
+    await service.getQuote(userId.toString(), bookingId.toString(), now);
+    expect(refundQuote).toHaveBeenCalledWith(
+      expect.objectContaining({ paidAmount: 80 }),
+    );
+  });
+
+  it('never refunds more than the original payment after a dearer flight change (FLT-27)', async () => {
+    const { service } = setup({
+      booking: makeBooking({ totalPrice: 150 }), // the extra 30 was paid on a separate Stripe payment
+    });
+    await service.getQuote(userId.toString(), bookingId.toString(), now);
+    expect(refundQuote).toHaveBeenCalledWith(
+      expect.objectContaining({ paidAmount: 120 }),
+    );
   });
 
   it('is blocked after departure', async () => {

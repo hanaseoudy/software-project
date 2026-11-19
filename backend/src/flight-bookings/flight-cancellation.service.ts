@@ -25,6 +25,7 @@ import {
 } from './schemas/flight-booking.schema';
 import { PassengerType } from './schemas/passenger.schema';
 import { hasDeparted, wholeDaysUntil } from './utils/flight-cancellation';
+import { chargeTotal } from './utils/flight-change';
 
 /**
  * FLT-26: a registered user cancels their own CONFIRMED flight booking before
@@ -166,10 +167,18 @@ export class FlightCancellationService {
       );
     }
 
+    // FLT-27: after a flight change the booking is worth its current total, not what was first paid
+    // (a cheaper flight was already refunded). A higher fare paid later is on a separate Stripe payment, so
+    // the refund can never be more than the original payment.
+    const paidAmount = Math.min(
+      payment.amount,
+      chargeTotal(booking.totalPrice, booking.baggageFees),
+    );
+
     // The refund follows the tiers of the airline operating the outbound flight.
     const airline = await this.airlineModel.findById(outbound.airline);
     const quote = refundQuote({
-      paidAmount: payment.amount,
+      paidAmount,
       daysRemaining: wholeDaysUntil(outbound.departureTime, now),
       flightTiers: airline?.cancellationPolicy?.rules ?? [],
     });
@@ -177,7 +186,7 @@ export class FlightCancellationService {
     return {
       booking,
       quote,
-      paidAmount: payment.amount,
+      paidAmount,
       currency: payment.currency,
       departureTime: outbound.departureTime,
     };
