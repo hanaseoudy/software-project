@@ -146,6 +146,20 @@ and the cancellation is refused if it changed. Cancelling frees the rooms
 because availability only counts Confirmed reservations and unexpired holds.
 It wrote the DTOs, a HotelCancellationService and unit tests. I will review the
 changes before the pull request is merged.
+Related Requirement: HTL-26 (Jira TASK-119, optional bonus)
+Prompt:
+There is a bonus for me too. (I pasted the HTL-26 description from Jira: "The
+system shall allow a hotel moderator to reply to a review", dependency HTL-23.)
+How the output was used:
+Claude added POST /api/reviews/:id/reply for the hotel moderator. It checks that
+the moderator is assigned to the hotel of the review, saves the reply on the
+review in one atomic update so a review can only have one reply (a second one
+returns 409), and rejects hidden reviews. It added a reply field to the Review
+schema, the DTO with field-level messages, a ReviewRepliesService, the
+controller and unit tests. HTL-23 (review creation) is another teammate's ticket
+and is not on develop yet, so the endpoint works on the existing Review schema;
+the stored reply is ready for the review list (HTL-24) to show. I will review
+the changes before the pull request is merged.
 Verification performed:
 Unit tests, lint and build passed under Node 24.
 ================================================
