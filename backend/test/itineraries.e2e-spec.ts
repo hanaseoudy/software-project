@@ -1012,11 +1012,11 @@ describe('ITN-07 against an isolated local replica set', () => {
 
   describe('ITN-14 daily budget entries and reconciled totals', () => {
     const createBudget = (id: string, dayId: string, body: unknown = { category: 'FOOD', amount: 0, currency: 'USD' }, cookies = auth) =>
-      request(app.getHttpServer()).post('/api/itineraries/' + id + '/days/' + dayId + '/budget-entries').set('Cookie', cookies).send(body);
-    const getTotals = (id: string, cookies = auth) => request(app.getHttpServer()).get('/api/itineraries/' + id + '/budget-totals').set('Cookie', cookies);
-    const patchBudget = (entry: string, body: unknown, cookies = auth) => request(app.getHttpServer()).patch('/api/budget-entries/' + entry).set('Cookie', cookies).send(body);
-    const deleteBudget = (entry: string, cookies = auth) => request(app.getHttpServer()).delete('/api/budget-entries/' + entry).set('Cookie', cookies);
-    const listBudget = (id: string, dayId: string, cookies = auth) => request(app.getHttpServer()).get('/api/itineraries/' + id + '/days/' + dayId + '/budget-entries').set('Cookie', cookies);
+      request(app.getHttpServer()).post('/api/itineraries/' + id + '/days/' + dayId + '/budgets').set('Cookie', cookies).send(body);
+    const getTotals = (id: string, cookies = auth) => request(app.getHttpServer()).get('/api/itineraries/' + id + '/budget-summary').set('Cookie', cookies);
+    const patchBudget = (entry: string, body: unknown, cookies = auth) => request(app.getHttpServer()).patch('/api/budgets/' + entry).set('Cookie', cookies).send(body);
+    const deleteBudget = (entry: string, cookies = auth) => request(app.getHttpServer()).delete('/api/budgets/' + entry).set('Cookie', cookies);
+    const listBudget = (id: string, dayId: string, cookies = auth) => request(app.getHttpServer()).get('/api/itineraries/' + id + '/days/' + dayId + '/budgets').set('Cookie', cookies);
     const money = (value: number) => BigInt(Math.round(value * 100));
     function reconcile(body: ItineraryBudgetTotalsResponseDto) {
       for (const total of body.totals) {
@@ -1224,11 +1224,32 @@ describe('ITN-07 against an isolated local replica set', () => {
       await models().activity.collection.insertOne({ dayId: days[0]._id, cost: null } as never);
       expect((await getTotals(id).expect(200)).body.totals).toEqual([]);
     });
+    it.each([
+      ['post', 'day'], ['get', 'day'], ['patch', 'entry'], ['delete', 'entry'], ['get', 'summary'],
+    ] as const)('returns 404 for obsolete %s %s route without changing stored budgets', async (method, kind) => {
+      const { id, days } = await seed(1);
+      const entry = await createBudget(id, days[0]._id.toString(), { category: 'FOOD', amount: 1, currency: 'USD' }).expect(201);
+      const before = await snapshot(id);
+      const route = kind === 'day' ? '/api/itineraries/' + id + '/days/' + days[0]._id + '/budget-entries'
+        : kind === 'entry' ? '/api/budget-entries/' + entry.body.id : '/api/itineraries/' + id + '/budget-totals';
+      const call = request(app.getHttpServer())[method](route).set('Cookie', auth);
+      if (method === 'post') call.send({ category: 'FOOD', amount: 2, currency: 'USD' });
+      if (method === 'patch') call.send({ amount: 2 });
+      await call.expect(404);
+      expect(await snapshot(id)).toBe(before);
+    });
     it('documents all five authenticated endpoints and response-only transport category', () => {
       const document = SwaggerModule.createDocument(app, createSwaggerConfig());
-      for (const [route, methods] of [['/api/itineraries/{id}/days/{dayId}/budget-entries', ['get', 'post']], ['/api/budget-entries/{id}', ['patch', 'delete']], ['/api/itineraries/{id}/budget-totals', ['get']]] as const) {
-        for (const method of methods) expect(document.paths[route][method]!.security).toContainEqual({ access_token: [] });
+      for (const [route, methods] of [['/api/itineraries/{id}/days/{dayId}/budgets', ['get', 'post']], ['/api/budgets/{id}', ['patch', 'delete']], ['/api/itineraries/{id}/budget-summary', ['get']]] as const) {
+        for (const method of methods) {
+          const operation = document.paths[route][method]!;
+          expect(operation.security).toContainEqual({ access_token: [] });
+          expect(operation.tags).toEqual(['budgets']);
+          expect(operation.responses).toHaveProperty(method === 'post' ? '201' : '200');
+        }
       }
+      for (const obsolete of ['/api/itineraries/{id}/days/{dayId}/budget-entries', '/api/budget-entries/{id}', '/api/itineraries/{id}/budget-totals'])
+        expect(document.paths).not.toHaveProperty(obsolete);
       expect(document.components!.schemas!.CreateBudgetEntryDto.properties!.category).toMatchObject({ enum: Object.values(BudgetCategory) });
       expect(document.components!.schemas!.BudgetCategoryTotalsDto.properties).toHaveProperty('INTERCITY_TRANSPORT');
     });

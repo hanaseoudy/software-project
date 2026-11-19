@@ -1,3 +1,5 @@
+import { RequestMethod } from '@nestjs/common';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { BudgetEntriesController } from './budget-entries.controller';
 import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
 import { BudgetCategory } from './schemas/budget-entry.schema';
@@ -48,4 +50,14 @@ describe('ITN-14 controller', () => {
       expect(service.update).not.toHaveBeenCalled();
     },
   );
+  it.each([
+    ['create', RequestMethod.POST, 'itineraries/:id/days/:dayId/budgets'],
+    ['list', RequestMethod.GET, 'itineraries/:id/days/:dayId/budgets'],
+    ['update', RequestMethod.PATCH, 'budgets/:id'],
+    ['remove', RequestMethod.DELETE, 'budgets/:id'],
+    ['totals', RequestMethod.GET, 'itineraries/:id/budget-summary'],
+  ] as const)('registers %s with the approved method and path', (handler, method, route) => {
+    expect(Reflect.getMetadata(METHOD_METADATA, controller[handler])).toBe(method);
+    expect(Reflect.getMetadata(PATH_METADATA, controller[handler])).toBe(route);
+  });
 });

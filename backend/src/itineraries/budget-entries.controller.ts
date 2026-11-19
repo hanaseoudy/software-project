@@ -63,13 +63,13 @@ const errors = () =>
       description: 'Unexpected database failure; uncommitted writes roll back',
     }),
   );
-@ApiTags('budget-entries')
+@ApiTags('budgets')
 @ApiCookieAuth(ACCESS_COOKIE)
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class BudgetEntriesController {
   constructor(private readonly budgets: BudgetEntriesService) {}
-  @Post('itineraries/:id/days/:dayId/budget-entries')
+  @Post('itineraries/:id/days/:dayId/budgets')
   @ApiOperation({
     summary: 'Create an owned daily budget entry (ITN-14)',
     description:
@@ -91,7 +91,7 @@ export class BudgetEntriesController {
     this.validateFields(req.body);
     return this.budgets.create(req.user!.sub, id, dayId, dto);
   }
-  @Get('itineraries/:id/days/:dayId/budget-entries')
+  @Get('itineraries/:id/days/:dayId/budgets')
   @ApiOperation({
     summary: 'List owned day budget entries (ITN-14)',
     description: 'Ordered by entry ID. Empty array when no entries exist.',
@@ -107,7 +107,7 @@ export class BudgetEntriesController {
   ) {
     return this.budgets.list(req.user!.sub, id, dayId);
   }
-  @Patch('budget-entries/:id')
+  @Patch('budgets/:id')
   @ApiOperation({
     summary: 'Edit an owned budget entry (ITN-14)',
     description:
@@ -124,7 +124,7 @@ export class BudgetEntriesController {
     this.validateFields(req.body);
     return this.budgets.update(req.user!.sub, id, dto);
   }
-  @Delete('budget-entries/:id')
+  @Delete('budgets/:id')
   @HttpCode(200)
   @ApiOperation({ summary: 'Delete an owned budget entry (ITN-14)' })
   @ApiParam({ name: 'id' })
@@ -143,7 +143,7 @@ export class BudgetEntriesController {
   remove(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.budgets.remove(req.user!.sub, id);
   }
-  @Get('itineraries/:id/budget-totals')
+  @Get('itineraries/:id/budget-summary')
   @ApiOperation({
     summary:
       'Get owned itinerary totals by currency, day and category (ITN-14)',

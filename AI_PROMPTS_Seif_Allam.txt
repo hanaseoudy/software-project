@@ -231,3 +231,15 @@ Verification:
 - Full unrelated backend suites were not run for this task. No FX conversion or purchase-level deduplication; distinct stored records count separately. Consistent reads may reflect the snapshot established before an overlapping update.
 - No commit, push or PR. Shared AI_PROMPTS.txt and original software-project workspace were not modified.
 ================================================
+
+================================================
+ITN-14 review fix — PDF section 8.8 endpoint names
+Date: 2026-11-19; Student: Seif Allam; AI tool: OpenAI Codex
+Prompt (summary, not verbatim): Inspect PDF section 8.8 and correct the five ITN-14 routes after approval; preserve all service/DTO/schema behavior, remove obsolete routes, update tests and Swagger, and append this worktree-only log. No commit or push.
+Used AI assistance to verify the PDF on page 9, rename endpoints to /budgets and /budget-summary, change the Swagger tag to budgets, and add route metadata and obsolete-path 404 regression tests.
+PDF distinction: section 8.8 lists POST daily budgets, PATCH/DELETE budgets and GET budget-summary. The approved GET daily budgets list remains an additional endpoint permitted by section 8. Section 8.8 does not define request/response fields or status codes.
+Contracts, status codes, ownership, currency validation, monetary precision, transactions and calculation logic were preserved. No service, DTO or schema files changed.
+Verification: focused ITN-14 unit tests 56 passed; itinerary unit regressions 275 passed; isolated itinerary integration tests 172 passed (including all 43 ITN-14 tests). No failures or skips. Five obsolete HTTP combinations return 404 and are absent from Swagger; all five corrected combinations and prior budget calculations pass.
+Backend build, lint and git diff --check passed. Lint retains five pre-existing unused-import warnings. Used a dedicated disposable localhost replica set; no shared Atlas access.
+Only the four approved files changed. Original workspace and shared AI_PROMPTS.txt untouched. No commit, push or PR.
+================================================
