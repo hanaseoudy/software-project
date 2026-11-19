@@ -126,3 +126,23 @@ add setCancellationPolicy (with uniqueness checks and descending threshold
 sorting) to AirlinesService, expose and document the protected route in
 AirlinesController, and verify all edge cases in Postman. Reviewed and
 adjusted every snippet before committing.
+================================================
+Date: 2026-11-19
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-05, GEN-01
+Prompt:
+Asked to guide me through implementing FLT-05 (PATCH /api/flights/:id and
+PATCH /api/flights/:id/cabins/:cabinId): validating partial flight time and
+airport updates with timezone conversions, locking airport edits against
+active FlightBooking records, preventing cabin totalSeats reductions below
+bookedSeats + heldSeats, integrating NotificationsService.createForMany to
+notify Confirmed passengers on schedule changes, resolving TypeScript
+strict lookup types, and generating Postman test cases.
+How the output was used:
+Used the explanations, MongoDB seed documents, and code snippets to build
+UpdateFlightDto, UpdateCabinDto, FlightsService.update,
+FlightsService.updateCabin, and the protected FlightsController routes,
+then verified all happy-path, validation, conflict, and authorization cases
+in Postman. Reviewed and adjusted every snippet before committing.
+================================================
