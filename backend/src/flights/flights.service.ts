@@ -33,6 +33,17 @@ import {
   CabinClass,
 } from '../airlines/schemas/airline.schema';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { NotificationsService } from '../notifications/notifications.service';
+import { CancelFlightDto } from './dto/cancel-flight.dto';
+import {
+  FlightBooking,
+  FlightBookingDocument,
+  FlightBookingStatus,
+} from '../flight-bookings/schemas/flight-booking.schema';
+import { PassengerType } from '../flight-bookings/schemas/passenger.schema';
+import { Refund } from '../payments/schemas/refund.schema';
+import { BookingType } from '../payments/enums/payment.enums';
+import { NotificationType } from '../notifications/enums/notification.enums';
 
 @Injectable()
 export class FlightsService {
@@ -47,6 +58,11 @@ export class FlightsService {
     private readonly assignmentModel: Model<ModeratorAssignmentDocument>,
     @InjectModel(Airline.name)
     private readonly airlineModel: Model<AirlineDocument>,
+    @InjectModel(FlightBooking.name)
+    private readonly flightBookingModel: Model<FlightBookingDocument>,
+    @InjectModel(Refund.name)
+    private readonly refundModel: Model<Refund>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(moderatorId: string, dto: CreateFlightsDto) {
@@ -218,22 +234,39 @@ export class FlightsService {
 
   // ITN-26: all destination airports participate in each leg's single query.
   // Legacy search keeps its original unpaginated, single-airport contract.
-  async searchToAirports(dto: Omit<SearchFlightsDto, 'arrivalAirport'>, arrivalCodes: readonly string[]) {
-    const codes = [...new Set(arrivalCodes)].filter(code => code !== dto.departureAirport);
-    const result = await this.searchRoutes({ ...dto, arrivalAirport: codes[0] ?? '' }, codes);
+  async searchToAirports(
+    dto: Omit<SearchFlightsDto, 'arrivalAirport'>,
+    arrivalCodes: readonly string[],
+  ) {
+    const codes = [...new Set(arrivalCodes)].filter(
+      (code) => code !== dto.departureAirport,
+    );
+    const result = await this.searchRoutes(
+      { ...dto, arrivalAirport: codes[0] ?? '' },
+      codes,
+    );
     const unique = (flights: any[]) => {
       const byId = new Map<string, any>();
       for (const flight of flights) {
         const id = flight._id?.toString();
-        if (!id || !isValidObjectId(id)) throw new ServiceUnavailableException('Flight search returned an invalid identifier');
+        if (!id || !isValidObjectId(id))
+          throw new ServiceUnavailableException(
+            'Flight search returned an invalid identifier',
+          );
         if (!byId.has(id)) byId.set(id, flight);
       }
       return [...byId.values()];
     };
-    return { outbound: unique(result.outbound), ...(result.return === undefined ? {} : { return: unique(result.return) }) };
+    return {
+      outbound: unique(result.outbound),
+      ...(result.return === undefined ? {} : { return: unique(result.return) }),
+    };
   }
 
-  private async searchRoutes(dto: SearchFlightsDto, arrivalCodes?: readonly string[]) {
+  private async searchRoutes(
+    dto: SearchFlightsDto,
+    arrivalCodes?: readonly string[],
+  ) {
     const { adults, children = 0, infants = 0 } = dto;
 
     if (infants > adults) {
@@ -265,7 +298,12 @@ export class FlightsService {
       dto.cabinClass,
       priceRange,
     );
-    const outbound = this.sortFlights(outboundRaw, dto.sortBy, dto.sortOrder, arrivalCodes !== undefined); // ADDED (FLT-15)
+    const outbound = this.sortFlights(
+      outboundRaw,
+      dto.sortBy,
+      dto.sortOrder,
+      arrivalCodes !== undefined,
+    ); // ADDED (FLT-15)
 
     if (!dto.returnDate) return { outbound };
 
@@ -279,7 +317,12 @@ export class FlightsService {
       priceRange,
     );
 
-    const returning = this.sortFlights(returningRaw, dto.sortBy, dto.sortOrder, arrivalCodes !== undefined); // ADDED (FLT-15)
+    const returning = this.sortFlights(
+      returningRaw,
+      dto.sortBy,
+      dto.sortOrder,
+      arrivalCodes !== undefined,
+    ); // ADDED (FLT-15)
 
     return { outbound, return: returning };
   }
@@ -320,6 +363,187 @@ export class FlightsService {
     };
   }
 
+  /**
+   * FLT-06: Cancels a moderator's Scheduled flight after confirmation,
+   * cancels all Confirmed bookings with a 100% refund (PAY-03),
+   * releases pending seat holds, and sends in-app notifications to passengers.
+   */
+  async cancelFlight(flightId: string, userId: string, dto: CancelFlightDto) {
+    if (!isValidObjectId(flightId)) {
+      throw new BadRequestException('Invalid flight ID format');
+    }
+
+    // Reuses ownership check (403) + SCHEDULED status check (409)[cite: 3]
+    const flight = await this.loadOwnedScheduledFlight(flightId, userId);
+
+    // FLT-30: Ensure departureTime hasn't already passed before the cron tick[cite: 2]
+    await this.assertFlightScheduled(flight);
+
+    const cancellationReason =
+      dto.reason?.trim() ||
+      `Flight ${flight.flightNumber} cancelled by airline`;
+    const now = new Date();
+
+    // 1. Transition flight status to CANCELLED (automatically hides it from GET /api/flights/search)[cite: 2]
+    flight.status = FlightStatus.CANCELLED;
+    flight.cabins.forEach((cabin) => {
+      cabin.bookedSeats = 0;
+      cabin.heldSeats = 0;
+    });
+    await flight.save();
+
+    // 2. Find all active bookings (CONFIRMED or PENDING_PAYMENT) referencing this flight[cite: 3]
+    const bookings = await this.flightBookingModel.find({
+      $or: [{ outboundFlight: flight._id }, { returnFlight: flight._id }],
+      status: {
+        $in: [
+          FlightBookingStatus.CONFIRMED,
+          FlightBookingStatus.PENDING_PAYMENT,
+        ],
+      },
+    });
+
+    const passengerUserIds = new Set<string>();
+
+    for (const booking of bookings) {
+      const seatCount = booking.passengers.filter(
+        (p) => p.type !== PassengerType.INFANT,
+      ).length;
+
+      // Identify the OTHER leg if this is a round-trip booking so its seats are also freed
+      const otherFlightId =
+        booking.outboundFlight.toString() === flight._id.toString()
+          ? booking.returnFlight
+          : booking.outboundFlight;
+
+      if (booking.status === FlightBookingStatus.CONFIRMED) {
+        booking.status = FlightBookingStatus.CANCELLED;
+        booking.cancelledAt = now;
+        booking.cancellationReason = cancellationReason;
+
+        // PAY-03: 100% refund of total amount paid (seat fares + baggage fees)[cite: 7]
+        const refundAmount =
+          Math.round((booking.totalPrice + (booking.baggageFees ?? 0)) * 100) /
+          100;
+
+        // Create 100% refund record (adjust fields/service call to match your Refund schema/RefundsService)
+        if (booking.payment) {
+          const refund = await this.refundModel.create({
+            paymentId: booking.payment,
+            userId: booking.user,
+            bookingType: BookingType.FLIGHT,
+            bookingId: booking._id,
+            amount: refundAmount,
+            currency: booking.currency,
+            reason: cancellationReason,
+            appliedPolicy: {
+              refundPercent: 100,
+              source: 'AIRLINE_FLIGHT_CANCELLATION',
+            },
+          });
+          booking.refund = refund._id as Types.ObjectId;
+        }
+
+        if (otherFlightId) {
+          await this.releaseSeatsOnOtherLeg(
+            otherFlightId,
+            booking.cabinClass,
+            seatCount,
+            'bookedSeats',
+          );
+        }
+
+        passengerUserIds.add(booking.user.toString());
+      } else if (booking.status === FlightBookingStatus.PENDING_PAYMENT) {
+        // Release pending seat hold[cite: 7]
+        booking.status = FlightBookingStatus.EXPIRED;
+        booking.cancelledAt = now;
+        booking.cancellationReason = cancellationReason;
+
+        if (otherFlightId) {
+          await this.releaseSeatsOnOtherLeg(
+            otherFlightId,
+            booking.cabinClass,
+            seatCount,
+            'heldSeats',
+          );
+        }
+      }
+
+      await booking.save();
+    }
+
+    // 3. Send in-app notifications to all passengers with Confirmed bookings (GEN-01)
+    if (passengerUserIds.size > 0) {
+      await this.notificationsService.createForMany(
+        Array.from(passengerUserIds),
+        {
+          type: NotificationType.BOOKING_CANCELLED, // verify exact enum key in notification.enums.ts
+          title: 'Flight Cancelled',
+          message: `Your flight ${flight.flightNumber} has been cancelled by the airline. A 100% refund has been initiated.`,
+          metadata: {
+            flightId: String(flight._id),
+            flightNumber: flight.flightNumber,
+            reason: cancellationReason,
+          },
+        },
+      );
+    }
+
+    const populated = await flight.populate([
+      'airline',
+      'departureAirport',
+      'arrivalAirport',
+    ]);
+
+    return {
+      flight: formatFlightWithLocalTimes(populated),
+      cancelledBookingsCount: passengerUserIds.size,
+      releasedHoldsCount: bookings.length - passengerUserIds.size,
+    };
+  }
+
+  /**
+   * Helper: Releases booked or held seats on the opposite leg of a round-trip booking
+   * when one leg is cancelled by the airline.
+   */
+  private async releaseSeatsOnOtherLeg(
+    otherFlightId: Types.ObjectId,
+    cabinClass: string,
+    seats: number,
+    field: 'bookedSeats' | 'heldSeats',
+  ): Promise<void> {
+    await this.flightsModel.updateOne(
+      { _id: otherFlightId },
+      { $inc: { [`cabins.$[c].${field}`]: -seats } },
+      {
+        arrayFilters: [
+          { 'c.cabinClass': cabinClass, [`c.${field}`]: { $gte: seats } },
+        ],
+      },
+    );
+  }
+
+  /**
+   * FLT-05: Fetches a flight by ID, verifies the moderator owns its airline,
+   * and ensures the flight is still in Scheduled status before editing.
+   */
+  private async loadOwnedScheduledFlight(flightId: string, userId: string) {
+    const flight = await this.flightsModel.findById(flightId);
+    if (!flight) throw new NotFoundException('Flight not found');
+
+    const airlineId = await this.getModeratorAirlineId(userId);
+    if (flight.airline.toString() !== airlineId.toString()) {
+      throw new ForbiddenException(
+        'You do not have permission to modify this flight',
+      );
+    }
+
+    await this.assertFlightScheduled(flight);
+
+    return flight;
+  }
+
   private async findLeg(
     fromCode: string | readonly string[],
     toCode: string | readonly string[],
@@ -329,7 +553,8 @@ export class FlightsService {
     cabinClass?: CabinClass,
     priceRange?: { minPrice?: number; maxPrice?: number },
   ) {
-    let departure: Types.ObjectId | { $in: Types.ObjectId[] }, arrival: Types.ObjectId | { $in: Types.ObjectId[] };
+    let departure: Types.ObjectId | { $in: Types.ObjectId[] },
+      arrival: Types.ObjectId | { $in: Types.ObjectId[] };
     if (typeof fromCode === 'string' && typeof toCode === 'string') {
       // Preserve legacy lookup/validation semantics exactly.
       const [from, to] = await Promise.all([
@@ -337,17 +562,24 @@ export class FlightsService {
         this.airportModel.findOne({ iataCode: toCode }),
       ]);
       if (!from || !to) throw new BadRequestException('Unknown airport code');
-      departure = from._id; arrival = to._id;
+      departure = from._id;
+      arrival = to._id;
     } else {
-      const fromCodes = typeof fromCode === 'string' ? [fromCode] : [...fromCode];
+      const fromCodes =
+        typeof fromCode === 'string' ? [fromCode] : [...fromCode];
       const toCodes = typeof toCode === 'string' ? [toCode] : [...toCode];
       if (!fromCodes.length || !toCodes.length) return [];
       const allCodes = [...new Set([...fromCodes, ...toCodes])];
-      const airports = await this.airportModel.find({ iataCode: { $in: allCodes } }).lean();
-      const byCode = new Map(airports.map(airport => [airport.iataCode, airport._id]));
-      if (allCodes.some(code => !byCode.has(code))) throw new BadRequestException('Unknown airport code');
-      departure = { $in: fromCodes.map(code => byCode.get(code)!) };
-      arrival = { $in: toCodes.map(code => byCode.get(code)!) };
+      const airports = await this.airportModel
+        .find({ iataCode: { $in: allCodes } })
+        .lean();
+      const byCode = new Map(
+        airports.map((airport) => [airport.iataCode, airport._id]),
+      );
+      if (allCodes.some((code) => !byCode.has(code)))
+        throw new BadRequestException('Unknown airport code');
+      departure = { $in: fromCodes.map((code) => byCode.get(code)!) };
+      arrival = { $in: toCodes.map((code) => byCode.get(code)!) };
     }
     const flights = await this.flightsModel
       .find({
@@ -429,7 +661,10 @@ export class FlightsService {
           new Date(b.departureTime).getTime();
       }
 
-      return diff * dir || (stableTies ? String(a._id).localeCompare(String(b._id)) : 0);
+      return (
+        diff * dir ||
+        (stableTies ? String(a._id).localeCompare(String(b._id)) : 0)
+      );
     });
   }
 

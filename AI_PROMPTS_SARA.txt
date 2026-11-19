@@ -145,3 +145,24 @@ and FlightsService (search, findLeg, and sortFlights) and verified all
 filtering, sorting, and 400 validation cases in Postman. Reviewed and
 adjusted every snippet before committing.
 ================================================
+================================================
+Date: 2026-11-19
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-06, PAY-03, GEN-01
+Prompt:
+Asked for implementation guidance and Postman test cases for FLT-06
+(POST /api/flights/:id/cancel): validating explicit cancellation
+confirmation in CancelFlightDto, cancelling Scheduled flights while
+hiding them from search, issuing 100% refunds (PAY-03) for Confirmed
+bookings across one-way and round-trip legs, releasing pending seat
+holds, integrating NotificationsService.createForMany (GEN-01), and
+resolving NestJS module dependency exports between FlightsModule and
+ItinerariesModule.
+How the output was used:
+Used the explanations and code snippets to build CancelFlightDto,
+FlightsService.cancelFlight, and the protected POST /api/flights/:id/cancel
+route in FlightsController, wired FlightsModule exports, and verified all
+happy-path, refund, notification, and error cases in Postman. Reviewed and
+adjusted every snippet before committing.
+================================================
