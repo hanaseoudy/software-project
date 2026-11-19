@@ -1805,3 +1805,14 @@ Used only mocks and a dedicated disposable localhost MongoDB replica set with un
 Limits: past group dates are rejected by HTL-11. Overlapping edits may complete after the group snapshot; subsequent requests recalculate. Hotel availability retains HTL-11 consistency and does not reserve rooms. The selection must remain a current first-day boundary; otherwise refresh groups. No booking creation or itinerary mutation.
 Only the approved ten files changed, including this worktree-local personal log. All prior entries preserved. Shared AI_PROMPTS.txt and other worktrees unchanged. No commit, push or PR.
 ================================================
+
+================================================
+Date: 2026-11-19
+Student: Seif Allam
+Tool: Codex (ChatGPT)
+Related Requirement: ITN-18
+Prompt:
+Inspect the official ITN-18 endpoint and its ITN-14, ACC-09 and PAY-04 dependencies before editing. After approval, implement opt-in preferred-currency budget reporting with FXRatesAPI, daily MongoDB caching, bounded recovery for failed or abandoned refreshes, last-known-good fallback, exact rounding and reconciliation, and booking/payment isolation. Use the approved 14-file list and verify with mocked provider responses and an isolated local MongoDB replica set.
+How the output was used:
+Used the approved design to add conversion to the existing budget-summary route via convert=preferred. Reused the owner-only ITN-14 snapshot for budget entries, activity costs and intercity transport and the current ACC-09 profile preference with GEN-12 checks. The provider's rate date and freshness are exposed separately from the UTC refresh claim. Added atomic cross-instance claims, a 60-second cooldown, one recovery attempt per UTC day, and a fenced last-known-good snapshot. Missing required rates produce an explicit 503. Added unit and local replica-set coverage for conversion, refresh, concurrency, rollback, authorization, Swagger and booking/payment isolation. Live provider access and plan behavior were not verified.
+================================================

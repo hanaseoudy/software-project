@@ -4,6 +4,11 @@ import { ItineraryHotelsService } from './itinerary-hotels.service';
 import { BudgetEntriesController } from './budget-entries.controller';
 import { BudgetEntriesService } from './budget-entries.service';
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { UsersModule } from '../users/users.module';
+import { BudgetConversionService } from './budget-conversion.service';
+import { ExchangeRatesService } from './exchange-rates.service';
+import { ExchangeRateSnapshot, ExchangeRateSnapshotSchema } from './schemas/exchange-rate-snapshot.schema';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthModule } from '../auth/auth.module';
@@ -58,9 +63,12 @@ import { ItineraryExportService } from './itinerary-export.service';
 @Module({
   imports: [
     AuthModule,
+    ConfigModule,
+    UsersModule,
     HotelsModule,
     UploadsModule,
     MongooseModule.forFeature([
+      { name: ExchangeRateSnapshot.name, schema: ExchangeRateSnapshotSchema },
       { name: Currency.name, schema: CurrencySchema },
       {
         name: Itinerary.name,
@@ -102,6 +110,6 @@ controllers: [
     TransportCostsController,
     ItineraryExportController,
   ],
-  providers: [ItineraryHotelsService, BudgetEntriesService, ItinerariesService, ActivitiesService, TransportCostsService, ItineraryExportService],
+  providers: [ItineraryHotelsService, BudgetEntriesService, BudgetConversionService, ExchangeRatesService, ItinerariesService, ActivitiesService, TransportCostsService, ItineraryExportService],
 })
 export class ItinerariesModule {}
