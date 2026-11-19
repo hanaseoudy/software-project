@@ -16,6 +16,10 @@ const dateTime = (value: Date | string, timezone?: string) => {
   }
 };
 
+/** Airport name and IATA code, never a database id: "Cairo International (CAI)". */
+const airportLabel = (a: { name: string; iataCode: string }) =>
+  `${a.name} (${a.iataCode})`;
+
 /**
  * FLT-23: downloadable e-ticket (PDF) for a confirmed flight booking: booking
  * reference, every flight, every passenger and the total paid.
@@ -52,10 +56,10 @@ export function buildETicketPdf(
       doc
         .fontSize(10)
         .text(
-          `${f.departureAirport.city} (${f.departureAirport.iataCode}) ${dateTime(f.departureTime, f.departureAirport.timezone)}`,
+          `${airportLabel(f.departureAirport)} ${dateTime(f.departureTime, f.departureAirport.timezone)}`,
         )
         .text(
-          `${f.arrivalAirport.city} (${f.arrivalAirport.iataCode}) ${dateTime(f.arrivalTime, f.arrivalAirport.timezone)}`,
+          `${airportLabel(f.arrivalAirport)} ${dateTime(f.arrivalTime, f.arrivalAirport.timezone)}`,
         )
         .text(
           `Duration: ${Math.floor(f.durationMinutes / 60)}h ${f.durationMinutes % 60}m`,
