@@ -9,7 +9,8 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { fromZonedTime } from 'date-fns-tz';
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
+import { TZDate } from '@date-fns/tz';
 import { Flight, FlightDocument, FlightStatus } from './schemas/flight.schema';
 import { Airport, AirportDocument } from '../airports/schemas/airport.schema';
 import {
@@ -28,6 +29,15 @@ import {
   CabinClass,
 } from '../airlines/schemas/airline.schema';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { UpdateFlightDto } from './dto/update-flights.dto';
+import { UpdateCabinDto } from './dto/update-cabin.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/enums/notification.enums';
+import {
+  FlightBooking,
+  FlightBookingDocument,
+  FlightBookingStatus,
+} from '../flight-bookings/schemas/flight-booking.schema';
 
 @Injectable()
 export class FlightsService {
@@ -42,6 +52,9 @@ export class FlightsService {
     private readonly assignmentModel: Model<ModeratorAssignmentDocument>,
     @InjectModel(Airline.name)
     private readonly airlineModel: Model<AirlineDocument>,
+    @InjectModel(FlightBooking.name)
+    private readonly flightBookingModel: Model<FlightBookingDocument>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(moderatorId: string, dto: CreateFlightsDto) {
@@ -54,18 +67,22 @@ export class FlightsService {
     this.assertRealLocalDateTime(dto.departureTime, 'departureTime');
     this.assertRealLocalDateTime(dto.arrivalTime, 'arrivalTime');
 
-    const departureUtc = fromZonedTime(
+    const departureUtc = this.countryLocalToUtc(
       dto.departureTime,
       departureAirport.timezone,
     );
-    const arrivalUtc = fromZonedTime(dto.arrivalTime, arrivalAirport.timezone);
-
-    this.validateFlightSchedule(
-      dto.departureAirport,
-      dto.arrivalAirport,
-      departureUtc,
-      arrivalUtc,
+    const arrivalUtc = this.countryLocalToUtc(
+      dto.arrivalTime,
+      arrivalAirport.timezone,
     );
+
+    console.log(departureUtc, arrivalUtc);
+    const { departureAirport: dep, arrivalAirport: arr } =
+      await this.getAirports(
+        dto.departureAirport as unknown as Airport,
+        dto.arrivalAirport as unknown as Airport,
+      );
+    this.validateFlightSchedule(dep, arr, departureUtc, arrivalUtc);
 
     const departureLocalDate = dto.departureTime.split('T')[0]; // or via date-fns-tz
 
@@ -104,6 +121,43 @@ export class FlightsService {
 
     return formatFlightWithLocalTimes(populatedFlight);
   }
+
+  /**
+   * FLT-05: Updates a cabin's seat capacity and/or price on a moderator's Scheduled flight,
+   * requiring at least one field to be provided and preventing totalSeats from dropping
+   * below the number of seats already booked or held.
+   */
+  async updateCabin(
+    flightId: string,
+    cabinId: string,
+    userId: string,
+    dto: UpdateCabinDto,
+  ) {
+    if (dto.totalSeats === undefined && dto.price === undefined) {
+      throw new BadRequestException('Send totalSeats and/or price');
+    }
+
+    const flight = await this.loadOwnedScheduledFlight(flightId, userId);
+    const cabin = flight.cabins.find((c) => String((c as any)._id) === cabinId);
+    if (!cabin) throw new NotFoundException('Cabin not found on this flight');
+
+    if (dto.totalSeats !== undefined) {
+      const inUse = cabin.bookedSeats + cabin.heldSeats;
+      if (dto.totalSeats < inUse) {
+        throw new ConflictException(
+          `Cannot reduce seats below ${inUse} (already booked or held)`,
+        );
+      }
+      cabin.totalSeats = dto.totalSeats;
+    }
+    if (dto.price !== undefined) cabin.price = dto.price;
+
+    await flight.save();
+    return formatFlightWithLocalTimes(
+      await flight.populate(['airline', 'departureAirport', 'arrivalAirport']),
+    );
+  }
+
   /**
    * FLT-30: Automatically transitions Scheduled flights to Departed
    * once their departureTime (UTC) has passed.
@@ -241,6 +295,161 @@ export class FlightsService {
     return { outbound, return: returning };
   }
 
+  /**
+   * FLT-05: Updates departure/arrival airports and times on a moderator's Scheduled flight,
+   * blocking airport changes once seats are booked or held, validating the new schedule in UTC,
+   * and preventing duplicate flight numbers on the updated departure date.
+   */
+  async update(flightId: string, userId: string, dto: UpdateFlightDto) {
+    const flight = await this.loadOwnedScheduledFlight(flightId, userId);
+
+    // The local time depends on the airport's time zone, so a new airport needs its time re-sent.
+    if (dto.departureAirport && !dto.departureTime) {
+      throw new BadRequestException(
+        'Changing the departure airport requires departureTime too',
+      );
+    }
+    if (dto.arrivalAirport && !dto.arrivalTime) {
+      throw new BadRequestException(
+        'Changing the arrival airport requires arrivalTime too',
+      );
+    }
+
+    const [oldDep, oldArr] = await Promise.all([
+      this.airportModel.findById(flight.departureAirport),
+      this.airportModel.findById(flight.arrivalAirport),
+    ]);
+
+    if (!oldDep) throw new NotFoundException('Departure airport not found');
+    if (!oldArr) throw new NotFoundException('Arrival airport not found');
+
+    const { departureAirport: dep, arrivalAirport: arr } =
+      await this.getAirports(
+        (dto.departureAirport ?? oldDep!.iataCode) as unknown as Airport,
+        (dto.arrivalAirport ?? oldArr!.iataCode) as unknown as Airport,
+      );
+
+    // FLT-05: Airports cannot be changed once the flight has any active booking
+    const airportChanged =
+      !dep._id.equals(flight.departureAirport) ||
+      !arr._id.equals(flight.arrivalAirport);
+
+    if (airportChanged) {
+      const hasBookings = await this.flightBookingModel.exists({
+        $or: [{ outboundFlight: flight._id }, { returnFlight: flight._id }],
+        status: {
+          $in: [
+            FlightBookingStatus.PENDING_PAYMENT,
+            FlightBookingStatus.CONFIRMED,
+            FlightBookingStatus.COMPLETED,
+          ],
+        },
+      });
+
+      if (hasBookings) {
+        throw new ConflictException(
+          'Airports cannot be changed once the flight has bookings',
+        );
+      }
+    }
+
+    if (dto.departureTime) {
+      this.assertRealLocalDateTime(dto.departureTime, 'departureTime');
+    }
+    if (dto.arrivalTime) {
+      this.assertRealLocalDateTime(dto.arrivalTime, 'arrivalTime');
+    }
+
+    const departureTime = dto.departureTime
+      ? this.countryLocalToUtc(dto.departureTime, dep.timezone)
+      : flight.departureTime;
+    const arrivalTime = dto.arrivalTime
+      ? this.countryLocalToUtc(dto.arrivalTime, arr.timezone)
+      : flight.arrivalTime;
+
+    this.validateFlightSchedule(dep, arr, departureTime, arrivalTime);
+
+    const departureLocalDate = formatInTimeZone(
+      departureTime,
+      dep.timezone,
+      'yyyy-MM-dd',
+    );
+    if (departureLocalDate !== flight.departureLocalDate) {
+      await this.ensureNoDuplicateFlight(
+        flight.airline,
+        flight.flightNumber,
+        departureLocalDate,
+      );
+    }
+
+    const timeChanged =
+      departureTime.getTime() !== flight.departureTime.getTime() ||
+      arrivalTime.getTime() !== flight.arrivalTime.getTime();
+
+    flight.departureAirport = dep._id;
+    flight.arrivalAirport = arr._id;
+    flight.departureTime = departureTime;
+    flight.arrivalTime = arrivalTime;
+    flight.departureLocalDate = departureLocalDate;
+
+    try {
+      await flight.save();
+    } catch (err: any) {
+      if (err.code === 11000) {
+        throw new ConflictException(
+          'A flight with this number already exists on this date',
+        );
+      }
+      throw err;
+    }
+
+    if (timeChanged) {
+      const confirmedBookings = await this.flightBookingModel
+        .find({
+          status: FlightBookingStatus.CONFIRMED,
+          $or: [{ outboundFlight: flight._id }, { returnFlight: flight._id }],
+        })
+        .select('user')
+        .lean();
+
+      const userIds = confirmedBookings.map((b: any) => b.user);
+
+      await this.notificationsService.createForMany(userIds, {
+        type: NotificationType.FLIGHT_SCHEDULE_CHANGED,
+        title: 'Flight schedule updated',
+        message: `Flight ${flight.flightNumber} (${dep.iataCode} → ${arr.iataCode}) has a new departure/arrival time.`,
+        metadata: {
+          flightId: String(flight._id),
+          flightNumber: flight.flightNumber,
+        },
+      });
+    }
+
+    return formatFlightWithLocalTimes(
+      await flight.populate(['airline', 'departureAirport', 'arrivalAirport']),
+    );
+  }
+
+  /**
+   * FLT-05: Fetches a flight by ID, verifies the moderator owns its airline,
+   * and ensures the flight is still in Scheduled status before editing.
+   */
+  private async loadOwnedScheduledFlight(flightId: string, userId: string) {
+    const flight = await this.flightsModel.findById(flightId);
+    if (!flight) throw new NotFoundException('Flight not found');
+
+    const airlineId = await this.getModeratorAirlineId(userId);
+    if (flight.airline.toString() !== airlineId.toString()) {
+      throw new ForbiddenException(
+        'You do not have permission to modify this flight',
+      );
+    }
+
+    await this.assertFlightScheduled(flight);
+
+    return flight;
+  }
+
   private async findLeg(
     fromCode: string,
     toCode: string,
@@ -350,6 +559,11 @@ export class FlightsService {
     departureUtc: Date,
     arrivalUtc: Date,
   ): void {
+    console.log(departureAirport.timezone);
+    console.log(departureUtc);
+    console.log(arrivalAirport.timezone);
+    console.log(arrivalUtc);
+
     if (departureAirport === arrivalAirport) {
       throw new BadRequestException(
         'Departure and Arrival airport cannot be the same.',
@@ -399,5 +613,21 @@ export class FlightsService {
         'A flight with this number already exists on this date',
       );
     }
+  }
+
+  countryLocalToUtc(localDateTime: string, timezone: string): Date {
+    // Ensure we handle both Date objects (if NestJS transformed it) and strings
+    const str =
+      typeof localDateTime === 'string'
+        ? localDateTime
+        : (localDateTime as Date).toISOString().slice(0, 19);
+
+    const [datePart, timePart] = str.split('T');
+    const [y, m, d] = datePart.split('-').map(Number);
+    const [hh, mm] = timePart.split(':').map(Number);
+
+    // Numeric arguments force TZDate to construct the timestamp strictly in `timezone`
+    const zonedDate = TZDate.tz(timezone, y, m - 1, d, hh, mm, 0);
+    return new Date(zonedDate.getTime());
   }
 }
