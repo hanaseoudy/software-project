@@ -2,17 +2,19 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { isValidObjectId, Model, Types } from 'mongoose';
+import { Error as MongooseError, isValidObjectId, Model, Types } from 'mongoose';
 import { PLATFORM_CURRENCY } from '../common/constants/currency.constants';
 import type { AuthPayload } from '../common/guards/jwt-auth.guard';
 import { City } from '../reference-data/schemas/city.schema';
 import { Country } from '../reference-data/schemas/country.schema';
 import { Review } from '../hotel-bookings/schemas/review.schema';
-import { User } from '../users/schemas/user.schema';
+import { AccountStatus, User } from '../users/schemas/user.schema';
 import {
   ModeratorAssignment,
   ProviderType,
@@ -32,6 +34,7 @@ import {
   HotelReviewDto,
 } from './dto/hotel-details-response.dto';
 import { HotelResponseDto } from './dto/hotel-response.dto';
+import { HotelReviewItemDto, HotelReviewsPageDto } from './dto/hotel-reviews-response.dto';
 import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dto';
 import { RoomResponseDto } from './dto/room-response.dto';
 import {
@@ -739,6 +742,107 @@ export class HotelsService {
         (review as { createdAt?: Date }).createdAt ?? new Date(0)
       ).toISOString(),
     }));
+  }
+
+  /**
+   * HTL-24: public. The hotel's average rating and number of ratings (the values HTL-23 keeps on the hotel)
+   * and its visible reviews, newest first, 10 per page (GEN-05). Hidden reviews (GEN-10) are never listed;
+   * old documents without the flag count as visible. Same visibility as the details page: an inactive hotel is 404.
+   */
+  async listReviews(id: unknown, page: unknown = 1): Promise<HotelReviewsPageDto> {
+    if (typeof id !== 'string' || !/^[a-f\d]{24}$/i.test(id)) {
+      throw new BadRequestException({ message: 'Validation failed', errors: { id: ['Hotel id must be a valid id'] } });
+    }
+    if (typeof page !== 'number' || !Number.isSafeInteger(page) || page < 1) {
+      throw new BadRequestException({ message: 'Validation failed', errors: { page: ['Page must be at least 1'] } });
+    }
+    const hotel = await this.runReviewsDb(() =>
+      this.hotelModel
+        .findById(id)
+        .select('isActive averageRating reviewCount')
+        .lean<{ _id: Types.ObjectId; isActive?: boolean; averageRating?: number; reviewCount?: number }>()
+        .exec(),
+    );
+    if (!hotel || !hotel.isActive) {
+      throw new NotFoundException('Hotel not found');
+    }
+
+    const filter = { hotel: hotel._id, hidden: { $ne: true } };
+    const [reviews, total] = await this.runReviewsDb(() =>
+      Promise.all([
+        this.reviewModel
+          .find(filter)
+          .select('user rating comment createdAt updatedAt')
+          .sort({ createdAt: -1, _id: -1 })
+          .skip(skipFor(page))
+          .limit(PAGE_SIZE)
+          .lean<
+            {
+              _id: Types.ObjectId;
+              user: Types.ObjectId;
+              rating: number;
+              comment?: string;
+              createdAt: Date;
+              updatedAt: Date;
+            }[]
+          >()
+          .exec(),
+        this.reviewModel.countDocuments(filter).exec(),
+      ]),
+    );
+
+    // One query for all reviewers on the page (no N+1); only the display-name fields and the status are read
+    const userIds = [...new Set(reviews.map((review) => review.user.toString()))];
+    const users =
+      userIds.length === 0
+        ? []
+        : await this.runReviewsDb(() =>
+            this.userModel
+              .find({ _id: { $in: userIds } })
+              .select('firstName lastName status')
+              .lean<{ _id: Types.ObjectId; firstName?: string; lastName?: string; status?: AccountStatus }[]>()
+              .exec(),
+          );
+    const byId = new Map(users.map((user) => [user._id.toString(), user]));
+
+    const items: HotelReviewItemDto[] = reviews.map((review) => {
+      const user = byId.get(review.user.toString());
+      // ACC-12: a deactivated or missing account is shown as "Deleted user" without an id
+      const deleted = !user || user.status === AccountStatus.DEACTIVATED;
+      return {
+        id: review._id.toString(),
+        reviewer: deleted
+          ? { id: null, name: DELETED_USER }
+          : { id: user._id.toString(), name: reviewerName(user) },
+        rating: review.rating,
+        comment: review.comment ?? null,
+        createdAt: review.createdAt,
+        updatedAt: review.updatedAt,
+      };
+    });
+
+    return {
+      hotelId: hotel._id.toString(),
+      averageRating: Math.round((hotel.averageRating ?? 0) * 100) / 100,
+      ratingsCount: hotel.reviewCount ?? 0,
+      ...paginate(items, total, page),
+    };
+  }
+
+  // HTL-24: expected database errors become Nest exceptions; anything else is a 500 with a safe message
+  private async runReviewsDb<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      if (error instanceof MongooseError.CastError) {
+        throw new BadRequestException({ message: 'Validation failed', errors: { [error.path]: ['Invalid value'] } });
+      }
+      if (error instanceof MongooseError.ValidationError) {
+        throw new BadRequestException({ message: 'Validation failed' });
+      }
+      throw new InternalServerErrorException('Could not load the reviews');
+    }
   }
 
   /**
