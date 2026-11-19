@@ -6,6 +6,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { HotelBookingConfirmationService } from './hotel-booking-confirmation.service';
 import { HotelBookingsController } from './hotel-bookings.controller';
+import { HotelReservationsController } from './hotel-reservations.controller';
+import { HotelReservationsService } from './hotel-reservations.service';
 import { HotelBookingsService } from './hotel-bookings.service';
 import { HotelCompletionService } from './hotel-completion.service';
 import { HotelHoldExpiryService } from './hotel-hold-expiry.service';
@@ -27,9 +29,10 @@ import { RoomLock, RoomLockSchema } from './schemas/room-lock.schema';
       { name: RoomLock.name, schema: RoomLockSchema },
     ]),
   ],
-  controllers: [HotelBookingsController, ReviewsController],
+  controllers: [HotelBookingsController, ReviewsController, HotelReservationsController],
   providers: [
     HotelBookingsService,
+    HotelReservationsService,
     HotelHoldExpiryService,
     HotelBookingConfirmationService,
     HotelCompletionService,

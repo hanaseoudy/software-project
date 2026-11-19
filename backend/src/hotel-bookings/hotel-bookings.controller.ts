@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -13,6 +15,7 @@ import {
   ApiForbiddenResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
@@ -31,6 +34,12 @@ import { HoldHotelBookingDto } from './dto/hold-hotel-booking.dto';
 import { ReviewResponseDto } from './dto/review-response.dto';
 import { HotelBookingsService } from './hotel-bookings.service';
 import { ReviewsService } from './reviews.service';
+import {
+  MyReservationsPageDto,
+  MyReservationsQueryDto,
+  ReservationDetailsDto,
+} from './dto/reservation-views.dto';
+import { HotelReservationsService } from './hotel-reservations.service';
 
 @ApiTags('Hotel Bookings')
 @ApiCookieAuth()
@@ -40,6 +49,7 @@ export class HotelBookingsController {
   constructor(
     private readonly hotelBookingsService: HotelBookingsService,
     private readonly reviewsService: ReviewsService,
+    private readonly reservations: HotelReservationsService,
   ) {}
 
   @Post()
@@ -144,5 +154,45 @@ export class HotelBookingsController {
     @StrictBody() dto: CreateReviewDto,
   ): Promise<ReviewResponseDto> {
     return this.reviewsService.create(req.user?.sub, id, dto);
+  }
+
+  @Get()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.USER)
+  @ApiOperation({
+    summary: 'HTL-20: my hotel reservations, grouped as upcoming, past or cancelled',
+    description:
+      'Registered users only. Choose a group with ?group=upcoming (default), past or cancelled; 10 per page. upcoming: Confirmed stays that have not ended yet. past: Completed stays. cancelled: Cancelled reservations. Each reservation shows the booking reference, hotel, rooms, dates, guests, total and status. The response also gives the size of all three groups in counts. Unpaid holds are not reservations and are never listed.',
+  })
+  @ApiOkResponse({ type: MyReservationsPageDto })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+  })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
+  @ApiForbiddenResponse({ description: 'Only registered users have reservations' })
+  listMine(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: MyReservationsQueryDto,
+  ): Promise<MyReservationsPageDto> {
+    return this.reservations.listMine(req.user!.sub, query);
+  }
+
+  @Get(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.USER)
+  @ApiOperation({
+    summary: 'HTL-20: full details of one of my hotel reservations',
+    description:
+      'Registered users only, and only their own reservation (another guest\'s reservation returns 404).',
+  })
+  @ApiOkResponse({ type: ReservationDetailsDto })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
+  @ApiForbiddenResponse({ description: 'Only registered users have reservations' })
+  @ApiNotFoundResponse({ description: 'Reservation not found (or not yours)' })
+  getMine(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ): Promise<ReservationDetailsDto> {
+    return this.reservations.getMine(req.user!.sub, id);
   }
 }
