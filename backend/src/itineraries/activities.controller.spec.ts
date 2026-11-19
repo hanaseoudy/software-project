@@ -1,6 +1,11 @@
 import { ActivitiesController } from './activities.controller';
 import { type AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  INestApplication,
+  NotFoundException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { getModelToken } from '@nestjs/mongoose';
@@ -53,10 +58,12 @@ describe('ITN-10 controller', () => {
 
 describe('ITN-12 HTTP routes', () => {
   const url = '/api/uploads/activity/680329ed-1150-49a5-b035-b0b7ef86424f.png';
+  const filename = '680329ed-1150-49a5-b035-b0b7ef86424f.png';
   const activity = { id: 'activity', images: [url] };
   const service = {
     addImage: jest.fn().mockResolvedValue({ url }),
     removeImage: jest.fn().mockResolvedValue({ ...activity, images: [] }),
+    removeImageByFilename: jest.fn(),
     findOne: jest.fn().mockResolvedValue(activity),
   };
   const cookie = `${ACCESS_COOKIE}=test-token`;
@@ -120,6 +127,10 @@ describe('ITN-12 HTTP routes', () => {
     await request(app.getHttpServer()).get(path).expect(401);
     expect(service.addImage).not.toHaveBeenCalled();
     expect(service.removeImage).not.toHaveBeenCalled();
+    await request(app.getHttpServer())
+      .delete(`${path}/images/${filename}`)
+      .expect(401);
+    expect(service.removeImageByFilename).not.toHaveBeenCalled();
     expect(service.findOne).not.toHaveBeenCalled();
   });
 
@@ -199,7 +210,46 @@ describe('ITN-12 HTTP routes', () => {
     expect(service.removeImage).toHaveBeenCalledWith('owner', 'activity', url);
   });
 
-  it('publishes the multipart upload and removal query in Swagger', () => {
+  it('returns the updated activity on filename removal and 404 when repeated', async () => {
+    service.removeImageByFilename
+      .mockResolvedValueOnce({ ...activity, images: [] })
+      .mockRejectedValueOnce(
+        new NotFoundException('Image attachment not found'),
+      );
+    await request(app.getHttpServer())
+      .delete(`${path}/images/${filename}`)
+      .set('Cookie', cookie)
+      .expect(200, { ...activity, images: [] });
+    await request(app.getHttpServer())
+      .delete(`${path}/images/${filename}`)
+      .set('Cookie', cookie)
+      .expect(404);
+    expect(service.removeImageByFilename).toHaveBeenCalledTimes(2);
+    expect(service.removeImageByFilename).toHaveBeenCalledWith(
+      'owner',
+      'activity',
+      filename,
+    );
+    expect(service.removeImage).not.toHaveBeenCalled();
+  });
+
+  it('passes a decoded traversal attempt to validation and returns 400', async () => {
+    const traversal = `../${filename}`;
+    service.removeImageByFilename.mockRejectedValueOnce(
+      new BadRequestException('Invalid activity image filename'),
+    );
+    await request(app.getHttpServer())
+      .delete(`${path}/images/${encodeURIComponent(traversal)}`)
+      .set('Cookie', cookie)
+      .expect(400);
+    expect(service.removeImageByFilename).toHaveBeenCalledWith(
+      'owner',
+      'activity',
+      traversal,
+    );
+  });
+
+  it('publishes the multipart upload and both removal routes in Swagger', () => {
     const document = SwaggerModule.createDocument(
       app,
       new DocumentBuilder().build(),
@@ -216,6 +266,19 @@ describe('ITN-12 HTTP routes', () => {
       },
     });
     expect(routes?.delete?.requestBody).toBeUndefined();
+    const byFilename =
+      document.paths['/api/activities/{id}/images/{imageId}']?.delete;
+    expect(byFilename?.requestBody).toBeUndefined();
+    expect(byFilename?.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'id', in: 'path', required: true }),
+        expect.objectContaining({
+          name: 'imageId',
+          in: 'path',
+          required: true,
+        }),
+      ]),
+    );
     expect(routes?.delete?.parameters).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'url', in: 'query', required: true }),

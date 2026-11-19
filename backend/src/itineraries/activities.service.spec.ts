@@ -280,6 +280,72 @@ describe('ITN-10 service transaction and currency rules', () => {
     expect(uploads.deleteByUrl).toHaveBeenCalledTimes(1);
   });
 
+  describe('filename-based removal', () => {
+    const filename = '680329ed-1150-49a5-b035-b0b7ef86424f.png';
+    const removeByFilename = (value = filename) =>
+      service.removeImageByFilename(owner, id.toString(), value);
+
+    it('removes the exact attached URL and cleans up the file after commit', async () => {
+      const other = `/api/uploads/post/${filename}`;
+      activity.images = [other, url];
+      jest.mocked(uploads.deleteByUrl).mockImplementationOnce(async () => {
+        expect(session.commitTransaction).toHaveBeenCalledTimes(1);
+      });
+      await expect(removeByFilename()).resolves.toMatchObject({
+        images: [other],
+      });
+      expect(activity.save).toHaveBeenCalledWith({ session });
+      expect(uploads.deleteByUrl).toHaveBeenCalledWith(url);
+      await expect(removeByFilename()).rejects.toMatchObject({ status: 404 });
+      expect(uploads.deleteByUrl).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 404 for a valid filename absent from the activity', async () => {
+      activity.images = [url];
+      await expect(
+        removeByFilename('110329ed-1150-49a5-b035-b0b7ef86424f.png'),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(activity.save).not.toHaveBeenCalled();
+      expect(uploads.deleteByUrl).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'photo.gif',
+      url,
+      `../${filename}`,
+      `..\\${filename}`,
+      `%2e%2e%2f${filename}`,
+      `${filename}\n`,
+    ])(
+      'rejects malformed filename %j before database access',
+      async (value) => {
+        await expect(removeByFilename(value)).rejects.toMatchObject({
+          status: 400,
+        });
+        expect(activities.findById).not.toHaveBeenCalled();
+        expect(uploads.deleteByUrl).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects ambiguous stored references without altering them', async () => {
+      activity.images = [url, url];
+      await expect(removeByFilename()).rejects.toMatchObject({ status: 400 });
+      expect(activity.images).toEqual([url, url]);
+      expect(activity.save).not.toHaveBeenCalled();
+      expect(uploads.deleteByUrl).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 for an unowned or missing activity without deleting anything', async () => {
+      activity.images = [url];
+      parents.findOneAndUpdate.mockReturnValueOnce({ lean: async () => null });
+      await expect(removeByFilename()).rejects.toMatchObject({ status: 404 });
+      activities.findById.mockReturnValueOnce(query(null));
+      await expect(removeByFilename()).rejects.toMatchObject({ status: 404 });
+      expect(activity.save).not.toHaveBeenCalled();
+      expect(uploads.deleteByUrl).not.toHaveBeenCalled();
+    });
+  });
+
   it('keeps the file when removal fails or its commit is uncertain', async () => {
     activity.images = [url];
     activity.save.mockRejectedValueOnce(new Error('write failed'));

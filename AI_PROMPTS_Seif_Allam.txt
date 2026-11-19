@@ -221,3 +221,20 @@ and post-commit cleanup for unreferenced activity files. Added service and HTTP
 tests covering write retries, uncertain commits, legacy URLs and request validation.
 
 ================================================
+
+Date: 2026-11-19
+Student: Seif Allam
+AI Tool: Codex
+Requirement: ITN-12 pull request review
+
+Prompt:
+Add DELETE /api/activities/:id/images/:imageId using the GEN-08 filename.
+Preserve URL-query deletion and reuse ownership checks, transactions and cleanup.
+Reject invalid or ambiguous filenames and document and test both routes.
+
+How the output was used:
+Added filename-based removal to the existing activity transaction and cleanup flow.
+Added Swagger documentation and regression coverage for authentication, repeated
+removal, unattached filenames, ambiguous references and traversal attempts.
+
+================================================

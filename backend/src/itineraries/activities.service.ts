@@ -279,15 +279,44 @@ export class ActivitiesService {
   }
 
   async removeImage(userId: string, id: string, url: string) {
-    const activity = await this.withOwnedActivity(
+    return this.removeAttachedImage(userId, id, (images) =>
+      images.includes(url) ? url : undefined,
+    );
+  }
+
+  async removeImageByFilename(userId: string, id: string, filename: string) {
+    const category = ImageCategory.ACTIVITY;
+    const url = `/api/uploads/${category}/${filename}`;
+    // Use the GEN-08 format check and reject trailing whitespace or path components.
+    if (
+      filename !== filename.trim() ||
+      !this.uploads.isStoredUrl(category, url)
+    )
+      throw new BadRequestException('Invalid activity image filename');
+
+    return this.removeAttachedImage(userId, id, (images) => {
+      const matches = images.filter((image) => image === url);
+      if (matches.length > 1)
+        throw new BadRequestException('Ambiguous activity image filename');
+      return matches[0];
+    });
+  }
+
+  private async removeAttachedImage(
+    userId: string,
+    id: string,
+    resolveUrl: (images: string[]) => string | undefined,
+  ) {
+    const { activity, url } = await this.withOwnedActivity(
       userId,
       id,
       async (current, session) => {
-        if (!current.images.includes(url))
+        const url = resolveUrl(current.images);
+        if (url === undefined)
           throw new NotFoundException('Image attachment not found');
         current.images = current.images.filter((image) => image !== url);
         await current.save({ session });
-        return ActivityResponseDto.from(current);
+        return { activity: ActivityResponseDto.from(current), url };
       },
     );
     await this.cleanUnreferencedImage(url);

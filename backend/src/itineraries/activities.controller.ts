@@ -154,7 +154,10 @@ export class ActivitiesController {
   }
 
   @Delete('activities/:id/images')
-  @ApiOperation({ summary: 'Remove an image from an owned activity (ITN-12)' })
+  @ApiOperation({
+    summary: 'Remove an image by its stored URL (ITN-12)',
+    description: 'Provide the exact URL from the activity images array.',
+  })
   @ApiParam({ name: 'id', description: 'Activity ObjectId' })
   @ApiQuery({
     name: 'url',
@@ -173,6 +176,31 @@ export class ActivitiesController {
     @Query() query: RemoveActivityImageQueryDto,
   ) {
     return this.activities.removeImage(req.user!.sub, id, query.url);
+  }
+
+  @Delete('activities/:id/images/:imageId')
+  @ApiOperation({
+    summary: 'Remove an image by its GEN-08 filename (ITN-12)',
+    description: 'Use the filename from an attached GEN-08 activity URL.',
+  })
+  @ApiParam({ name: 'id', description: 'Activity ObjectId' })
+  @ApiParam({
+    name: 'imageId',
+    description:
+      'Stored GEN-08 activity image filename, including its extension',
+    example: '680329ed-1150-49a5-b035-b0b7ef86424f.png',
+  })
+  @ApiOkResponse({ type: ActivityResponseDto })
+  @errors(
+    'Malformed activity ID, invalid image filename, or ambiguous filename match',
+    'Activity, owned itinerary or image attachment unavailable',
+  )
+  removeImageByFilename(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Param('imageId') imageId: string,
+  ) {
+    return this.activities.removeImageByFilename(req.user!.sub, id, imageId);
   }
 
   @Post('itineraries/:id/days/:dayId/activities')
