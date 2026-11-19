@@ -12,7 +12,11 @@ import {
   HotelSearchPageDto,
   HotelSearchResultDto,
 } from './dto/hotel-search-result.dto';
-import { SearchHotelsQueryDto } from './dto/search-hotels-query.dto';
+import {
+  HotelSortBy,
+  SearchHotelsQueryDto,
+  SortOrder,
+} from './dto/search-hotels-query.dto';
 import { Hotel } from './schemas/hotel.schema';
 import {
   AvailabilityType,
@@ -130,7 +134,7 @@ export class HotelSearchService {
       }
     }
 
-    const matches: HotelSearchResultDto[] = [];
+    let matches: HotelSearchResultDto[] = [];
     for (const hotel of hotels) {
       const free = freeByHotel.get(String(hotel._id)) ?? [];
       if (free.length < roomsWanted) {
@@ -159,12 +163,54 @@ export class HotelSearchService {
       });
     }
 
+    matches = this.applyFiltersAndSort(matches, query);
+
     const start = skipFor(page);
     return paginate(
       matches.slice(start, start + PAGE_SIZE),
       matches.length,
       page,
     );
+  }
+
+  /**
+   * HTL-12: inclusive price range on the cheapest free room, minimum average rating (hotels with no
+   * ratings are excluded when a rating filter is set), then the requested sort. Ties always fall back
+   * to the hotel name so the order (and the pages) stay stable.
+   */
+  private applyFiltersAndSort(
+    matches: HotelSearchResultDto[],
+    query: SearchHotelsQueryDto,
+  ): HotelSearchResultDto[] {
+    const { minPrice, maxPrice, minRating, sortBy } = query;
+    const direction = query.sortOrder === SortOrder.DESC ? -1 : 1;
+
+    const filtered = matches.filter(
+      (hotel) =>
+        (minPrice === undefined || hotel.lowestPricePerNight >= minPrice) &&
+        (maxPrice === undefined || hotel.lowestPricePerNight <= maxPrice) &&
+        (minRating === undefined ||
+          (hotel.reviewCount > 0 && hotel.averageRating >= minRating)),
+    );
+
+    const byName = (a: HotelSearchResultDto, b: HotelSearchResultDto) =>
+      a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+    if (sortBy === HotelSortBy.PRICE) {
+      return filtered.sort(
+        (a, b) =>
+          direction * (a.lowestPricePerNight - b.lowestPricePerNight) ||
+          byName(a, b),
+      );
+    }
+    if (sortBy === HotelSortBy.RATING) {
+      return filtered.sort((a, b) => {
+        const aRated = a.reviewCount > 0;
+        const bRated = b.reviewCount > 0;
+        if (aRated !== bRated) return aRated ? -1 : 1; // unrated hotels last
+        return direction * (a.averageRating - b.averageRating) || byName(a, b);
+      });
+    }
+    return filtered; // already sorted by name
   }
 
   private validate(
@@ -190,6 +236,14 @@ export class HotelSearchService {
       errors.checkOut = ['Check-out must be a real date in YYYY-MM-DD format'];
     } else if (checkIn && checkOut <= checkIn) {
       errors.checkOut = ['Check-out must be after check-in'];
+    }
+
+    if (
+      query.minPrice !== undefined &&
+      query.maxPrice !== undefined &&
+      query.maxPrice < query.minPrice
+    ) {
+      errors.maxPrice = ['Maximum price cannot be less than minimum price'];
     }
 
     if (!checkIn || !checkOut || Object.keys(errors).length > 0) {
