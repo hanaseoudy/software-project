@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../users/schemas/user.schema';
 import { HotelBookingsController } from './hotel-bookings.controller';
+import { ReviewsService } from './reviews.service';
 import { HotelBookingsService } from './hotel-bookings.service';
 import { HotelReservationsController } from './hotel-reservations.controller';
 import { HotelReservationsService } from './hotel-reservations.service';
@@ -20,6 +21,7 @@ describe('reservation controllers (HTL-20 / HTL-22)', () => {
       controllers: [HotelBookingsController, HotelReservationsController],
       providers: [
         { provide: HotelBookingsService, useValue: {} },
+        { provide: ReviewsService, useValue: {} },
         { provide: HotelReservationsService, useValue: service },
       ],
     })
