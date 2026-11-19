@@ -506,7 +506,9 @@ describe('FlightChangeService.requestChange', () => {
       expect.objectContaining({ bookingId, amount: 40 }),
     );
     expect(t.notificationsService.create).toHaveBeenCalledTimes(1);
+    // The change is already applied: it must not be reported as waiting for payment.
     expect(result).toMatchObject({
+      status: 'COMPLETED',
       difference: -40,
       refund: { id: 'r1', status: 'pending' },
     });
@@ -515,7 +517,7 @@ describe('FlightChangeService.requestChange', () => {
 
   it('applies a same-price flight without any payment or refund', async () => {
     const t = setup();
-    await t.service.requestChange(
+    const result = await t.service.requestChange(
       user,
       bid,
       { outboundFlightId: String(newOut), confirm: true },
@@ -524,6 +526,7 @@ describe('FlightChangeService.requestChange', () => {
     expect(t.paymentsService.createFarePayment).not.toHaveBeenCalled();
     expect(t.refundsService.issueFareDifferenceRefund).not.toHaveBeenCalled();
     expect(t.bookingModel.findOneAndUpdate).toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'COMPLETED', difference: 0 });
   });
 
   it('keeps the change and warns when the refund cannot be created', async () => {
@@ -539,6 +542,7 @@ describe('FlightChangeService.requestChange', () => {
     );
     expect((result as { refund?: unknown }).refund).toBeNull();
     expect(result).toHaveProperty('warning');
+    expect(result).toMatchObject({ status: 'COMPLETED' });
     expect(t.bookingModel.findOneAndUpdate).toHaveBeenCalled();
   });
 

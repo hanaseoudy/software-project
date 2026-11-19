@@ -23,7 +23,6 @@ export class FlightChange {
     type: MongooseSchema.Types.ObjectId,
     ref: 'FlightBooking',
     required: true,
-    index: true,
   })
   booking: Types.ObjectId;
 
@@ -87,7 +86,9 @@ export class FlightChange {
 
 export const FlightChangeSchema = SchemaFactory.createForClass(FlightChange);
 
-// A booking can have only one change waiting for payment at a time.
+// A booking can have only one change waiting for payment at a time. This is the
+// only index on `booking`: do not add `index: true` to the field, it would define
+// a second, non-unique index on the same key.
 FlightChangeSchema.index(
   { booking: 1 },
   {

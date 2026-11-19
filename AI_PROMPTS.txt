@@ -1543,3 +1543,25 @@ suite passes on Node 24 except blog.service.spec, which already failed before th
 change. tsc and oxlint show no errors in the changed files. Not tested end to end
 against Stripe (no keys here): the Stripe calls are covered with mocks.
 ================================================
+Date: 2026-11-19
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-27 (review fixes on PR #143)
+
+Prompt (summary of the conversation):
+The reviewer (Hana) asked for two changes on PR #143: (1) remove index: true from
+the booking field in flight-change.schema.ts to prevent a duplicate index definition
+and protect the unique pending-change constraint; (2) fix the immediate-change
+response, which showed PENDING_PAYMENT although the change had already been applied.
+
+How the output was used:
+Removed index: true from the booking field; the partial unique index on booking
+(only one PENDING_PAYMENT change per booking) is now the only index on that key. A
+change that is applied at once (same or lower fare) now answers with status COMPLETED
+instead of the stale in-memory PENDING_PAYMENT.
+
+Verification:
+Added status assertions to the three immediate-change tests (lower fare, same fare,
+refund warning); they failed before the fix and pass now (36 tests in the flight
+change spec). tsc and prettier show no errors in the changed files.
+================================================

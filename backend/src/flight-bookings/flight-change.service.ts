@@ -318,7 +318,10 @@ export class FlightChangeService implements OnModuleInit {
       }
     }
     return {
+      // applyChange completed the request in the database, but this in-memory
+      // document is still the PENDING_PAYMENT one created a moment ago.
       ...this.toResponse(change),
+      status: FlightChangeStatus.COMPLETED,
       refund: refund
         ? {
             id: refund.id,
