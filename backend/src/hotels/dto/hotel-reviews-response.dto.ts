@@ -10,6 +10,15 @@ export class HotelReviewerDto {
   name!: string;
 }
 
+// HTL-26: the hotel moderator's public reply to a review (the moderator's id is not shown)
+export class HotelReviewReplyDto {
+  @ApiProperty({ example: 'Thank you for staying with us.' })
+  text!: string;
+
+  @ApiProperty({ example: '2026-11-18T10:00:00.000Z' })
+  repliedAt!: Date;
+}
+
 // HTL-24: one visible review of the hotel
 export class HotelReviewItemDto {
   @ApiProperty({ example: '675f1b2c9d3e4a00aabbcc01' })
@@ -29,6 +38,13 @@ export class HotelReviewItemDto {
 
   @ApiProperty({ example: '2026-11-01T10:00:00.000Z' })
   updatedAt!: Date;
+
+  @ApiProperty({
+    type: HotelReviewReplyDto,
+    nullable: true,
+    description: 'HTL-26: the hotel moderator\'s reply, or null when there is none',
+  })
+  reply!: HotelReviewReplyDto | null;
 }
 
 // HTL-24: the hotel's average rating and number of ratings, with one page of its reviews (GEN-05)

@@ -741,6 +741,9 @@ export class HotelsService {
       createdAt: (
         (review as { createdAt?: Date }).createdAt ?? new Date(0)
       ).toISOString(),
+      reply: review.reply
+        ? { text: review.reply.text, repliedAt: review.reply.repliedAt.toISOString() }
+        : null,
     }));
   }
 
@@ -772,7 +775,7 @@ export class HotelsService {
       Promise.all([
         this.reviewModel
           .find(filter)
-          .select('user rating comment createdAt updatedAt')
+          .select('user rating comment reply createdAt updatedAt')
           .sort({ createdAt: -1, _id: -1 })
           .skip(skipFor(page))
           .limit(PAGE_SIZE)
@@ -782,6 +785,7 @@ export class HotelsService {
               user: Types.ObjectId;
               rating: number;
               comment?: string;
+              reply?: { text: string; repliedAt: Date };
               createdAt: Date;
               updatedAt: Date;
             }[]
@@ -818,6 +822,7 @@ export class HotelsService {
         comment: review.comment ?? null,
         createdAt: review.createdAt,
         updatedAt: review.updatedAt,
+        reply: review.reply ? { text: review.reply.text, repliedAt: review.reply.repliedAt } : null,
       };
     });
 
