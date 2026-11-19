@@ -15,7 +15,7 @@ import {
   FlightBooking,
   FlightBookingSchema,
 } from '../flight-bookings/schemas/flight-booking.schema';
-import { Refund, RefundSchema } from '../payments/schemas/refund.schema';
+import { PaymentsModule } from '../payments/payments.module';
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -24,10 +24,10 @@ import { Refund, RefundSchema } from '../payments/schemas/refund.schema';
       { name: Flight.name, schema: FlightSchema },
       { name: ModeratorAssignment.name, schema: ModeratorAssignmentSchema },
       { name: FlightBooking.name, schema: FlightBookingSchema },
-      { name: Refund.name, schema: RefundSchema },
     ]),
     AuthModule,
     NotificationsModule,
+    PaymentsModule,
   ],
   controllers: [FlightsController],
   providers: [FlightsService],

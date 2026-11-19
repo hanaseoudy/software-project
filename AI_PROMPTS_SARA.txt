@@ -166,3 +166,29 @@ route in FlightsController, wired FlightsModule exports, and verified all
 happy-path, refund, notification, and error cases in Postman. Reviewed and
 adjusted every snippet before committing.
 ================================================
+================================================
+Date: 2026-11-20
+Student: Sara Gomaa
+Tool: Cursor (Grok 4.7)
+Related Requirement: FLT-06, PAY-03
+
+Prompt:
+Reviewer said FLT-06 only inserts a refund document and never calls Stripe.
+Explain how to replace that with RefundsService.issueRefund() so refund
+status, Stripe refund id, payment status and refund notifications are
+handled, then apply the fix.
+
+How the output was used:
+Reviewed the change against FLT-06 and PAY-03 and the existing
+RefundsService.issueRefund() / refundQuote() used by FLT-26 and HTL-21.
+FlightsModule now imports PaymentsModule. cancelFlight saves each
+confirmed booking as CANCELLED, then calls issueRefund() with a 100%
+provider-initiated quote (totalPrice + baggage fees). A refund failure
+is logged and does not stop the other bookings. Pending holds are still
+released without a refund. The existing flight-cancelled notification
+stays; the refund notification is sent by RefundsService.
+
+Verification:
+npm run build in backend completed successfully. No Stripe call or
+database refund was executed.
+================================================

@@ -41,10 +41,9 @@ import {
   FlightBookingStatus,
 } from '../flight-bookings/schemas/flight-booking.schema';
 import { PassengerType } from '../flight-bookings/schemas/passenger.schema';
-import { Refund } from '../payments/schemas/refund.schema';
 import { BookingType } from '../payments/enums/payment.enums';
 import { NotificationType } from '../notifications/enums/notification.enums';
-
+import { RefundsService, refundQuote } from '../payments/refunds.service';
 @Injectable()
 export class FlightsService {
   private readonly logger = new Logger(FlightsService.name);
@@ -60,8 +59,7 @@ export class FlightsService {
     private readonly airlineModel: Model<AirlineDocument>,
     @InjectModel(FlightBooking.name)
     private readonly flightBookingModel: Model<FlightBookingDocument>,
-    @InjectModel(Refund.name)
-    private readonly refundModel: Model<Refund>,
+    private readonly refundsService: RefundsService,
     private readonly notificationsService: NotificationsService,
   ) {}
 
@@ -420,28 +418,33 @@ export class FlightsService {
         booking.status = FlightBookingStatus.CANCELLED;
         booking.cancelledAt = now;
         booking.cancellationReason = cancellationReason;
+        // issueRefund() only runs after the booking is persisted as CANCELLED.
+        await booking.save();
 
-        // PAY-03: 100% refund of total amount paid (seat fares + baggage fees)[cite: 7]
-        const refundAmount =
-          Math.round((booking.totalPrice + (booking.baggageFees ?? 0)) * 100) /
-          100;
+        // PAY-03: 100% of the amount charged (seat fares + baggage fees).
+        const quote = refundQuote({
+          paidAmount:
+            Math.round(
+              (booking.totalPrice + (booking.baggageFees ?? 0)) * 100,
+            ) / 100,
+          providerInitiated: true,
+        });
 
-        // Create 100% refund record (adjust fields/service call to match your Refund schema/RefundsService)
-        if (booking.payment) {
-          const refund = await this.refundModel.create({
-            paymentId: booking.payment,
-            userId: booking.user,
+        try {
+          await this.refundsService.issueRefund({
             bookingType: BookingType.FLIGHT,
             bookingId: booking._id,
-            amount: refundAmount,
-            currency: booking.currency,
+            amount: quote.amount,
+            appliedPolicy: quote.appliedPolicy,
             reason: cancellationReason,
-            appliedPolicy: {
-              refundPercent: 100,
-              source: 'AIRLINE_FLIGHT_CANCELLATION',
-            },
           });
-          booking.refund = refund._id as Types.ObjectId;
+        } catch (error) {
+          // The flight and this booking stay cancelled. One Stripe failure must not stop the rest.
+          this.logger.error(
+            `Booking ${String(booking._id)} cancelled but the refund failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
         }
 
         if (otherFlightId) {
@@ -468,9 +471,9 @@ export class FlightsService {
             'heldSeats',
           );
         }
-      }
 
-      await booking.save();
+        await booking.save();
+      }
     }
 
     // 3. Send in-app notifications to all passengers with Confirmed bookings (GEN-01)
