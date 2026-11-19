@@ -17,6 +17,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { RequireVerifiedEmail } from '../common/decorators/require-verified-email.decorator';
 import { UserRole } from '../users/schemas/user.schema';
 import { CancelFlightBookingDto } from './dto/cancel-flight-booking.dto';
 import { ChangeFlightBookingDto, ChangeFlightQueryDto } from './dto/change-flight-booking.dto';
@@ -38,6 +39,7 @@ export class FlightBookingsController {
 
   @Post('hold')
   @UseGuards(RolesGuard)
+  @RequireVerifiedEmail() // ACC-02: email must be verified before booking
   @Roles(UserRole.USER)
   @ApiOperation({
     summary:

@@ -26,4 +26,7 @@ export class LoginResponseDto {
 
   @ApiProperty({ example: false, description: 'True when the user must change a temporary password (ACC-13)' })
   mustChangePassword!: boolean;
+
+  @ApiProperty({ example: true, description: 'False until the user opens the link in the verification email; booking is blocked until then (ACC-02)' })
+  emailVerified!: boolean;
 }
