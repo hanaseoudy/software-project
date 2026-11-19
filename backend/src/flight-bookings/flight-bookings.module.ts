@@ -7,6 +7,7 @@ import { Flight, FlightSchema } from '../flights/schemas/flight.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { FlightBookingConfirmationService } from './flight-booking-confirmation.service';
+import { FlightCancellationService } from './flight-cancellation.service';
 import { FlightBookingsController } from './flight-bookings.controller';
 import { FlightBookingsService } from './flight-bookings.service';
 import { FlightCompletionService } from './flight-completion.service';
@@ -34,6 +35,7 @@ import {
     FlightHoldExpiryService,
     FlightCompletionService,
     FlightBookingConfirmationService,
+    FlightCancellationService,
   ],
   exports: [FlightBookingsService, FlightBookingConfirmationService],
 })

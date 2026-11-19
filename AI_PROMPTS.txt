@@ -1451,6 +1451,37 @@ New unit tests (confirmation service, reference generator, PDF) pass together wi
 the other flight-bookings tests, and tsc and oxlint show no errors in the changed
 files. Not tested end to end against Stripe; the hook is covered with mocks.
 ================================================
+Date: 2026-11-18
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-26 (TASK-42) - user flight cancellation and policy-based refund
+
+Prompt (summary of the conversation):
+Help me implement FLT-26: a registered user cancels their own Confirmed flight
+booking any time before departure, after viewing the refund amount computed from
+the airline tiers (FLT-09) and confirming. The booking becomes Cancelled, its
+seats return to inventory and a refund is created (PAY-03). Cancellation after
+departure is blocked. Dependencies: FLT-23, FLT-09, PAY-03.
+
+How the output was used:
+Used the generated code after reviewing it against FLT-26, FLT-09 and PAY-03.
+GET /flight-bookings/:id/cancellation-quote shows the refund (refundQuote() from
+PAY-03 with the airline cancellationPolicy rules of FLT-09 and the whole days
+left until the outbound flight departs). POST /flight-bookings/:id/cancel needs
+{ "confirm": true } and only works for the owner's CONFIRMED booking before
+departure (409 otherwise). Cancelling is one atomic update (CONFIRMED ->
+CANCELLED, checked with assertBookingTransition from GEN-11), so a second request
+at the same time does nothing; then the seats go back (booked seats, or held seats
+if FLT-23 did not convert them yet; infants have no seat), the refund is created
+with RefundsService.issueRefund (a 0% tier creates none) and a BOOKING_CANCELLED
+notification is sent. If the refund cannot be created, the booking stays cancelled
+and the response carries a warning. The refund follows the tiers of the airline of
+the outbound flight. This PR is based on FLT-23 (#140), which adds the booking
+reference and the held -> booked seat conversion.
+
+Verification:
+New unit tests (18) pass and tsc and oxlint show no errors in the changed files.
+Not tested end to end against Stripe; the refund call is covered with mocks.
 Date: 2026-11-19
 Student: Mariam Mashoud
 Tool: Claude
