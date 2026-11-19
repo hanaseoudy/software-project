@@ -16,11 +16,12 @@ import {
 } from './schemas/flight-booking.schema';
 import { PassengerType } from './schemas/passenger.schema';
 import { BaggageRuleError, calculateLegBaggageFees } from './utils/baggage-fees';
+import { buildETicketPdf } from './utils/e-ticket-pdf';
 import { buildBookingSummary } from './utils/booking-summary';
+import { INFANT_FARE_RATIO } from './utils/flight-change';
 import type { SummaryFlight } from './utils/booking-summary';
 
 export const HOLD_DURATION_MS = 10 * 60 * 1000; // FLT-22: 10-minute hold
-const INFANT_FARE_RATIO = 0.1; // infants pay 10% (see Cabin.price comment)
 
 @Injectable()
 export class FlightBookingsService {
@@ -37,6 +38,43 @@ export class FlightBookingsService {
    * total). Only the owner of the booking can read it.
    */
   async getSummary(userId: string, bookingId: string) {
+    return (await this.loadOwnedSummary(userId, bookingId)).summary;
+  }
+
+  /**
+   * FLT-23: confirmation page data: the booking summary plus the booking
+   * reference. Only available once the booking is confirmed (or completed).
+   */
+  async getConfirmation(userId: string, bookingId: string) {
+    const { summary, bookingReference } = await this.loadConfirmed(userId, bookingId);
+    return { ...summary, bookingReference };
+  }
+
+  /** FLT-23: downloadable e-ticket (PDF) of a confirmed booking. */
+  async getETicket(userId: string, bookingId: string) {
+    const { summary, bookingReference } = await this.loadConfirmed(userId, bookingId);
+    return {
+      filename: `e-ticket-${bookingReference}.pdf`,
+      pdf: await buildETicketPdf(summary, bookingReference),
+    };
+  }
+
+  private async loadConfirmed(userId: string, bookingId: string) {
+    const { summary, bookingReference } = await this.loadOwnedSummary(userId, bookingId);
+    const confirmed =
+      summary.status === FlightBookingStatus.CONFIRMED ||
+      summary.status === FlightBookingStatus.COMPLETED;
+    if (!confirmed) {
+      throw new ConflictException('Booking is not confirmed yet');
+    }
+    if (!bookingReference) {
+      // Paid, but the reference is still being generated (the hourly job completes it).
+      throw new ConflictException('Booking reference is not ready yet, try again shortly');
+    }
+    return { summary, bookingReference };
+  }
+
+  private async loadOwnedSummary(userId: string, bookingId: string) {
     if (!Types.ObjectId.isValid(bookingId)) {
       throw new BadRequestException('Invalid booking ID');
     }
@@ -55,7 +93,7 @@ export class FlightBookingsService {
       ? await this.loadSummaryFlight(booking.returnFlight)
       : undefined;
 
-    return buildBookingSummary(
+    const summary = buildBookingSummary(
       {
         id: String(booking._id),
         status: booking.status,
@@ -70,6 +108,7 @@ export class FlightBookingsService {
       outbound,
       inbound,
     );
+    return { summary, bookingReference: booking.bookingReference };
   }
 
   private async loadSummaryFlight(flightId: Types.ObjectId): Promise<SummaryFlight> {

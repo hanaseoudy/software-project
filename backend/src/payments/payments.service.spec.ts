@@ -609,6 +609,90 @@ describe('PaymentsService (PAY-01)', () => {
     });
   });
 
+  describe('fare difference of a flight change (FLT-27)', () => {
+    const now = 1_790_000_000; // Stripe event time (seconds)
+    const fareEvent = (over: Record<string, unknown> = {}) => ({
+      type: 'payment_intent.succeeded',
+      created: now,
+      data: {
+        object: {
+          id: 'pi_fare',
+          amount_received: 6000,
+          currency: 'usd',
+          metadata: { purpose: 'flight-change', changeId: 'change1' },
+          ...over,
+        },
+      },
+    });
+
+    it('creates a PaymentIntent for the difference, marked with the change', async () => {
+      const { service, stripe } = setup();
+      const result = await service.createFarePayment({ amount: 60.5, changeId: 'change1', bookingId: 'b1' });
+      expect(stripe.paymentIntents.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 6050,
+          currency: 'usd',
+          metadata: expect.objectContaining({ purpose: 'flight-change', changeId: 'change1', bookingId: 'b1' }),
+        }),
+      );
+      expect(result).toEqual({ paymentIntentId: 'pi_new', clientSecret: 'secret_new' });
+    });
+
+    it('needs Stripe', async () => {
+      const { service } = setup({ stripe: false });
+      await expect(service.createFarePayment({ amount: 10, changeId: 'c', bookingId: 'b' })).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+    });
+
+    it('sends a paid fare difference to the FLT-27 handler and never confirms a booking', async () => {
+      const { service, stripe, paymentModel, bookingModel } = setup({ webhookSecret: 'whsec' });
+      const handler = jest.fn().mockResolvedValue(undefined);
+      service.onFarePaid(handler);
+      stripe.webhooks.constructEvent.mockReturnValue(fareEvent());
+
+      await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+      expect(handler).toHaveBeenCalledWith({
+        changeId: 'change1',
+        paymentIntentId: 'pi_fare',
+        amountReceived: 60,
+        currency: 'USD',
+        paidAt: new Date(now * 1000),
+      });
+      expect(paymentModel.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(bookingModel.updateOne).not.toHaveBeenCalled();
+    });
+
+    it('logs a failing handler instead of failing the webhook', async () => {
+      const { service, stripe } = setup({ webhookSecret: 'whsec' });
+      service.onFarePaid(jest.fn().mockRejectedValue(new Error('boom')));
+      stripe.webhooks.constructEvent.mockReturnValue(fareEvent());
+      await expect(service.handleWebhook(Buffer.from('{}'), 'sig')).resolves.toBeUndefined();
+    });
+
+    it('cancels an unpaid fare PaymentIntent, but not one whose money is moving', async () => {
+      const { service, stripe } = setup();
+      stripe.paymentIntents.retrieve.mockResolvedValueOnce({ id: 'pi_fare', status: 'requires_payment_method' });
+      await expect(service.cancelFarePayment('pi_fare')).resolves.toBe(true);
+      expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith('pi_fare');
+
+      stripe.paymentIntents.cancel.mockClear();
+      stripe.paymentIntents.retrieve.mockResolvedValueOnce({ id: 'pi_fare', status: 'processing' });
+      await expect(service.cancelFarePayment('pi_fare')).resolves.toBe(false);
+      expect(stripe.paymentIntents.cancel).not.toHaveBeenCalled();
+    });
+
+    it('refunds a fare payment that could not be applied', async () => {
+      const { service, stripe } = setup();
+      (stripe as any).refunds = { create: jest.fn().mockResolvedValue({ id: 're_1' }) };
+      await service.refundFarePayment('pi_fare', 60, 'change1');
+      expect((stripe as any).refunds.create).toHaveBeenCalledWith(
+        expect.objectContaining({ payment_intent: 'pi_fare', amount: 6000 }),
+      );
+    });
+  });
+
   describe('cancelExpiredPayments', () => {
     it('cancels the PaymentIntent and marks the payment expired', async () => {
       const { service, stripe, paymentModel } = setup();
