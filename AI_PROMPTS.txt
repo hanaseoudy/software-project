@@ -1536,3 +1536,29 @@ Verification:
 New unit tests (17) pass and tsc and oxlint show no errors in the changed files.
 Tested in Postman and Swagger with an admin account (see the PR).
 ================================================
+Date: 2026-11-19
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: ITN-28 (Itineraries) - export or print an itinerary as PDF (bonus)
+
+Prompt (summary of the conversation):
+Help me implement ITN-28: the system shall allow a user to export or print an
+itinerary as PDF. Dependency: ITN-03 (itinerary details).
+
+How the output was used:
+Used the generated code after reviewing it against ITN-28 and ITN-03. New endpoint
+GET /itineraries/:id/pdf for the logged-in owner only (401 without login; 404 for a
+missing, invalid or someone else's itinerary, with the same answer so ids cannot be
+probed). The PDF has the title, countries, first and last date, and for every day
+its date, city, notes and activities (time, name, description, cost), with page
+numbers; long itineraries continue on more pages. By default the file is
+downloaded; ?inline=true opens it in the browser so it can be printed (any other
+value is a 400 in the GEN-02 format). The file name is a safe ASCII name made from
+the title. The PDF is built like the FLT-23 e-ticket (pdfkit), read only, no data is
+changed. Limitation: the standard PDF font only draws Latin-1, so characters such as
+Arabic are shown as "?" (documented in Swagger).
+
+Verification:
+New unit tests (23) pass, and tsc and oxlint show no errors in the new files. A
+sample PDF was rendered and checked visually. Tested in Postman (see the PR).
+================================================
