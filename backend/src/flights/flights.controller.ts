@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -29,6 +30,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AddCabinDto } from './dto/add-cabin.dto';
 import { SearchFlightsDto } from './dto/search-flights.dto';
+import { UpdateFlightDto } from './dto/update-flights.dto';
+import { UpdateCabinDto } from './dto/update-cabin.dto';
 
 @ApiTags('Flights')
 @Controller('flights')
@@ -62,6 +65,38 @@ export class FlightsController {
     @Body() dto: CreateFlightsDto,
   ) {
     return this.flights.create(userId.sub, dto);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Edit times/airports of own Scheduled flight (FLT-05)',
+  })
+  @ApiResponse({ status: 200, description: 'Flight updated' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid id, date, or schedule (e.g. arrival not after departure)',
+  })
+  @ApiResponse({ status: 401, description: 'Not logged in' })
+  @ApiResponse({
+    status: 403,
+    description: "Not a moderator of this flight's airline",
+  })
+  @ApiResponse({ status: 404, description: 'Flight not found' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Flight not Scheduled, airports locked by bookings, or duplicate flight number on that date',
+  })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateFlightDto,
+    @CurrentUser() user: AuthPayload,
+  ) {
+    return this.flights.update(id, user.sub, dto);
   }
 
   @Post(':id/cabins')
@@ -103,6 +138,35 @@ export class FlightsController {
   ) {
     // req.user.sub is the moderator's ID extracted from the JWT token
     return this.flights.addCabin(flightId, user.sub, dto);
+  }
+
+  @Patch(':id/cabins/:cabinId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR)
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Edit price/seat count of a cabin (FLT-05)' })
+  @ApiResponse({ status: 200, description: 'Cabin updated' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid id, empty body, or invalid values',
+  })
+  @ApiResponse({ status: 401, description: 'Not logged in' })
+  @ApiResponse({
+    status: 403,
+    description: "Not a moderator of this flight's airline",
+  })
+  @ApiResponse({ status: 404, description: 'Flight or cabin not found' })
+  @ApiResponse({
+    status: 409,
+    description: 'Flight not Scheduled, or seats below booked + held',
+  })
+  updateCabin(
+    @Param('id') id: string,
+    @Param('cabinId') cabinId: string,
+    @Body() dto: UpdateCabinDto,
+    @CurrentUser() user: AuthPayload,
+  ) {
+    return this.flights.updateCabin(id, cabinId, user.sub, dto);
   }
 
   @ApiOperation({
