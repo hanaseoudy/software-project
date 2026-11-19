@@ -202,3 +202,1515 @@ Broader unit suite: 621 passed, with three pre-existing BlogService failures.
 Shared MongoDB Atlas was not modified.
 
 ================================================
+
+ITN-08 — Day Reordering and Itinerary Recalculation
+
+Date: 2026-11-17
+Student: Seif Allam
+Tool: ChatGPT / Codex (OpenAI)
+Related Requirement: ITN-08; dependency ITN-05; compatibility with ITN-07, ITN-10 and ITN-16; grouping deferred to ITN-09
+
+Prompts (verbatim user task messages available in the conversation):
+The following four prompts are reproduced from the available conversation context. Prompt 1 was truncated when received; its final incomplete sentence is preserved rather than reconstructed. Markdown and examples are retained. Summaries elsewhere in this entry are explicitly labeled and are not verbatim prompts.
+
+Prompt 1 (verbatim; initial request, truncated as received):
+--- BEGIN PROMPT 1 ---
+# Implement ITN-08 — Day Reordering and Itinerary Recalculation
+
+You are working on branch `feature/ITN-08-day-reordering` in the worktree `software-project-itn08`.
+
+## 1. Official requirement
+
+**ID:** ITN-08\
+**Module:** Itineraries\
+**Complexity:** Medium\
+**Actor:** Registered User\
+**Dependency:** ITN-05
+
+**Requirement:**\
+"The system shall allow a user to move a day to a new position, with days renumbered and dates and groupings recalculated."
+
+## 2. Current project status
+
+- ITN-05 and ITN-07 are already merged into `develop`.
+- ITN-07's implementation is confirmed in the current branch's Git history.
+- ITN-10 (activity management) is implemented but not yet merged.
+- ITN-16 (intercity transport costs) is implemented but not yet merged.
+- ITN-08 has its own separate worktree.
+- The project uses NestJS, TypeScript, Mongoose, MongoDB, JWT authentication, and Swagger.
+
+**Important:** Do not switch branches, modify other worktrees, or merge ITN-10/ITN-16 into ITN-08.
+
+## 3. Required backend functionality
+
+Implement an authenticated endpoint for moving an existing day to another position within the same itinerary.
+
+Suggested endpoint:
+
+`PATCH /api/itineraries/:id/days/:dayId/reorder`
+
+Suggested request body:
+```json
+{
+  "newPosition": 2
+}
+```
+
+Inspect the existing controller and DTO conventions before finalizing the endpoint.
+
+### Functional requirements
+
+1. Validate that the user is authenticated.
+2. Verify that the itinerary belongs to the authenticated user.
+3. Verify that the day belongs to the specified itinerary.
+4. Validate that `newPosition` is an integer between 1 and the itinerary's current day count.
+5. Support moving a day forward and backward.
+6. Renumber all days sequentially from 1, without gaps or duplicates.
+7. Recalculate dates based on the itinerary's start date and the new day order.
+8. Preserve existing day database IDs.
+9. Preserve associated activities, budgets, transport costs, and other day-related records.
+10. Handle moving a day to its current position as a safe no-op.
+11. Return an appropriate response using the project's existing DTO conventions.
+12. Add Swagger documentation for the endpoint and its errors.
+
+### Example
+
+Initial order:
+
+- Day 1: Cairo — December 1
+- Day 2: Giza — December 2
+- Day 3: Luxor — December 3
+- Day 4: Aswan — December 4
+
+Move Day 4 to position 2.
+
+Expected order:
+
+- Day 1: Cairo — December 1
+- Day 2: Aswan — December 2
+- Day 3: Giza — December 3
+- Day 4: Luxor — December 4
+
+The IDs of all existing days must remain unchanged.
+
+## 4. Critical database requirements
+
+Inspect the existing ITN-05 and ITN-07 implementations before writing code.
+
+Pay particular attention to the unique `(itineraryId, dayNumber)` index.
+
+A normal sequential renumbering approach may cause MongoDB duplicate-key errors, even inside a transaction.
+
+Design a safe algorithm that:
+
+- Avoids unique-index conflicts.
+- Uses atomic MongoDB transactions.
+- Preserves day IDs.
+- Rolls back completely on failure.
+- Coordinates concurrency with existing ITN-07 operations.
+- Handles simultaneous reorder, creation, and deletion requests.
+- Uses bounded retries where appropriate.
+- Distinguishes transaction-body retries
+--- END PROMPT 1 ---
+
+Prompt 2 (verbatim; Phase 1 continuation and scope clarification):
+--- BEGIN PROMPT 2 ---
+Continue Phase 1 of ITN-08. My previous prompt was truncated.
+
+Please use the following clarifications and remaining instructions.
+
+### 1. Grouping clarification
+
+ITN-09 owns the grouping functionality and is not yet implemented in the current branch.
+
+For ITN-08:
+
+- Implement day reordering and day-number recalculation.
+- Ensure dates derived from the itinerary start date reflect the new order.
+- Preserve stable day IDs.
+- Preserve existing city assignments and day-related records.
+- Do not implement new consecutive-city grouping calculations.
+- Do not add currency-separated budget subtotals or other ITN-09 functionality.
+- Do not introduce grouping fields or unrelated database schema changes.
+- Document that grouping behavior will need to reflect the final day order when ITN-09 is integrated.
+
+If the current backend already has any grouping-related behavior, preserve its existing contract.
+
+### 2. Transaction safety
+
+The implementation must:
+
+- Preserve the existing unique `(itineraryId, dayNumber)` index.
+- Avoid intermediate duplicate day numbers, even inside MongoDB transactions.
+- Reuse ITN-07's established parent-write coordination protocol.
+- Use atomic MongoDB transactions for multi-document changes.
+- Distinguish transaction-body retries from uncertain transaction commit outcomes.
+- Never blindly rerun a transaction after an ambiguous commit outcome.
+- Use bounded retry attempts for transient conflicts.
+- Avoid partial updates or duplicate day numbers.
+- Support concurrent creation, deletion and reordering safely.
+- Avoid unnecessary schema migrations.
+
+### 3. Validation and authorization
+
+The endpoint must:
+
+- Require JWT authentication.
+- Verify itinerary ownership.
+- Verify the day belongs to the specified itinerary.
+- Validate itinerary ID and day ID.
+- Validate `newPosition` as an integer from 1 through the current day count.
+- Reject invalid, missing, fractional, negative and out-of-range positions.
+- Handle nonexistent itineraries and days.
+- Treat moving a day to its existing position as a safe no-op.
+
+### 4. Data preservation
+
+Reordering must:
+
+- Preserve all existing MongoDB day IDs.
+- Preserve associated activities, budgets, transport costs and other records.
+- Preserve city and country assignments.
+- Preserve all unrelated itinerary fields.
+- Recalculate derived dates according to the final sequential day order.
+
+### 5. Compatibility
+
+ITN-07 is already merged into develop.
+
+ITN-10 and ITN-16 remain on separate, unmerged branches.
+
+Do not modify or merge those branches.
+
+Ensure ITN-08 is architecturally compatible with records associated by stable day IDs, so these features can be integrated later without losing associations.
+
+### 6. Required tests
+
+Plan unit and isolated MongoDB integration tests for:
+
+- Moving the last day into the middle.
+- Moving the first day to the end.
+- Moving a middle day to the beginning.
+- No-op reorder.
+- Single-day itinerary.
+- Empty itinerary.
+- Sequential numbering and recalculated dates.
+- Preservation of stable day IDs and associated records.
+- Invalid IDs and positions.
+- Unauthorized and unauthenticated access.
+- Cross-itinerary day references.
+- Transaction rollback.
+- Unique-index conflicts.
+- Concurrent reorders.
+- Reorder racing with day creation.
+- Reorder racing with day deletion.
+
+Use an isolated local MongoDB replica set for database tests. Do not modify the team's shared MongoDB Atlas data.
+
+### 7. Project restrictions
+
+- Follow existing NestJS and Swagger conventions.
+- Do not modify the shared `AI_PROMPTS.txt`.
+- Do not create or modify `AI_PROMPTS_Seif_Allam.txt`.
+- Do not change branches or worktrees.
+- Do not commit, push or create a PR.
+- Do not refactor unrelated modules.
+
+### 8. Complete Phase 1 only
+
+Before implementation, provide:
+
+1. The precise endpoint and request/response contracts.
+2. The complete proposed reordering algorithm, including how unique-index conflicts are avoided.
+3. Transaction and concurrency strategy.
+4. How recalculated day dates will be represented.
+5. How grouping behavior is deferred without violating existing functionality.
+6. ITN-07, ITN-10 and ITN-16 compatibility considerations.
+7. Planned unit and integration tests.
+8. **The exact list of files to create or modify**, as required by `AGENTS.md` §5.
+
+STOP after reporting this information.
+
+Do not write or modify source files yet. I will review the algorithm and explicitly approve the file list before implementation.
+--- END PROMPT 2 ---
+
+Prompt 3 (verbatim; Phase 2 implementation approval):
+--- BEGIN PROMPT 3 ---
+# ITN-08 — Phase 2 Implementation Approval
+
+I have reviewed your Phase 1 architecture and approve proceeding with implementation.
+
+**Approved algorithm:** Vacant temporary position (`N + 1`), sequential collision-free shifts, and final placement inside the existing MongoDB transaction protocol.
+
+**Approved files (exactly five):**
+
+1. CREATE `backend/src/itineraries/dto/reorder-itinerary-day.dto.ts`
+2. MODIFY `backend/src/itineraries/itineraries.controller.ts`
+3. MODIFY `backend/src/itineraries/itineraries.service.ts`
+4. MODIFY `backend/src/itineraries/itineraries.service.spec.ts`
+5. MODIFY `backend/test/itineraries.e2e-spec.ts`
+
+This is my explicit approval under `AGENTS.md` §5 for these five files only. Request approval before changing any additional files.
+
+## Implementation instructions
+
+Proceed with ITN-08 according to your Phase 1 proposal, with the following safeguards:
+
+1. Keep the existing unique `(itineraryId, dayNumber)` index enabled.
+2. Use the temporary `N + 1` position only within the transaction. Never commit a value greater than 60.
+3. Verify that every shift updates exactly one expected document.
+4. Ensure an exception during any shift causes a complete transaction rollback.
+5. Reuse ITN-07's parent-write coordination and bounded retry helper without changing its behavior.
+6. Handle `UnknownTransactionCommitResult` without blindly repeating the transaction body.
+7. Preserve all original day IDs and existing day-associated records.
+8. Keep dates derived from the itinerary start date and the final day numbers.
+9. Implement both forward and backward movements.
+10. Treat reordering to the same position as a safe no-op.
+11. Preserve the existing response DTO conventions and avoid leaking internal database metadata.
+12. Do not implement ITN-09 groupings or new budget subtotals. Document this scope limitation.
+13. Do not change database schemas, indexes, migrations or dependencies.
+
+## Required tests
+
+Implement and execute the unit and isolated MongoDB integration tests from your approved Phase 1 plan.
+
+Pay particular attention to:
+
+- Moving Day 4 to position 2.
+- Moving Day 1 to position 4.
+- Moving a middle day to position 1.
+- Single-day and no-op cases.
+- Full 60-day itineraries.
+- Position validation and ownership.
+- Real unique-index enforcement.
+- Complete rollback after injected failures.
+- No committed temporary day numbers.
+- Concurrent reorders.
+- Reorder racing with day creation and deletion.
+- Stable day IDs and preservation of day-associated records.
+- UTC date calculations across leap days and year boundaries.
+
+Use an isolated local MongoDB replica set. Do not access or modify the shared Atlas database.
+
+If the local MongoDB replica set is unavailable, report the blocker. Do not claim integration tests passed without running them, and do not install system-level dependencies without approval.
+
+## Verification
+
+After implementation:
+
+1. Run the relevant unit tests.
+2. Run MongoDB integration tests where available.
+3. Run the backend build.
+4. Run lint.
+5. Run `git diff --check`.
+6. Inspect the final changes and confirm no unrelated files were modified.
+
+If a test fails, investigate and correct defects within the approved files. Do not suppress tests or weaken assertions.
+
+## Restrictions
+
+- Remain on `feature/ITN-08-day-reordering`.
+- Do not modify ITN-07, ITN-10 or ITN-16 worktrees.
+- Do not modify `AI_PROMPTS.txt`.
+- Do not create or modify `AI_PROMPTS_Seif_Allam.txt`.
+- Do not commit or push.
+- Do not create a PR.
+
+## Final report required
+
+When implementation and verification are complete, report:
+
+1. Exact files changed.
+2. Endpoint and request/response format.
+3. Explanation of the implemented reordering algorithm.
+4. Unit tests: passed, failed, skipped.
+5. Integration tests: passed, failed, skipped.
+6. Build and lint results.
+7. Any remaining risks or unverified behavior.
+8. `git status --short`.
+9. Confirmation that no commit or push occurred.
+
+Proceed with Phase 2 implementation now.
+--- END PROMPT 3 ---
+
+Prompt 4 (verbatim; full backend suite and baseline comparison):
+--- BEGIN PROMPT 4 ---
+Run the complete backend test suite for ITN-08.
+
+Do not modify any files yet.
+
+Report:
+
+- Total tests passed, failed and skipped.
+- Full details of any failures.
+- Whether failures also exist on the baseline `origin/develop` branch.
+- Whether any failure is related to ITN-08.
+
+Do not access the shared MongoDB Atlas database. Use isolated test infrastructure only.
+
+Do not commit, push or modify AI prompt documentation.
+--- END PROMPT 4 ---
+
+Documentation request (summary, not a verbatim prompt):
+Append this ITN-08 record only to the existing personal AI prompts log in the original software-project folder. Read the file first, preserve every earlier entry, prevent duplicate ITN-08 sections, follow the existing format, record available actual prompts and accurately labeled summaries, include the reported verification results, and report preservation checks, added lines, exact path and Git status in both worktrees. The latest documentation-only request explicitly authorizes this personal-log update after the earlier implementation-stage prohibition; shared AI_PROMPTS.txt and ITN-08 source/tests remain unchanged.
+
+How the output was used (summary of the assistance and implementation):
+Used Codex to inspect the mandatory requirement CSV, ITN-05 day behavior, ITN-07 transaction and deletion implementation, schemas, controller/DTO conventions, authentication, tests, Git history and CI checks. Confirmed ITN-05 and ITN-07 were present and did not import unmerged ITN-10 or ITN-16 code.
+
+The initial prompt was incomplete. Codex requested the missing instructions and clarified that grouping belongs to ITN-09. Phase 1 produced the endpoint/response contract, algorithm, transaction/concurrency strategy, date representation, compatibility considerations, test plan and exact five-file list, then stopped for explicit approval. The user approved Phase 2 for those five files only.
+
+Implemented PATCH /api/itineraries/:id/days/:dayId/reorder with a ReorderItineraryDayDto request body { "newPosition": 2 }. The response contains a success message and all days in final order, exposing _id, itineraryId, dayNumber, cityId, optional notes and derived date, while omitting internal database metadata. Added Swagger documentation for the request, response, authentication and 400/401/404/409/500/503 outcomes.
+
+The reordering algorithm:
+- Validate itinerary/day IDs and require an integer position from 1 through the current day count, within the 60-day maximum.
+- Enter ITN-07's existing withDayTransaction helper and acquire its parent __v write before reading days, coordinating with creation, updates, deletion and other reorders.
+- Verify ownership, day membership and existing sequential numbering.
+- Return a safe no-op if the position is unchanged; day documents remain untouched, while the existing parent coordination metadata may change.
+- Park the selected day at vacant N + 1 inside the transaction. At 60 days, temporary 61 bypasses Mongoose update validation only for that parking write.
+- Shift intervening days sequentially in the collision-free direction, checking that each expected document is matched and modified exactly once.
+- Place the selected day at its final position with validation enabled. Re-read and verify the complete final 1..N sequence before commit; never commit the temporary number.
+- Keep the unique (itineraryId, dayNumber) index enabled throughout. No schema/index migration, delete/reinsert algorithm or dependency change was introduced.
+
+Reused the existing snapshot/majority/primary MongoDB transaction protocol without changing the ITN-07 helper. TransientTransactionError permits bounded transaction-body retries from fresh reads. UnknownTransactionCommitResult retries commit only; persistent uncertainty returns 503 without blindly replaying the body. Unlabelled duplicate-key errors propagate and abort rather than being blindly retried. Exceptions during parking, shifts or final placement roll back all uncommitted changes.
+
+Dates remain unstored and are calculated as itinerary.startDate + (final dayNumber - 1) UTC days, formatted YYYY-MM-DD. Day IDs, cities, countries, notes and all day-associated records remain intact, apart from ordinary update/coordination metadata. Activities, budgets and transport costs continue to reference stable dayId values, maintaining architectural compatibility with later ITN-10 and ITN-16 integration without modifying their branches or worktrees.
+
+No consecutive-city grouping calculations, grouping fields, currency-separated subtotals or other ITN-09 functionality were added. Service comments and Swagger document that future ITN-09 grouping must consume the final dayNumber order.
+
+Final review identified that uppercase hexadecimal ObjectIds must match the same day. Codex corrected the ObjectId comparison, added unit/integration regression coverage and reran verification. Swagger explicitly describes newPosition as an integer.
+
+Implementation files (only the approved five):
+- Created backend/src/itineraries/dto/reorder-itinerary-day.dto.ts.
+- Modified backend/src/itineraries/itineraries.controller.ts.
+- Modified backend/src/itineraries/itineraries.service.ts.
+- Modified backend/src/itineraries/itineraries.service.spec.ts.
+- Modified backend/test/itineraries.e2e-spec.ts.
+
+Verification:
+52 itinerary unit tests passed; 0 failed; 0 skipped (including the existing ITN-07 transaction retry tests).
+57 isolated MongoDB integration tests passed; 0 failed; 0 skipped (including the existing ITN-07 integration tests).
+npm run build passed.
+npm run lint passed with five pre-existing warnings in unchanged airline/flight files.
+git diff --check passed.
+
+Tests covered forward/backward movements, Day 4 to position 2, Day 1 to position 4, middle to first, no-op, single/empty itineraries, 60-day capacity and temporary 61, validation, authentication, ownership, foreign days, uppercase IDs, final numbering, leap-day/year-boundary UTC dates, stable IDs/cities/records, real unique-index enforcement and E11000 rollback, injected failures after completed writes, concurrent reorders, and reorder racing with creation/deletion. An outside reader could not see the uncommitted temporary position. The ITN-07 transaction helper was independently verified unchanged.
+
+Full backend verification used npm test -- --runInBand and npm run test:e2e -- --runInBand with NODE_OPTIONS=--experimental-vm-modules:
+- Current ITN-08 unit suite: 645 passed, 3 failed, 0 skipped.
+- Current ITN-08 complete E2E suite: 68 passed, 1 failed, 0 skipped.
+- Full backend suite: 713 passed, 4 failed, 0 skipped; 717 tests total.
+- Baseline origin/develop at b44dcf8, tested from a temporary git-archive snapshot with identical installed dependencies: 607 unit tests passed, 3 failed; 37 E2E tests passed, 1 failed; 0 skipped.
+- All four failures were independently reproduced on that baseline. No failure was related to ITN-08. All 69 added ITN-08 tests passed (38 unit and 31 integration additions).
+
+Baseline failure details:
+- Three BlogService tests in backend/src/blog/blog.service.spec.ts fail during beforeEach Test.createTestingModule().compile() at line 26: draft creation (BLG-01), published creation with tags (BLG-01), and listing the user's own posts with pagination (BLG-03/GEN-05). Nest cannot resolve LikeModel at constructor index 1; the test module supplies only PostModel while BlogService also requires LikeModel, CommentModel, UserModel and UploadsService. The test bodies never reach their assertions.
+- The ACC-05 regression in backend/test/app.e2e-spec.ts at line 195 expects 401 for the fifth wrong password, but the existing authentication implementation intentionally returns 423 Locked immediately on the fifth failure. The identical expectation mismatch occurs on baseline.
+- Neither unrelated failure was suppressed or changed.
+
+Database testing used fresh disposable local MongoDB 8.0.20 replica sets and local-only E2E safeguards, never the shared Atlas database. Existing MongoDB binaries were reused without system dependency installation; the temporary database processes were shut down after testing. The original project and other feature worktrees were not modified during implementation/testing. No source/test files were changed during the subsequent full-suite comparison.
+
+No branch/worktree switch, commit, push or PR creation occurred during this ITN-08 task. Shared AI_PROMPTS.txt was not modified. This entry is the later explicitly requested personal-log documentation update only.
+
+================================================
+
+ITN-09 — Consecutive-City Grouping and Budget Subtotals
+
+Date: 2026-11-17
+Student: Seif Allam
+Tool: ChatGPT / Codex (OpenAI)
+Related Requirement: ITN-09; dependency ITN-05; existing ITN-07 behavior; compatibility with future ITN-08, ITN-10 and ITN-16 integration
+
+Prompts (verbatim available user attachments):
+The following two task prompts are reproduced directly from the supplied UTF-8 attachments. Verbatim wording is retained; line endings and trailing Markdown hard-break spaces are normalized for this text log. The implementation/design narrative and results below are summaries, not invented verbatim prompts.
+
+Prompt 1 (verbatim; Phase 1 investigation and design):
+--- BEGIN ITN-09 PROMPT 1 ---
+# ITN-09 — Consecutive-City Grouping and Budget Subtotals
+
+You are working in:
+
+`C:\Users\seife\OneDrive\Desktop\SWP1\software-project-itn09`
+
+Expected branch: `feature/ITN-09-city-grouping`
+
+## Official requirement
+
+**ID:** ITN-09
+**Module:** Itineraries
+**Actor:** Registered User
+**Complexity:** Medium
+**Dependency:** ITN-05
+
+"The system shall require each itinerary day to have a city and shall display consecutive days in the same city as a group, with the group's day count and budget subtotal."
+
+## Current development status
+
+- ITN-05 is merged into develop.
+- ITN-07 is merged into develop.
+- ITN-08 (day reordering) is implemented and pushed but awaiting review/merge.
+- ITN-10 (activity CRUD) is implemented and pushed but awaiting review/merge.
+- ITN-16 (transport cost management) is implemented and pushed but awaiting review/merge.
+
+Do not merge, cherry-pick or copy implementations from the unmerged branches.
+
+Inspect the existing database schemas and service methods before making design decisions.
+
+## Functional requirements
+
+1. Every itinerary day must have a valid city according to existing GEN-12 validation.
+2. Consecutive days with the same cityId must form one group.
+3. Nonconsecutive days in the same city must form separate groups.
+4. Each group must report its city, first day, last day, day count and budget subtotal.
+5. Grouping must follow dayNumber order, not database insertion order.
+6. Grouping must remain correct after adding, editing, deleting or reordering days.
+7. Preserve existing day IDs and their associated data.
+8. Handle empty itineraries and single-day itineraries.
+9. Protect private itinerary data using existing JWT and ownership rules.
+10. Avoid unnecessary database schema changes or stored grouping records.
+
+## Budget subtotal investigation
+
+Before implementation, investigate:
+
+- Existing budget and expense schemas.
+- How expenses reference itineraries and days.
+- Existing budget-total calculations, including ITN-07 behavior.
+- Whether activity costs, transportation costs and other budget items are represented in the current branch.
+- Which currency fields are supported.
+- Whether a currency-conversion mechanism exists.
+- Whether the data model distinguishes planned budgets from actual expenses.
+- Whether the official requirement or existing API conventions establish which amounts belong in a group subtotal.
+
+Do not assume all expenses can be added together.
+
+Do not add EUR, USD, EGP or other currencies into one numerical subtotal without a defined conversion mechanism.
+
+Recommend a clear subtotal response contract based on existing code and data.
+
+If the scope is ambiguous, identify the ambiguity and recommend the smallest implementation that satisfies ITN-09 without inventing ITN-14 or ITN-18 functionality.
+
+## Example grouping
+
+Days in order:
+
+1. Cairo
+2. Cairo
+3. Giza
+4. Giza
+5. Cairo
+6. Cairo
+
+Expected groups:
+
+- Group 1: Cairo, days 1–2, dayCount 2
+- Group 2: Giza, days 3–4, dayCount 2
+- Group 3: Cairo, days 5–6, dayCount 2
+
+Group 1 and Group 3 must remain separate.
+
+Each group must have a budget subtotal derived from the relevant days and supported expense sources.
+
+## Integration compatibility
+
+### ITN-08
+
+The group calculations must reflect the current persisted dayNumber order after future reordering.
+
+Avoid hardcoded group relationships or stale stored totals.
+
+### ITN-10
+
+Activities are associated with days and can include costs.
+
+Investigate how activity costs could be incorporated when ITN-10 is merged, without importing its unmerged implementation now.
+
+### ITN-16
+
+Intercity transport costs may be associated with itinerary days.
+
+Investigate compatibility with those future records and avoid assumptions that could lead to double counting.
+
+### ITN-07
+
+Deleting a day can merge previously separate city groups or split/reduce groups depending on the resulting order.
+
+Verify that grouping derives correctly from surviving days.
+
+## Architecture and validation
+
+- Follow existing NestJS, Mongoose and Swagger conventions.
+- Prefer reusable read-only grouping logic derived from sorted days.
+- Avoid unnecessary transactions for calculations that do not modify data.
+- Do not weaken existing authorization or city-validation rules.
+- Avoid N+1 database queries and unnecessary repeated calculations.
+- Preserve current endpoint response contracts unless changes are explicitly approved.
+- Do not introduce unrelated frontend functionality without approval.
+
+## Testing plan
+
+Propose unit and isolated MongoDB integration tests covering:
+
+- Consecutive matching cities.
+- Nonconsecutive matching cities.
+- One city across all days.
+- Alternating cities.
+- Empty itinerary.
+- Single-day itinerary.
+- Day creation and city editing.
+- Day deletion causing groups to merge.
+- Reordering compatibility.
+- Budget subtotals from supported expense records.
+- Multiple currencies.
+- Zero-budget groups.
+- Missing or invalid city values.
+- Invalid itinerary IDs.
+- JWT authentication and ownership.
+- Preservation of existing data.
+- Consistency with existing itinerary budget calculations.
+
+Do not run destructive tests against shared MongoDB Atlas.
+
+## Restrictions
+
+- Stay on `feature/ITN-09-city-grouping`.
+- Do not change other worktrees.
+- Do not modify shared `AI_PROMPTS.txt`.
+- Do not create or edit `AI_PROMPTS_Seif_Allam.txt`; I maintain that separately.
+- Do not commit or push.
+- Do not create a pull request.
+- Do not modify unrelated schemas, modules or dependencies.
+
+## Phase 1 — Investigation and design ONLY
+
+Before changing any files:
+
+1. Confirm the active branch and clean worktree.
+2. Inspect ITN-05, ITN-07 and current itinerary endpoints.
+3. Identify exactly where the city requirement is currently enforced.
+4. Identify all existing expense sources and budget calculations.
+5. Propose the grouping algorithm.
+6. Recommend whether grouping should appear in GET itinerary detail, GET days or a separate endpoint, based on the existing architecture.
+7. Define the proposed JSON response, including group day counts and currency-safe budget subtotals.
+8. Explain how the implementation will remain compatible with ITN-08, ITN-10 and ITN-16.
+9. Identify any unresolved business-rule questions.
+10. Present the unit and integration test plan.
+11. Provide an EXACT list of files to create, modify or delete, as required by AGENTS.md §5.
+
+**STOP after Phase 1. Do not implement anything until I explicitly approve the algorithm, API contract and file list.**
+--- END ITN-09 PROMPT 1 ---
+
+Prompt 2 (verbatim; Phase 2 implementation approval and post-verification personal-log request):
+--- BEGIN ITN-09 PROMPT 2 ---
+# ITN-09 — Phase 2 Implementation Approval
+
+I approve proceeding with ITN-09 implementation on branch `feature/ITN-09-city-grouping`, based on your Phase 1 design, subject to the safeguards below.
+
+## 1. Approved API
+
+`GET /api/itineraries/:id/groups`
+
+Use the existing JWT authentication and itinerary ownership rules.
+
+Response must include:
+- Itinerary ID.
+- Consecutive-city groups in ascending day order.
+- City ID, name and country code.
+- First and last day IDs, day numbers and derived UTC dates.
+- Day IDs belonging to each group.
+- Day count.
+- Budget subtotals separated by currency.
+
+For an empty itinerary, return `groups: []`.
+
+Do not expose internal database metadata.
+
+## 2. Approved grouping algorithm
+
+- Read itinerary days in ascending `dayNumber` order.
+- Validate the existing day sequence.
+- Resolve distinct city IDs using a batched reference-data query.
+- Create a new group whenever the current city's ID differs from the immediately preceding city's ID.
+- Treat nonconsecutive visits to the same city as separate groups.
+- Derive groups dynamically rather than storing them in the database.
+- Preserve existing day IDs, cities and associated records.
+
+## 3. Budget subtotal rules
+
+Include these existing expense sources:
+
+1. `BudgetEntry.amount`
+2. `Activity.cost`, where a cost exists
+3. `TransportCost.amount`
+
+Requirements:
+
+- Associate every expense with its group through its `dayId`.
+- Count each stored expense record once.
+- Do not multiply records through database joins.
+- Aggregate using MongoDB decimal-safe arithmetic, consistently with ITN-07.
+- Return separate subtotals for different currencies.
+- Sort currencies alphabetically.
+- Exclude activities without costs.
+- Preserve explicit zero-cost entries.
+- Return an empty subtotal array when no expenses exist.
+- Do not invent currency conversions.
+- Do not introduce purchase-level deduplication.
+- Do not implement ITN-14 or ITN-18 functionality.
+
+## 4. Critical MongoDB safeguards
+
+Before finalizing the implementation:
+
+1. Verify that the chosen read-only snapshot session is supported by the installed MongoDB driver, Mongoose version and local replica-set configuration.
+2. Verify that all relevant reads and aggregations use the same consistent snapshot.
+3. Ensure aggregations over multiple expense collections cannot silently omit a source.
+4. Verify that concurrent day deletion, city changes or expense updates cannot produce a response combining incompatible database states.
+5. Avoid N+1 queries.
+6. Release sessions reliably on both success and failure.
+7. Do not introduce write transactions for read-only grouping unless technically necessary and justified.
+8. Return an appropriate error rather than an incomplete subtotal when required data cannot be read.
+9. Avoid unnecessary database schema or index changes.
+
+If the proposed snapshot mechanism is incompatible with the actual Mongoose/driver versions, stop and report the issue before substituting a weaker consistency model.
+
+## 5. Validation and error handling
+
+Cover:
+
+- Invalid itinerary IDs.
+- Missing or invalid authentication.
+- Unauthorized itinerary access.
+- Missing itineraries.
+- Invalid existing city references.
+- Day-number gaps or duplicate numbers.
+- Malformed monetary data.
+- Missing or unsupported currencies.
+- Snapshot-read failures and cleanup.
+
+Follow the existing controller conventions for HTTP status codes and error formatting.
+
+## 6. Compatibility with other requirements
+
+ITN-07 is merged.
+
+ITN-08, ITN-10 and ITN-16 are not yet merged or approved by the team leader.
+
+- Do not merge or cherry-pick any of these branches.
+- Derive groups using the current persisted day order, remaining compatible with ITN-08 reordering.
+- Recalculate groups from surviving days after ITN-07 deletion.
+- Use existing stable `dayId` expense associations, remaining compatible with ITN-10 and ITN-16.
+- Do not implement their controllers or services in this branch.
+
+## 7. Required tests
+
+Implement and run unit and isolated MongoDB integration tests covering:
+
+- Consecutive matching cities.
+- Nonconsecutive visits to the same city.
+- Alternating cities.
+- Single-day and empty itineraries.
+- Group order independent of database insertion order.
+- Correct group day counts and boundaries.
+- Derived dates including leap-year boundaries.
+- Group changes after day creation, city changes and deletion.
+- Persisted reordered-day fixtures.
+- Budget subtotals from all three sources.
+- Multiple currencies and decimal precision.
+- Zero-cost and costless activities.
+- No cross-itinerary expense leakage.
+- No double counting or join multiplication.
+- Authentication and ownership.
+- Invalid data and error handling.
+- Snapshot consistency during concurrent writes.
+- Reliable session cleanup.
+- Reconciliation with existing ITN-07 budget calculations.
+
+Use an isolated local MongoDB replica set. Do not access or modify the shared MongoDB Atlas database.
+
+## 8. Explicit file approval — AGENTS.md §5
+
+You are authorized to change exactly these seven files:
+
+CREATE:
+1. `backend/src/itineraries/dto/itinerary-groups-response.dto.ts`
+2. `backend/src/itineraries/utils/city-groups.ts`
+3. `backend/src/itineraries/utils/city-groups.spec.ts`
+
+MODIFY:
+4. `backend/src/itineraries/itineraries.controller.ts`
+5. `backend/src/itineraries/itineraries.service.ts`
+6. `backend/src/itineraries/itineraries.service.spec.ts`
+7. `backend/test/itineraries.e2e-spec.ts`
+
+This is explicit approval for these seven files only. Ask before modifying additional files.
+
+Do not modify schemas, dependencies, other worktrees or unrelated modules.
+
+## 9. Personal AI prompts documentation
+
+My personal AI contribution log is:
+
+`C:\Users\seife\OneDrive\Desktop\SWP1\software-project\AI_PROMPTS_Seif_Allam.txt`
+
+For this implementation phase, leave it unchanged while developing and testing ITN-09.
+
+After the implementation and verification are complete, I want a separate documentation-only update that APPENDS all ITN-09 prompts, design decisions, implementation assistance and test results to this existing file.
+
+Preserve all earlier entries. Do not create a duplicate file or modify shared `AI_PROMPTS.txt`.
+
+Do not commit or push the personal log yet.
+
+## 10. Verification
+
+After implementation:
+
+1. Run focused unit tests.
+2. Run isolated MongoDB integration tests.
+3. Run the backend build.
+4. Run lint.
+5. Run `git diff --check`.
+6. Check that only the seven approved files changed.
+7. Report any untested or unresolved scenarios.
+
+Do not suppress failures or weaken tests.
+
+## 11. Final report
+
+Provide:
+
+- Exact files changed.
+- Final endpoint and JSON contract.
+- Grouping and budget aggregation algorithm.
+- Actual snapshot consistency mechanism.
+- Unit test results.
+- Integration test results.
+- Build and lint results.
+- Remaining risks.
+- `git status --short`.
+- Confirmation that no commits, pushes or PRs occurred.
+
+Proceed with Phase 2 implementation and verification.
+
+Do not commit, push or create a PR until I review the results.
+--- END ITN-09 PROMPT 2 ---
+
+How the output was used (summary):
+Codex inspected the clean software-project-itn09 worktree on feature/ITN-09-city-grouping at 40f723d, the local AGENTS.md, the mandatory requirement CSV, relevant project PDF sections, current ITN-05 and ITN-07 code, DTO/controller conventions, authentication, schemas, reference data, tests and existing budget calculations. No unmerged feature implementation was merged, cherry-picked or copied from ITN-08, ITN-10 or ITN-16.
+
+Phase 1 identified that city assignment is already required by the create-day DTO and day schema, and validated against seeded GEN-12 City records in addDay/updateDay through validateCity. Grouping did not exist. The existing BudgetEntry.amount, optional Activity.cost and TransportCost.amount all reference stable dayId values and are already included in ITN-07 native-currency totals. There is no planned-versus-actual expense distinction. An ExchangeRate schema exists, but no conversion service was found. The higher-priority CSV assigns hotel reuse to ITN-25 despite a conflicting ITN-09 label in the PDF endpoint table.
+
+Codex proposed a separate owner-only GET /api/itineraries/:id/groups endpoint to preserve existing detail/day response contracts. The design included a reusable linear consecutive-city grouping helper, currency-safe decimal aggregation, snapshot-consistent read-only queries, validation/error policies and an exact seven-file implementation/test list. Work stopped for explicit approval before implementation. The user approved the API, algorithm, three expense sources, currency-separated subtotals and seven files with additional consistency safeguards.
+
+Implemented endpoint and contract:
+GET /api/itineraries/:id/groups uses the existing JWT access-cookie guard and ownership rules. The response is { itineraryId, groups }. Each group includes city { cityId, name, countryCode }, firstDay and lastDay { id, dayNumber, date }, ordered dayIds, dayCount and budgetSubtotals [{ currency, total }]. Internal Mongoose/database metadata is omitted. Empty itineraries return groups: []. Existing itinerary detail and day-list contracts remain unchanged. Swagger documents the DTOs and 400/401/404/409/500/503 responses.
+
+Grouping and validation:
+Days are read in ascending dayNumber order, checked for a sequential 1..N sequence within the existing 60-day limit, and validated for nonempty city IDs. Distinct city references are resolved in one batched query. Missing/unknown or malformed city references return 409. The pure grouping utility starts a group whenever the current city differs from the immediately preceding city's ID, so nonconsecutive visits to the same city remain separate. Boundaries and UTC dates derive from the persisted day order and itinerary startDate. No group records, cached totals, schema changes or index changes were introduced.
+
+Budget calculation:
+The aggregation reads all three existing expense collections through independent dayId lookups, sums each source before concatenating results, assigns days to the derived groups, and sums again by group and currency. It counts every stored record once and avoids Cartesian multiplication across expense arrays. Amounts are converted through their string form to MongoDB decimal values, consistently with ITN-07, and only final summed values are converted to JSON numbers. Native currencies are kept separate and sorted alphabetically. Costless activities are excluded, explicit zero entries are retained, and groups without expenses return an empty subtotal array. Malformed/non-numeric, negative or non-finite amounts and missing/unsupported currencies produce 409 rather than partial totals. Currency codes are checked against the existing currencies reference collection. No currency conversion, purchase-level deduplication, budget CRUD or ITN-14/ITN-18 summary functionality was added.
+
+Actual snapshot mechanism and compatibility verification:
+Dependencies were initially absent in this worktree. npm ci restored the existing lockfile without changing package.json, package-lock.json or dependency versions. No system-level MongoDB installation was needed; an existing binary was used with fresh disposable data on localhost:27179.
+
+A disposable probe verified Mongoose 9.11.4, MongoDB Node.js driver 7.7.0 and MongoDB Server 8.0.20 support startSession({ snapshot: true, causalConsistency: false }). After another writer committed value 2, both a query and an aggregation in the snapshot session still read value 1. No transaction was started.
+
+The endpoint uses that same snapshot session for the owned-itinerary read, ordered-day read, batched-city read and expense aggregation, with primary read preference and 5-second operation limits. Tests verified exactly four database read commands, the same session ID and snapshot atClusterTime, and no transaction fields. Sessions end in finally on success or failure. Snapshot/network/timeout failures return 503; required-data failures do not return incomplete subtotals. There is no weaker-read fallback and no write transaction or parent coordination write for this read-only calculation. Existing JWT guard session-activity behavior is preserved.
+
+Compatibility:
+ITN-07 deletion can merge groups because groups derive from surviving persisted days; group totals reconcile with its unchanged native-currency budget calculation. ITN-08 compatibility is tested through valid persisted alternate-order fixtures rather than importing its endpoint/service. Existing stable dayId associations preserve compatibility with future ITN-10 and ITN-16 records. All original itinerary/day/expense data remains unchanged by group reads. ITN-07's transaction helper and survivingBudgetTotals implementation were independently checked unchanged.
+
+Approved implementation files (seven only in software-project-itn09):
+- Created backend/src/itineraries/dto/itinerary-groups-response.dto.ts.
+- Created backend/src/itineraries/utils/city-groups.ts.
+- Created backend/src/itineraries/utils/city-groups.spec.ts.
+- Modified backend/src/itineraries/itineraries.controller.ts.
+- Modified backend/src/itineraries/itineraries.service.ts.
+- Modified backend/src/itineraries/itineraries.service.spec.ts.
+- Modified backend/test/itineraries.e2e-spec.ts.
+
+Verification:
+Focused command: NODE_OPTIONS=--experimental-vm-modules npm test -- --runInBand itineraries.
+Result: 2 suites passed; 53 tests passed; 0 failed; 0 skipped. This includes existing ITN-07 retry tests plus 39 new ITN-09 unit tests.
+
+Isolated integration command: TEST_MONGODB_URI=mongodb://127.0.0.1:27179 NODE_OPTIONS=--experimental-vm-modules npm run test:e2e -- --runInBand itineraries.e2e-spec.ts.
+Result: 1 suite passed; 61 tests passed; 0 failed; 0 skipped. This includes the existing 26 ITN-07 tests plus 35 new ITN-09 integration tests.
+
+Coverage included consecutive/nonconsecutive/alternating/single-city runs, empty/single itineraries, stable IDs and boundaries, insertion-order independence, leap-day/year-boundary UTC dates, creation/city edits/deletion, persisted alternate ordering, all three expense sources, decimal precision, currencies, explicit zero costs, costless/null-cost activities, no cross-itinerary leakage, no join multiplication or purchase-level deduplication, invalid cities/amounts/currencies, actual unique-index enforcement, JWT/ownership, unchanged existing endpoint contracts and ITN-07 total reconciliation.
+
+Concurrency tests paused the first snapshot read while another operation committed day deletion, a city change, activity/budget/transport amount changes or a start-date update. The in-progress response retained the complete earlier state; a fresh request reflected the new state. Tests also verified snapshot timestamps on actual wire commands, fixed query count and reliable cleanup on both success and injected 503/500 failures. The expected injected 500 error was logged by Nest during the error-handling test; the test passed.
+
+The initial build found the currency schema collection option had an optional TypeScript type. Codex added an explicit configuration check. The first lint pass flagged MongoDB's required switch-branch then property as a thenable; Codex replaced that mapping with an equivalent index-of-membership expression. No lint rules or tests were suppressed. All focused tests and integration tests were rerun successfully after these corrections.
+
+Final npm run build: passed.
+Final npm run lint: passed with the same five pre-existing warnings in unchanged airline/flight files; no ITN-09 warnings.
+git diff --check: passed.
+Final file-scope check: exactly the seven approved implementation/test files changed; dependency manifests and ITN-07 transaction/totals logic unchanged.
+
+Remaining limits:
+The complete backend unit/E2E suites were not rerun for ITN-09; the results above are the focused itinerary suites. Atlas was not accessed or tested. Local verification used MongoDB 8.0.20; deployment needs snapshot-capable MongoDB 5.0+. npm ci reported engine advisories for the host's Node 25.8.0 versus some CLI dependencies, although the required build/tests/lint passed. Actual cross-branch CRUD integration awaits later feature merges; this task tested existing schema-compatible records and persisted ordering fixtures only. FX conversion remains ITN-18 work.
+
+The isolated local replica-set process was shut down after verification. No commits, pushes, PRs or branch switches occurred. Shared AI_PROMPTS.txt was not changed. The personal log remained unchanged throughout implementation and verification; this section is the separately authorized post-verification documentation-only append. All earlier personal-log entries, including ITN-07, ITN-08, ITN-10 and ITN-16, are preserved byte-for-byte.
+
+================================================
+
+ITN-20 — Public and Private Itinerary Visibility
+
+Date: 2026-11-17
+Student: Seif Allam
+Tool: ChatGPT / Codex (OpenAI)
+Related Requirement: ITN-20; dependency ITN-01; compatibility with ITN-05, ITN-07, ITN-08, ITN-09, ITN-10 and ITN-16; GEN-05 pagination
+
+Prompts (available actual task text):
+Verbatim wording is retained below; line endings and trailing Markdown hard-break spaces are normalized for this text log. The initial request was later pasted again with formatting escapes after attachment reads stalled; that repeated wording is recorded once from the original supplied attachment. Design/implementation narratives below are explicitly summaries.
+
+Prompt 1 (verbatim supplied initial attachment):
+--- BEGIN ITN-20 PROMPT 1 ---
+# ITN-20 — Public and Private Itinerary Visibility
+
+You are working in:
+
+`C:\Users\seife\OneDrive\Desktop\SWP1\software-project-itn20`
+
+Expected branch: `feature/ITN-20-itinerary-visibility`
+
+## 1. Official requirement
+
+**ID:** ITN-20
+**Scope:** Mandatory
+**Module:** Itineraries
+**Actor:** Registered User
+**Complexity:** Low
+**Dependency:** ITN-01
+
+"The system shall allow a user to set an itinerary's visibility to Public or Private. Public itineraries appear in shared search and are read-only to other users. Setting Private removes them immediately."
+
+## 2. Current project status
+
+The user confirms that all previous itinerary implementations are merged into `develop`, except:
+
+- ITN-08 — Day reordering, pending review/merge.
+- ITN-09 — Consecutive-city grouping, pending review/merge.
+
+ITN-01, ITN-05, ITN-07, ITN-10 and ITN-16 should be available in the latest `origin/develop`.
+
+Verify actual implementation status by inspecting the code. Do not assume a particular endpoint exists without checking.
+
+Do not merge, copy or cherry-pick ITN-08 or ITN-09.
+
+## 3. Functional requirements
+
+Implement owner-controlled itinerary visibility with the following behavior.
+
+### Visibility
+
+1. New itineraries default to Private.
+2. The itinerary owner can change visibility from Private to Public.
+3. The owner can change visibility from Public to Private.
+4. Only the owner can change itinerary visibility.
+5. Visibility changes persist in MongoDB.
+6. The implementation must follow existing schema conventions and retain compatibility with previously created itineraries.
+
+### Public search
+
+1. Public itineraries must appear in the existing shared-search experience.
+2. Private itineraries must never appear in shared-search results.
+3. Changing an itinerary from Public to Private must remove it from subsequent search results immediately after the update commits.
+4. Search pagination, filters and result counts must respect visibility.
+5. Do not introduce a redundant search system if an existing one can be extended.
+6. If shared-search functionality is absent, identify that dependency and propose the smallest suitable integration.
+
+### Read-only access
+
+1. Other users may read a Public itinerary through an authorized public-read endpoint.
+2. Other users must never edit, delete or change the visibility of an itinerary they do not own.
+3. Other users must not be allowed to add, modify, reorder or delete the owner's days, activities, transport costs or other nested records.
+4. Private itineraries must remain inaccessible to nonowners even when they know the itinerary ID.
+5. Changing Public to Private must revoke nonowner access through direct links and public endpoints, not merely hide the itinerary from search.
+6. Existing owner-only behavior must remain intact.
+
+### Security
+
+Use existing JWT and ownership conventions.
+
+Inspect all relevant itinerary and nested-resource routes to identify potential authorization gaps.
+
+Avoid revealing private itinerary existence unnecessarily.
+
+Do not create new authentication or authorization frameworks.
+
+## 4. Existing data model investigation
+
+Inspect:
+
+- Itinerary schema.
+- Itinerary creation DTO.
+- Itinerary update DTO.
+- Itinerary controllers and services.
+- Existing visibility fields and values, if present.
+- Current private itinerary listing and detail endpoints.
+- Shared/public search endpoints and their filters.
+- Nested day, activity and transport controllers.
+- Existing authentication and authorization patterns.
+- Existing public response DTOs.
+- Existing database indexes relevant to visibility and searching.
+
+Determine whether the field should be named `visibility`, `isPublic` or something already established by the project.
+
+Do not introduce a new field if an appropriate one already exists.
+
+## 5. API design
+
+Inspect project conventions and recommend the smallest API change necessary.
+
+A possible endpoint is:
+
+`PATCH /api/itineraries/:id/visibility`
+
+Example request:
+
+```json
+{
+  "visibility": "PUBLIC"
+}
+```
+
+Another request:
+
+```json
+{
+  "visibility": "PRIVATE"
+}
+```
+
+These are suggested contracts only. Use the existing enum and naming conventions if different.
+
+Investigate whether the project's existing search implementation can be reused.
+
+Do not implement duplicate endpoints without explaining why they are necessary.
+
+## 6. Important edge cases
+
+Your design must address:
+
+- New itinerary defaults to Private.
+- Existing itinerary without an explicit visibility value.
+- Public → Private.
+- Private → Public.
+- Repeating the same visibility update.
+- Invalid visibility values.
+- Missing visibility.
+- Invalid itinerary ID.
+- Nonexistent itinerary.
+- Unauthenticated request.
+- Nonowner attempting to change visibility.
+- Nonowner attempting to modify a Public itinerary.
+- Nonowner attempting to read a Private itinerary.
+- Previously obtained direct link after visibility becomes Private.
+- Public search pagination and total counts.
+- Concurrent visibility changes and public reads/searches.
+- Race conditions between visibility revocation and nested-resource operations.
+- Deleted itineraries disappearing from public results.
+- Public responses not exposing owner-private data or internal metadata.
+
+Assess whether caching, pagination or existing search-query logic could expose stale or private results.
+
+## 7. Dependencies and compatibility
+
+### ITN-01
+
+Reuse the existing itinerary model and preserve private-by-default creation.
+
+### ITN-07
+
+Deleting a Public itinerary must remove it from shared search.
+
+### ITN-08
+
+Do not import unmerged reordering code. The visibility implementation must not obstruct later integration.
+
+### ITN-09
+
+Do not import unmerged grouping code. Public-read authorization should be compatible with future group displays without revealing private data.
+
+### ITN-10 and ITN-16
+
+These are reportedly merged.
+
+Inspect their controllers and services to ensure public itineraries remain read-only to nonowners, especially where operations reference activity or transport IDs rather than itinerary IDs.
+
+Do not rewrite unrelated CRUD functionality.
+
+## 8. Testing plan
+
+Propose unit and isolated MongoDB integration tests covering:
+
+- Default Private visibility.
+- Existing records without explicit visibility.
+- Owner changes to Public and Private.
+- Repeated visibility changes.
+- Search inclusion/exclusion.
+- Immediate removal after switching to Private.
+- Direct-read authorization.
+- Nonowner mutation attempts.
+- Nested activity and transport authorization.
+- Pagination and search counts.
+- Invalid inputs and IDs.
+- Authentication and ownership.
+- Deleted Public itineraries.
+- Concurrent visibility changes and search requests.
+- No private-data leakage.
+- Existing ITN-01 CRUD regression tests.
+
+Use isolated local MongoDB only. Do not access the team's shared Atlas database.
+
+## 9. Restrictions
+
+- Stay on `feature/ITN-20-itinerary-visibility`.
+- Do not switch branches or modify other worktrees.
+- Do not merge or cherry-pick ITN-08 or ITN-09.
+- Do not make unnecessary schema changes.
+- Do not modify unrelated modules or dependencies.
+- Do not modify the shared `AI_PROMPTS.txt`.
+- Do not commit, push or create a PR.
+- Follow `AGENTS.md`, especially its file-approval requirements.
+
+## 10. Personal AI prompts documentation
+
+Maintain my accumulated personal AI assistance log at:
+
+`C:\Users\seife\OneDrive\Desktop\SWP1\software-project\AI_PROMPTS_Seif_Allam.txt`
+
+Do not change this file during Phase 1.
+
+After we approve the design and complete implementation/testing, append a new ITN-20 section to this existing file.
+
+Preserve all previous entries, including ITN-07, ITN-08, ITN-09, ITN-10 and ITN-16.
+
+Record actual prompts, architecture decisions, implementation assistance, troubleshooting and verification results.
+
+Do not invent verbatim prompts. Clearly label reconstructed summaries.
+
+Do not create a duplicate personal log in the ITN-20 worktree.
+
+Do not change shared `AI_PROMPTS.txt`.
+
+Documentation changes must be handled separately from the ITN-20 code commit.
+
+## 11. Phase 1 — Inspection and architecture only
+
+Before modifying any source files:
+
+1. Confirm branch and worktree.
+2. Inspect ITN-01 and existing visibility implementation.
+3. Identify the actual current visibility field and default.
+4. Identify existing shared-search functionality.
+5. Identify which endpoints currently enforce owner-only reads and writes.
+6. Determine the minimum change necessary for public-read/private-read behavior.
+7. Propose the visibility update endpoint and exact JSON contract.
+8. Explain how public search will immediately reflect privacy changes.
+9. Explain how nonowners remain unable to modify Public itineraries or their nested resources.
+10. Assess security risks, including stale visibility and direct-link access.
+11. Propose unit and integration tests.
+12. Identify compatibility risks with unmerged ITN-08 and ITN-09.
+13. Provide an EXACT file list with CREATE, MODIFY and DELETE actions, as required by `AGENTS.md` §5.
+
+**STOP after Phase 1. Do not modify any files or implement anything until I explicitly approve your design and file list.**
+--- END ITN-20 PROMPT 1 ---
+
+Prompt 2 (verbatim available architecture-review message):
+--- BEGIN ITN-20 PROMPT 2 ---
+# ITN-20 — Final Architecture Review Before Phase 2
+
+I have reviewed your Phase 1 proposal.
+
+The architecture is provisionally approved, but the original ITN-20 branch was based on an outdated develop commit.
+
+ITN-08 and ITN-09 are now merged into origin/develop according to your findings.
+
+I have updated the ITN-20 worktree to the latest origin/develop.
+
+Before implementation:
+
+1. Verify the current HEAD and confirm that ITN-08 and ITN-09 are now present.
+2. Reinspect the itinerary controller, service, DTOs, and tests for any changes introduced by those merges.
+3. Confirm that your proposed public-read and visibility implementations will not interfere with ITN-08 reordering or ITN-09 grouping.
+4. Preserve the existing owner-only access restrictions on all mutations, including nested resources.
+5. Ensure the visibility update coordinates correctly with ITN-07's existing parent-write transaction protocol.
+6. Confirm that pagination and result counts exclude Private and hidden itineraries.
+7. Ensure that a public-to-private transition blocks subsequent public search and direct-read requests after the change is acknowledged.
+8. Test and explain the consistency, performance, and limitations of the proposed linearizable visibility recheck.
+9. Return only explicitly allowlisted public data, with no private fields or internal metadata.
+10. Preserve the existing default-Private behavior for new and legacy itineraries.
+11. Reconfirm the exact file list required by AGENTS.md §5.
+
+Do not implement anything yet.
+
+Do not modify the shared AI_PROMPTS.txt.
+
+My existing personal AI log is:
+
+C:\Users\seife\OneDrive\Desktop\SWP1\software-project\AI_PROMPTS_Seif_Allam.txt
+
+After implementation and testing, append the ITN-20 prompts and verification results to that existing file, preserving all previous entries. Do not create another copy.
+
+Do not commit, push, or create a PR.
+
+STOP after reporting the updated architecture and exact file list. Wait for my explicit Phase 2 approval.
+--- END ITN-20 PROMPT 2 ---
+
+Prompt 3 (verbatim supplied Phase 2 approval attachment):
+--- BEGIN ITN-20 PROMPT 3 ---
+# ITN-20 — Phase 2 Implementation Approval
+
+I approve implementing ITN-20 on:
+
+Branch: `feature/ITN-20-itinerary-visibility`
+
+Worktree:
+`C:\Users\seife\OneDrive\Desktop\SWP1\software-project-itn20`
+
+The updated base is confirmed at `22bcff5f6e5249fb45ab6222ad222580c34e59eb`, including merged ITN-08 and ITN-09.
+
+This is my explicit approval under AGENTS.md §5 for the architecture and eight-file scope described below.
+
+## 1. Approved API contracts
+
+### Update visibility
+
+Extend the existing authenticated endpoint:
+
+`PATCH /api/itineraries/:id`
+
+Accept optional visibility:
+
+```json
+{
+  "visibility": "PUBLIC"
+}
+```
+
+or:
+
+```json
+{
+  "visibility": "PRIVATE"
+}
+```
+
+Requirements:
+
+- Accept only the existing uppercase enum values.
+- Preserve existing update behavior when visibility is omitted.
+- Keep new itineraries Private by default.
+- Treat existing records with missing/null visibility as Private.
+- Allow safe repeated updates to the same visibility.
+- Permit only the itinerary owner to change visibility.
+- Preserve all unrelated itinerary fields.
+
+### Public discovery
+
+`GET /api/itineraries/public/search?page=1`
+
+Requirements:
+
+- Return only explicitly Public, nonhidden itineraries.
+- Apply visibility filtering before pagination and counting.
+- Use existing GEN-05 pagination conventions.
+- Return deterministic results.
+- Use the agreed public-field allowlist.
+- Reject unsupported filters rather than silently ignoring them.
+- Do not implement full ITN-21 search functionality.
+
+### Public details
+
+`GET /api/itineraries/public/:id`
+
+Requirements:
+
+- Allow public read access without granting modification permissions.
+- Return only the agreed public itinerary and day fields.
+- Preserve the correct persisted day order and derived UTC dates.
+- Return 404 for Private, hidden, deleted and nonexistent itineraries.
+- Never expose owner-private information, notes or internal metadata.
+
+## 2. Visibility-write coordination
+
+Implement visibility changes using the existing ITN-07 parent-write transaction protocol.
+
+- Acquire the owner-filtered parent write.
+- Increment the existing parent version.
+- Apply only supplied and explicitly permitted update fields.
+- Preserve all other fields.
+- Use majority-acknowledged commit behavior.
+- Reuse the existing bounded transaction and commit retry logic.
+- Never replay a transaction body after an unresolved ambiguous commit outcome.
+- Preserve existing behavior for ordinary PATCH requests without visibility.
+
+Do not weaken ownership checks or modify unrelated transaction helpers.
+
+## 3. Privacy revocation and MongoDB consistency
+
+Implement the timestamp-anchored public-read mechanism verified during Phase 1.
+
+Requirements:
+
+1. Use the tested primary linearizable freshness barrier.
+2. Capture the actual operation timestamp from the command response, not from session.operationTime when unavailable.
+3. Anchor public snapshot reads to that timestamp.
+4. Keep public-search result items and counts within the same consistent snapshot.
+5. Perform the final linearizable visibility recheck for public direct-detail responses.
+6. Fail closed if the required consistency mechanism is unavailable.
+7. Never silently fall back to weaker consistency.
+8. Use bounded deadlines/timeouts.
+9. Properly close sessions and cursors on success and failure.
+10. Add `Cache-Control: no-store` to public responses.
+11. Ensure conditional requests cannot bypass visibility checks.
+12. Document that already completed responses cannot be revoked and overlapping requests may observe an earlier valid snapshot.
+
+Important: Validate the actual driver command/cursor behavior in integration tests, not only mocked calls.
+
+Do not create database documents merely to implement the freshness barrier.
+
+## 4. Authorization and data protection
+
+Preserve owner-only authorization on:
+
+- Itinerary updates and deletion.
+- Day creation, editing, deletion and reordering.
+- Activity creation, modification and deletion.
+- Transport-cost creation, modification and deletion.
+- ITN-09 grouping endpoint.
+
+Public visibility must grant read access only through the approved public endpoints.
+
+Do not use Public visibility as an alternative condition in ownership checks for mutations.
+
+Use explicit public response allowlists.
+
+## 5. Required automated tests
+
+Implement focused unit and isolated MongoDB integration tests covering:
+
+### Visibility
+- Default Private.
+- Existing records without visibility.
+- Private → Public.
+- Public → Private.
+- Repeated visibility changes.
+- Invalid visibility inputs.
+- Unauthorized visibility updates.
+
+### Public discovery
+- Only Public, nonhidden records appear.
+- Private records never appear.
+- Hidden records never appear.
+- Correct pagination, totals and ordering.
+- Immediate post-acknowledgement removal from search.
+- Deleted itineraries disappear.
+
+### Public details
+- Correct public itinerary/day information.
+- Correct dates and order after ITN-08 reordering.
+- Private direct links return 404 after revocation.
+- No exposure of private metadata or internal fields.
+- Proper handling of invalid IDs.
+
+### Authorization
+- Nonowners cannot modify Public or Private itineraries.
+- Nonowners cannot modify days, activities or transport costs.
+- Cross-itinerary and child-ID-only mutation attempts remain protected.
+- ITN-09 grouping authorization remains unchanged.
+
+### Concurrency and consistency
+- Visibility changes racing with day reordering.
+- Visibility changes racing with day deletion.
+- Visibility changes racing with nested-resource operations.
+- Linearizable barrier timestamps.
+- Anchored snapshot freshness.
+- Stale snapshot rejection.
+- Quorum failures and timeouts.
+- Session/cursor cleanup.
+- Failure-closed behavior.
+
+Use isolated local MongoDB replica-set test infrastructure only.
+
+Never access or modify shared Atlas.
+
+## 6. Exact approved files
+
+Modify:
+
+1. `backend/src/itineraries/dto/update-itinerary.dto.ts`
+2. `backend/src/itineraries/itineraries.controller.ts`
+3. `backend/src/itineraries/itineraries.service.ts`
+4. `backend/src/itineraries/itineraries.module.ts`
+5. `backend/src/itineraries/itineraries.service.spec.ts`
+6. `backend/test/itineraries.e2e-spec.ts`
+
+Create:
+
+7. `backend/src/itineraries/public-itineraries.controller.ts`
+8. `backend/src/itineraries/dto/public-itinerary-response.dto.ts`
+
+Do not modify additional files without requesting explicit approval.
+
+Do not change schemas, indexes or dependencies.
+
+## 7. Verification
+
+After implementation:
+
+1. Run focused itinerary unit tests.
+2. Run isolated MongoDB integration tests.
+3. Run the complete backend unit and E2E test suites.
+4. Compare any failures with the current origin/develop baseline.
+5. Run the backend build.
+6. Run lint.
+7. Run git diff --check.
+8. Confirm only the eight approved implementation files changed.
+
+Do not weaken assertions or suppress failing tests.
+
+## 8. Personal AI prompts documentation
+
+After implementing and testing ITN-20, APPEND the complete ITN-20 section to my existing file:
+
+`C:\Users\seife\OneDrive\Desktop\SWP1\software-project\AI_PROMPTS_Seif_Allam.txt`
+
+Requirements:
+
+- Read the existing file first.
+- Preserve every previous entry byte-for-byte.
+- Append exactly one ITN-20 section.
+- Include the available actual AI prompts, design decisions, implementation assistance, troubleshooting and verified test results.
+- Label reconstructed prompt summaries accurately.
+- Do not invent verbatim prompts.
+- Do not create another copy.
+- Do not modify shared AI_PROMPTS.txt.
+- Do not commit or push the documentation.
+
+This is a separate documentation-only operation and must not introduce additional implementation changes.
+
+## 9. Restrictions
+
+- Remain on the ITN-20 branch.
+- Do not modify other Git worktrees except the specifically authorized personal AI log.
+- Do not merge or cherry-pick branches.
+- Do not commit or push.
+- Do not create a PR.
+- Do not modify unrelated source files.
+
+## 10. Final report
+
+Report:
+
+1. Files created or modified.
+2. Final endpoint contracts.
+3. Visibility-write transaction behavior.
+4. Public-read consistency and revocation behavior.
+5. Unit test results.
+6. Integration test results.
+7. Full backend suite results and baseline comparison.
+8. Build and lint results.
+9. Remaining risks.
+10. Personal AI log update confirmation.
+11. Git status of both worktrees.
+12. Confirmation that no commits or pushes occurred.
+
+Proceed with implementation and verification.
+--- END ITN-20 PROMPT 3 ---
+
+How the output was used (summary of AI assistance and implementation):
+Codex inspected the reviewed mandatory requirement CSV, the project PDF's itinerary section/API table, AGENTS.md, itinerary schemas/DTOs/controllers/services, the shared access-control helper, nested day/activity/transport authorization, public response conventions, indexes, pagination, tests and Git history. The initial attachment reads stalled without returning content, so the user pasted the request directly; later file reads worked. No changes were made during those unsuccessful reads.
+
+Initial inspection found an existing visibility enum with PRIVATE/PUBLIC, a PRIVATE schema default and explicit PRIVATE creation. Visibility changes and shared/public itinerary search/detail routes were absent. Existing owner routes, ITN-07 parent-write transactions and ITN-10/16 ownership checks already protected mutation permissions. The PDF assigns visibility updates to the existing PATCH /api/itineraries/:id endpoint. A separate public discovery/detail controller was proposed so guest reads would not remove JWT protection from owner routes. Full ITN-21 filters/cloning were left outside scope.
+
+The initial worktree base was dfb1b4d, while origin/develop already showed ITN-08 and ITN-09 merges. The user updated the worktree, then requested another architecture-only review. Codex verified HEAD and the local origin/develop reference matched 22bcff5f6e5249fb45ab6222ad222580c34e59eb and inspected the merged reorder/grouping implementation and tests. Codex did not merge, cherry-pick, switch branches or copy another worktree's implementation. The user then explicitly approved eight files for Phase 2.
+
+Read-consistency architecture review:
+A primary linearizable single-document read is a freshness barrier, but ordinary snapshot recency or a final detail check alone is insufficient to anchor search counts. The revised approach uses the barrier command response's operationTime and an explicit snapshot atClusterTime. Search uses an arbitrary unique lookup ID, without creating a catalog document. Direct details use the actual itinerary ID initially and again for a final visibility recheck outside the historical snapshot.
+
+The architecture-only probe used Mongoose 9.11.4, MongoDB driver 7.7.0 and MongoDB 8.0.20 on a fresh three-member localhost replica set. It verified 20 acknowledged PUBLIC/PRIVATE transitions, private/hidden/legacy exclusion, old snapshots remaining Public after revocation, denial by a subsequent linearizable check, timestamp-anchored search and parent-write serialization. A first probe exposed that noncausal sessions do not populate session.operationTime; the corrected probe used the raw command reply. A real majority outage failed closed in approximately 1,013 ms with a one-second probe deadline. For 40 warmed reads per mode, local median/p95 latency was 0.89/1.36 ms for majority reads and 4.03/4.76 ms for linearizable reads. These figures are local probe measurements, not production API latency guarantees. All probe processes were stopped.
+
+Implemented API contracts:
+- PATCH /api/itineraries/:id accepts optional visibility: PUBLIC or PRIVATE through UpdateItineraryDto. Other values, including null/lowercase/nonstring values, are rejected. Existing owner authentication and 403/404 status conventions are preserved. Omitted visibility follows the original update path; missing/null legacy visibility is represented as Private. New itinerary creation remains explicitly Private, even if an unsupported visibility field is supplied during creation.
+- GET /api/itineraries/public/search?page=1 is guest-readable paginated discovery only. It uses GEN-05 page size 10, deterministic updatedAt/_id sorting, explicit PUBLIC and nonhidden predicates before counting/pagination, and one anchored facet for items/total. Unsupported query filters are rejected rather than ignored. Full ITN-21 search functionality is not implemented.
+- GET /api/itineraries/public/:id returns the allowlisted public details and persisted ordered days with derived UTC dates. Private, hidden, deleted and missing records return the same 404. Invalid IDs return 400. A final linearizable read denies revocation committed before that check.
+
+Public summaries expose only id, title, countryIds, startDate, visibility and dayCount. Details add days containing only id, dayNumber, cityId and date. Database projections and explicit response mapping exclude notes, userId, internal metadata, timestamps, moderation fields, cloning attribution and unrelated stored fields. Public visibility does not make the existing owner detail/day/grouping endpoints public.
+
+Visibility transaction behavior:
+Visibility-bearing PATCH requests use the unchanged withDayTransaction helper. It acquires an owned parent write and increments __v before applying explicitly supplied allowed fields in the transaction. The existing snapshot/primary/majority commit settings, bounded body retries and separate uncertain-commit retries are reused. An unresolved UnknownTransactionCommitResult never blindly replays the body. Ordinary updates without visibility retain their original behavior. Publishing does not clear isHidden or change ownership. No schemas, indexes or dependency manifests were changed.
+
+Public-read implementation:
+The implementation uses raw MongoDB find and runCursorCommand calls through the existing connection. It captures the actual reply operationTime and sends an explicit snapshot atClusterTime rather than relying on session.operationTime or driver readConcern options that discard the timestamp. A shared five-second deadline bounds all public-read operations, with primary preference and no weaker-consistency fallback. Sessions and cursors are closed on success/failure. Snapshot/network/quorum/deadline failures return 503 without partial payloads or raw database details.
+
+Read-only sessions are created synchronously through connection.getClient().startSession({ causalConsistency: false }). Real quorum-loss testing found that Mongoose connection.startSession() can buffer while reconnecting and exceed the public deadline; switching only these new read sessions to the native client fixed the defect. Existing ITN-07/08/09 transaction and grouping session behavior was not changed.
+
+Both public endpoints send Cache-Control: no-store. Integration tests showed Express can otherwise transform a completed search response into 304 for If-None-Match: *, even with no-store. The new public controller removes conditional cache headers for these new endpoints so each response executes current authorization and returns a newly computed representation. Existing owner routes and global HTTP settings are unchanged. Already completed responses cannot be revoked; an overlapping search may return its earlier valid snapshot, and revocation after a final detail check may overlap network delivery. These limitations are documented in Swagger.
+
+Authorization and compatibility:
+Owner-only restrictions remain on itinerary/day updates/deletion, day creation/reordering, activity/transport creation/update/delete and ITN-09 grouping. Public status is never an alternative in mutation ownership predicates. Child-ID-only routes continue locating and rechecking the owning itinerary inside their existing parent-write transactions. ITN-08 reordering, its unique index and stable day IDs are unchanged; public days follow the persisted final dayNumber order and derived UTC dates. ITN-09 owner authorization, grouping and budget aggregation are unchanged. Existing associated records remain intact.
+
+Implementation/test files (exact approved eight in software-project-itn20):
+MODIFY backend/src/itineraries/dto/update-itinerary.dto.ts
+MODIFY backend/src/itineraries/itineraries.controller.ts
+MODIFY backend/src/itineraries/itineraries.service.ts
+MODIFY backend/src/itineraries/itineraries.module.ts
+MODIFY backend/src/itineraries/itineraries.service.spec.ts
+MODIFY backend/test/itineraries.e2e-spec.ts
+CREATE backend/src/itineraries/public-itineraries.controller.ts
+CREATE backend/src/itineraries/dto/public-itinerary-response.dto.ts
+
+Troubleshooting and review:
+- The worktree initially had no backend node_modules. npm ci restored 663 packages from the existing lockfile without changing manifests/versions. No system-level MongoDB dependency was installed. npm reported existing CLI engine advisories for host Node 25.8.0.
+- A generated source edit initially collapsed MongoDB double-dollar lookup variables to single-dollar references, causing public days to be empty. Integration tests caught this; the variables were corrected and the original assertions retained.
+- Some initial wire-test spies targeted the Mongoose Connection instead of its native Db; the tests were corrected to exercise the actual native command/cursor layer.
+- The dedicated quorum fixture was changed to wait explicitly for election readiness and use test-only short election timing. It owns its processes/data and never disrupts the externally supplied local test replica set.
+- Integration testing caught the Express conditional-response issue and the Mongoose reconnect/session deadline issue described above. Both were fixed in approved files and tested again.
+- The PowerShell npm.ps1 launcher was blocked for one lint attempt. Verification used npm.cmd; no execution policy or global Git configuration was changed.
+- Added-line whitespace and line endings were corrected in the approved files. No tests or lint rules were suppressed or weakened.
+
+Verified test/build results:
+- Focused itinerary unit tests: 8 suites passed; 219 passed, 0 failed, 0 skipped. This includes the merged itinerary/activities/transport suites and 35 new ITN-20 unit tests.
+- Full-run itinerary integration file: 129 passed, 0 failed, 0 skipped, including 37 new ITN-20 integration tests. The earlier targeted ITN-20-only run also passed all 37 cases; its 92 skipped tests were the deliberately filtered existing cases, subsequently run successfully in the complete E2E suite.
+- Complete current backend unit suite: 934 passed, 3 failed, 0 skipped; 937 total.
+- Complete current backend E2E suite: 236 passed, 1 failed, 0 skipped; 237 total.
+- Complete current backend combined: 1,170 passed, 4 failed, 0 skipped; 1,174 total.
+- All 72 added ITN-20 tests passed.
+- Backend build: passed.
+- Lint: passed with five pre-existing warnings in unchanged airline/flight files (IsBoolean, ApiTags, JwtService, HttpCode and HttpStatus unused imports).
+- git diff --check: passed.
+- Scope check: exactly the eight approved files changed in the ITN-20 worktree. ITN-07's transaction helper, ITN-08 reorder implementation and ITN-09 grouping implementation were independently verified unchanged.
+
+Baseline comparison:
+origin/develop was refreshed to fcf3ef5362556bf55239578060f655786a3b978d (fcf3ef5). A git-archive snapshot in a temporary directory used the exact same installed dependencies. package.json, package-lock.json, Jest/TypeScript configurations, E2E configuration and setup were byte-identical. No branch switch or merge was performed. Both complete suites used --runInBand and JSON reports in temporary storage. E2E email/payment network integrations were disabled; unit transports/providers were mocked.
+
+Baseline unit tests: 912 passed, 3 failed, 0 skipped.
+Baseline E2E tests: 199 passed, 1 failed, 0 skipped.
+Baseline combined: 1,111 passed, 4 failed, 0 skipped; 1,115 total.
+The baseline moved beyond the explicitly approved implementation base 22bcff5 and includes additional unrelated tests. The differing totals are therefore expected. The combined merge of ITN-20 with those later upstream changes was not tested.
+
+Every current failing test name and root cause was independently reproduced on baseline:
+1. BlogService creates a draft by default and takes the author from the logged-in user (BLG-01).
+2. BlogService creates a published post with tags (BLG-01).
+3. BlogService lists only the user's own posts, drafts included, 10 per page (BLG-03, GEN-05).
+All three fail during Test.createTestingModule().compile() in backend/src/blog/blog.service.spec.ts at line 26: LikeModel is missing at constructor index 1. The test module supplies only PostModel despite other required providers. Assertions are not reached.
+4. Backend regressions against disposable MongoDB characterizes unchanged ACC-05: fifth failure is 401; following attempt is locked for 15 minutes.
+This fails at backend/test/app.e2e-spec.ts line 195 because the test expects 401 Unauthorized on the fifth incorrect password while the existing implementation returns 423 Locked immediately. The same mismatch occurs on baseline.
+No ITN-20 regression was detected in the executed suites, and unrelated failures were not altered or suppressed.
+
+Additional test-inclusive type check:
+The optional tsc --noEmit --incremental false --project tsconfig.spec.json check still reports existing test-code diagnostics: 50 on the current branch and 52 on the newer baseline. These include hotels AuthPayload sid mocks, existing admin/blog constructor mocks, the old nullable itinerary-test index, app session typing and the existing snapshotTime test typing. The two itinerary diagnostics also occur on baseline. No new ITN-20 source/test typing diagnostic was reported. The required source-only backend build passed; these older test typing issues were left unchanged.
+
+Integration coverage and limits:
+Tests exercised default/legacy Private handling, valid/invalid/repeated visibility changes, owner checks, moderation hiding, public-field allowlists, conditional requests, search pagination/totals/order, unsupported filters, deletion, actual reordering and UTC leap-day dates, all protected nested mutations, cross-itinerary references and unchanged ITN-09 authorization. Forced races covered visibility updates with real reordering, deletion, activity creation and transport creation. Wire tests verified linearizable/snapshot/linearizable detail command order, the exact reply timestamp used by the snapshot, noncausal session behavior and session/cursor cleanup. A historical Public snapshot was rejected after revocation before the final check; an overlapping search retained its earlier valid snapshot but the next search excluded the revoked record.
+
+The automated quorum test launched a separate disposable two-voter replica set from the existing mongod binary, verified HTTP success, stopped its owned secondary, and verified 503 for detail and discovery within bounded deadlines. ITN20_MONGOD_PATH supplies the existing executable for this fixture; no download or system installation occurs. The ordinary E2E suites used a separate fresh three-member localhost replica set. All test processes owned by this task were stopped and the dedicated quorum fixture cleaned up its temporary data. Shared Atlas was never accessed or modified.
+
+Remaining risks: quorum confirmation adds latency and unavailability deliberately produces 503; localhost measurements are not production benchmarks. Snapshot-capable MongoDB is required. Full ITN-21 filters/cloning/public budget or grouping presentation remain out of scope. Previously delivered data cannot be recalled, and overlapping response delivery is not globally cancelled by revocation. Four unrelated full-suite failures and the pre-existing test-inclusive TypeScript diagnostics remain outstanding. Actual integration with later upstream changes requires a subsequent approved merge/rebase and verification.
+
+The personal AI log was left unchanged throughout source implementation and testing. This is the separately authorized post-verification documentation-only append. All previous entries, including ITN-07, ITN-08, ITN-09, ITN-10 and ITN-16, remain byte-for-byte preserved. Shared AI_PROMPTS.txt was not modified. No commit, push, PR creation or branch/worktree switch occurred.
+
+================================================
