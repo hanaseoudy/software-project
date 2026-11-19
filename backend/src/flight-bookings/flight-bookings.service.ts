@@ -24,6 +24,8 @@ import { buildBookingSummary } from './utils/booking-summary';
 import type { SummaryFlight } from './utils/booking-summary';
 import { BookingGroup, ListMyBookingsDto } from './dto/list-my-bookings.dto';
 import { formatInTimeZone } from 'date-fns-tz';
+import { Refund } from '../payments/schemas/refund.schema';
+import { BookingType } from '../payments/enums/payment.enums';
 
 export const HOLD_DURATION_MS = 10 * 60 * 1000; // FLT-22: 10-minute hold
 const INFANT_FARE_RATIO = 0.1; // infants pay 10% (see Cabin.price comment)
@@ -36,6 +38,7 @@ export class FlightBookingsService {
     private readonly bookingModel: Model<FlightBooking>,
     @InjectModel(Airport.name) private readonly airportModel: Model<Airport>,
     @InjectModel(Airline.name) private readonly airlineModel: Model<Airline>,
+    @InjectModel(Refund.name) private readonly refundModel: Model<Refund>,
   ) {}
 
   private readonly PAGE_SIZE = 10;
@@ -88,11 +91,11 @@ export class FlightBookingsService {
   }
 
   async findMineById(userId: string, bookingId: string) {
-    const { summary, bookingReference } = await this.loadOwnedSummary(
+    const { summary, bookingReference, refund } = await this.loadOwnedSummary(
       userId,
       bookingId,
     );
-    return { ...summary, bookingReference };
+    return { ...summary, bookingReference, refund };
   }
 
   private groupOf(b: any, now: Date): BookingGroup {
@@ -197,6 +200,7 @@ export class FlightBookingsService {
         _id: new Types.ObjectId(bookingId),
         user: new Types.ObjectId(userId),
       })
+      .populate('refund')
       .lean();
     if (!booking) {
       throw new NotFoundException('Booking not found');
@@ -222,7 +226,32 @@ export class FlightBookingsService {
       outbound,
       inbound,
     );
-    return { summary, bookingReference: booking.bookingReference };
+
+    const refundDoc = booking.refund
+      ? await this.refundModel.findById(booking.refund).lean()
+      : await this.refundModel
+          .findOne({
+            bookingId: booking._id,
+            bookingType: BookingType.FLIGHT,
+          })
+          .sort({ createdAt: -1 })
+          .lean();
+
+    const refund = refundDoc
+      ? {
+          id: refundDoc._id,
+          amount: refundDoc.amount,
+          currency: refundDoc.currency,
+          status: refundDoc.status,
+          reason: refundDoc.reason ?? null,
+          appliedPolicy: refundDoc.appliedPolicy ?? null,
+          stripeRefundId: refundDoc.stripeRefundId ?? null,
+          processedAt: refundDoc.processedAt ?? null,
+          createdAt: (refundDoc as any).createdAt,
+        }
+      : null;
+
+    return { summary, bookingReference: booking.bookingReference, refund };
   }
 
   private async loadSummaryFlight(
