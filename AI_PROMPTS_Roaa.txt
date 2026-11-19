@@ -163,3 +163,19 @@ the changes before the pull request is merged.
 Verification performed:
 Unit tests, lint and build passed under Node 24.
 ================================================
+
+Date: 2026-11-19
+Student: Roaa Mahmoud
+Tool: Claude (Claude Code on claude.ai)
+Related Requirement: HTL-20 (Jira TASK-59), follow-up to HTL-21
+Prompt:
+Add the refund to GET /hotel-bookings/:id (HTL-20).
+How the output was used:
+Claude added a refund field to the reservation details. It reads the latest PAY-03
+refund of the reservation (RefundsService.findByBooking) and returns its amount,
+currency, status (Pending, Refunded or Failed) and applied policy, or null when the
+reservation has no refund. It updated the details DTO, the service and the unit
+tests. I will review the changes before the pull request is merged.
+Verification performed:
+Unit tests, lint and build passed under Node 24.
+================================================

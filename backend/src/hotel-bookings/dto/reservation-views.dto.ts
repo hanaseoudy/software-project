@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { RefundResponseDto } from '../../payments/dto/refund-response.dto';
 import { IsEnum, IsOptional } from 'class-validator';
 import { PAGE_SIZE, PaginationQueryDto } from '../../common/pagination/pagination';
 
@@ -123,6 +124,14 @@ export class ReservationDetailsDto extends ReservationSummaryDto {
     description: 'When the guest accepted the hotel policies at booking time',
   })
   policiesAcceptedAt!: string | null;
+
+  @ApiProperty({
+    type: RefundResponseDto,
+    nullable: true,
+    description:
+      'The refund of a cancelled reservation (amount, status Pending / Refunded / Failed, applied policy), or null when there is none, for example a cancellation with no refund.',
+  })
+  refund!: RefundResponseDto | null;
 }
 
 export class ReservationCountsDto {
