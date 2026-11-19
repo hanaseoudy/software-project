@@ -629,7 +629,7 @@ describe('ITN-07 against an isolated local replica set', () => {
       db.getClient().on('commandStarted', listener);
       try { await service.findGroups(owner, id); }
       finally { db.getClient().off('commandStarted', listener); }
-      expect(commands).toHaveLength(4);
+      expect(commands).toHaveLength(5);
       expect(sessions).toHaveLength(1);
       expect(sessions[0].snapshotEnabled).toBe(true);
       expect(sessions[0].hasEnded).toBe(true);
@@ -1047,7 +1047,7 @@ describe('ITN-07 against an isolated local replica set', () => {
         await parent.init(); await day.init();
         const id = oid();
         await parent.collection.insertOne({ _id: id, userId: oid(), title: 'Quorum fixture', countryIds: ['EG'], startDate: new Date('2028-02-28T00:00:00Z'), visibility: ItineraryVisibility.PUBLIC }, { writeConcern: { w: 'majority' } });
-        const reader = new ItinerariesService(parent as never, {} as never, day as never, { collection: { name: 'activities' } } as never, { collection: { name: 'budgetentries' } } as never, { collection: { name: 'transportcosts' } } as never, isolated, {} as never, { collection: { name: 'users' } } as never);
+        const reader = new ItinerariesService(parent as never, {} as never, day as never, { collection: { name: 'activities' } } as never, { collection: { name: 'budgetentries' } } as never, { collection: { name: 'transportcosts' } } as never, isolated, {} as never, { collection: { name: 'users' } } as never, { aggregationExpenses: async () => ({ $literal: [] }), removeForDays: async () => undefined, removeForItinerary: async () => undefined } as never);
         const module = await Test.createTestingModule({ controllers: [PublicItinerariesController], providers: [{ provide: ItinerariesService, useValue: reader }] }).compile();
         publicApp = module.createNestApplication(); publicApp.setGlobalPrefix('api');
         publicApp.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true })); await publicApp.init();
@@ -1284,7 +1284,7 @@ describe('ITN-07 against an isolated local replica set', () => {
       db.getClient().on('commandStarted', listener);
       try { const result = await app.get(BudgetEntriesService).totals(owner, id); reconcile(result); }
       finally { db.getClient().off('commandStarted', listener); }
-      expect(commands).toHaveLength(3); expect(sessions).toHaveLength(1); expect(sessions[0].hasEnded).toBe(true);
+      expect(commands).toHaveLength(4); expect(sessions).toHaveLength(1); expect(sessions[0].hasEnded).toBe(true);
       for (const command of commands) { expect(command.lsid).toEqual(commands[0].lsid); expect(command.readConcern?.level).toBe('snapshot'); expect(command.startTransaction).toBeUndefined(); }
       expect(commands[1].readConcern?.atClusterTime).toEqual(commands[2].readConcern?.atClusterTime);
       expect(commands[1].readConcern?.atClusterTime).toBeDefined();
