@@ -3,11 +3,14 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  HttpException,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
+import type { Document, Timestamp } from 'mongodb';
+import { PublicItineraryDetailDto, PublicItinerarySummaryDto } from './dto/public-itinerary-response.dto';
 
 import {
   Itinerary,
@@ -102,7 +105,7 @@ export class ItinerariesService {
       title: itinerary.title,
       countryIds: itinerary.countryIds,
       startDate: itinerary.startDate.toISOString().slice(0, 10),
-      visibility: itinerary.visibility,
+      visibility: itinerary.visibility ?? ItineraryVisibility.PRIVATE,
       dayCount: countsById.get(itinerary._id.toString()) ?? 0,
     }));
 
@@ -143,10 +146,137 @@ export class ItinerariesService {
       title: itinerary.title,
       countryIds: itinerary.countryIds,
       startDate: itinerary.startDate.toISOString().slice(0, 10),
-      visibility: itinerary.visibility,
+      visibility: itinerary.visibility ?? ItineraryVisibility.PRIVATE,
       dayCount: formattedDays.length,
       days: formattedDays,
     };
+  }
+
+  // ITN-20: raw driver commands retain reply.operationTime and atClusterTime.
+  // Noncausal sessions do not populate session.operationTime, and ordinary
+  // driver readConcern options discard an explicitly supplied timestamp.
+  private publicReadTimeout(deadline: number): number {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new ServiceUnavailableException('Public itinerary read deadline exceeded');
+    return remaining;
+  }
+
+  private async withPublicRead<T>(read: (session: ClientSession, deadline: number) => Promise<T>): Promise<T> {
+    const deadline = Date.now() + 5000;
+    let session: ClientSession | undefined;
+    try {
+      // Native session creation performs no reconnect/buffering wait. The first
+      // command's timeout therefore also bounds primary/server selection.
+      session = this.connection.getClient().startSession({ causalConsistency: false });
+      return await read(session, deadline);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new ServiceUnavailableException('Public itinerary data is temporarily unavailable. Please retry.');
+    } finally {
+      await session?.endSession();
+    }
+  }
+
+  private async publicBarrier(session: ClientSession, deadline: number, id = new Types.ObjectId()) {
+    const timeout = this.publicReadTimeout(deadline);
+    const reply = await this.connection.db!.command({
+      find: this.itineraryModel.collection.name,
+      filter: { _id: id }, projection: { visibility: 1, isHidden: 1 },
+      limit: 1, singleBatch: true,
+      readConcern: { level: 'linearizable' }, maxTimeMS: timeout,
+    }, { session, readPreference: 'primary', timeoutMS: timeout });
+    const time = reply.operationTime as Timestamp | undefined;
+    if (!time || time._bsontype !== 'Timestamp') {
+      throw new ServiceUnavailableException('Public itinerary freshness could not be established');
+    }
+    return { time, itinerary: reply.cursor?.firstBatch?.[0] as { visibility?: unknown; isHidden?: unknown } | undefined };
+  }
+
+  private async publicSnapshot<T>(pipeline: Document[], time: Timestamp, session: ClientSession, deadline: number): Promise<T[]> {
+    const timeout = this.publicReadTimeout(deadline);
+    const cursor = this.connection.db!.runCursorCommand({
+      aggregate: this.itineraryModel.collection.name, pipeline, cursor: {},
+      readConcern: { level: 'snapshot', atClusterTime: time }, maxTimeMS: timeout,
+    }, { session, readPreference: 'primary', timeoutMS: timeout });
+    try {
+      return await cursor.toArray() as T[];
+    } finally {
+      await cursor.close();
+    }
+  }
+
+  private publicSummary(item: PublicItinerarySummaryDto): PublicItinerarySummaryDto {
+    return {
+      id: item.id, title: item.title, countryIds: item.countryIds,
+      startDate: item.startDate, visibility: ItineraryVisibility.PUBLIC, dayCount: item.dayCount,
+    };
+  }
+
+  async findPublic(page = 1) {
+    if (!Number.isSafeInteger(page) || page < 1) throw new BadRequestException('Invalid page');
+    return this.withPublicRead(async (session, deadline) => {
+      // An arbitrary unique-key lookup is a read-only freshness barrier, not
+      // a catalog document. Nothing is created when the lookup returns empty.
+      const { time } = await this.publicBarrier(session, deadline);
+      const [result] = await this.publicSnapshot<{ items: PublicItinerarySummaryDto[]; meta: { total: number }[] }>([
+        { $match: { visibility: ItineraryVisibility.PUBLIC, isHidden: { $ne: true } } },
+        { $sort: { updatedAt: -1, _id: -1 } },
+        { $facet: {
+          items: [
+            { $skip: skipFor(page) }, { $limit: PAGE_SIZE },
+            { $lookup: { from: this.itineraryDayModel.collection.name, let: { itinerary: '$_id' }, as: 'countedDays', pipeline: [
+              { $match: { $expr: { $eq: ['$itineraryId', '$$itinerary'] } } }, { $count: 'count' },
+            ] } },
+            { $project: {
+              _id: 0, id: { $toString: '$_id' }, title: 1, countryIds: 1,
+              startDate: { $dateToString: { date: '$startDate', format: '%Y-%m-%d', timezone: 'UTC' } },
+              visibility: { $literal: ItineraryVisibility.PUBLIC },
+              dayCount: { $ifNull: [{ $arrayElemAt: ['$countedDays.count', 0] }, 0] },
+            } },
+          ],
+          meta: [{ $count: 'total' }],
+        } },
+      ], time, session, deadline);
+      if (!result) throw new ServiceUnavailableException('Public itinerary snapshot unavailable');
+      return paginate(result.items.map(item => this.publicSummary(item)), result.meta[0]?.total ?? 0, page);
+    });
+  }
+
+  async findPublicOne(itineraryId: string): Promise<PublicItineraryDetailDto> {
+    this.validateObjectId(itineraryId);
+    const id = new Types.ObjectId(itineraryId);
+    return this.withPublicRead(async (session, deadline) => {
+      const available = (item: { visibility?: unknown; isHidden?: unknown } | undefined) =>
+        item?.visibility === ItineraryVisibility.PUBLIC && item.isHidden !== true;
+      const first = await this.publicBarrier(session, deadline, id);
+      if (!available(first.itinerary)) throw new NotFoundException('Public itinerary unavailable');
+      const [result] = await this.publicSnapshot<PublicItineraryDetailDto>([
+        { $match: { _id: id, visibility: ItineraryVisibility.PUBLIC, isHidden: { $ne: true } } },
+        { $lookup: { from: this.itineraryDayModel.collection.name, let: { itinerary: '$_id', start: '$startDate' }, as: 'days', pipeline: [
+          { $match: { $expr: { $eq: ['$itineraryId', '$$itinerary'] } } }, { $sort: { dayNumber: 1 } },
+          { $project: {
+            _id: 0, id: { $toString: '$_id' }, dayNumber: 1, cityId: 1,
+            date: { $dateToString: { format: '%Y-%m-%d', timezone: 'UTC', date: {
+              $dateAdd: { startDate: '$$start', unit: 'day', amount: { $subtract: ['$dayNumber', 1] }, timezone: 'UTC' },
+            } } },
+          } },
+        ] } },
+        { $project: {
+          _id: 0, id: { $toString: '$_id' }, title: 1, countryIds: 1,
+          startDate: { $dateToString: { date: '$startDate', format: '%Y-%m-%d', timezone: 'UTC' } },
+          visibility: { $literal: ItineraryVisibility.PUBLIC }, dayCount: { $size: '$days' }, days: 1,
+        } },
+      ], first.time, session, deadline);
+      if (!result) throw new NotFoundException('Public itinerary unavailable');
+      // Outside the historical snapshot: revocation before this check denies
+      // the response. A later revocation can still overlap network delivery.
+      const final = await this.publicBarrier(session, deadline, id);
+      if (!available(final.itinerary)) throw new NotFoundException('Public itinerary unavailable');
+      return {
+        ...this.publicSummary(result),
+        days: result.days.map(day => ({ id: day.id, dayNumber: day.dayNumber, cityId: day.cityId, date: day.date })),
+      };
+    });
   }
 
   // ITN-09: one snapshot session pins every related read to the same committed
@@ -583,6 +713,26 @@ export class ItinerariesService {
     if (itinerary.userId.toString() !== userId) {
       throw new ForbiddenException('You cannot edit another user\'s itinerary');
     }
+    if (dto.visibility !== undefined) {
+      if (!Object.values(ItineraryVisibility).includes(dto.visibility)) {
+        throw new BadRequestException({ message: 'Validation failed', errors: { visibility: ['visibility must be PUBLIC or PRIVATE'] } });
+      }
+      return this.withDayTransaction(userId, itineraryId, async (session, parent) => {
+        const changes: { visibility: ItineraryVisibility; title?: string; countryIds?: string[]; startDate?: Date } = { visibility: dto.visibility! };
+        if (dto.countryIds !== undefined) {
+          await this.validateCountries(dto.countryIds);
+          changes.countryIds = dto.countryIds;
+        }
+        if (dto.title !== undefined) changes.title = dto.title;
+        if (dto.startDate !== undefined) changes.startDate = new Date(dto.startDate + 'T00:00:00.000Z');
+        const updated = await this.itineraryModel.findOneAndUpdate(
+          { _id: parent._id, userId: new Types.ObjectId(userId) },
+          { $set: changes }, { session, returnDocument: 'after', runValidators: true },
+        );
+        if (!updated) throw new NotFoundException('Itinerary not found');
+        return updated;
+      });
+    }
     if (dto.countryIds !== undefined) {
       await this.validateCountries(dto.countryIds);
       itinerary.countryIds = dto.countryIds;
@@ -593,7 +743,10 @@ export class ItinerariesService {
     if (dto.startDate !== undefined) {
       itinerary.startDate = new Date(`${dto.startDate}T00:00:00.000Z`);
     }
-    return itinerary.save();
+    const saved = await itinerary.save();
+    // Normalize legacy null visibility in the response without publishing it
+    // or changing the stored field during an ordinary unrelated PATCH.
+    return saved.visibility == null ? { ...saved.toObject(), visibility: ItineraryVisibility.PRIVATE } : saved;
   }
 
   async remove(userId: string, itineraryId: string) {

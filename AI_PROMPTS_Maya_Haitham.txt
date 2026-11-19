@@ -594,3 +594,70 @@ How the output was used:
 I gave the prompts to Claude Code and used the descriptions in my pull
 requests. CLAUDE.md is a local guidance file and is not committed.
 ================================================
+================================================
+Date: 2026-11-17
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-07
+
+Prompt:
+Implement GEN-07: audit log schema, an exported audit service with record(), and the
+admin-only GET /api/admin/audit-logs endpoint, following the requirement sheet and project PDF.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed in three passes and built by me (npm run build, 0 errors).
+Changed files: backend/src/audit-logs (module, service, controller, schema, enums, DTOs; placeholders removed)
+and the AuditLogsModule registration in backend/src/app.module.ts.
+Open items: the record() calls in the admin, providers and reports modules are left to their owners.
+================================================
+================================================
+Date: 2026-11-17
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: GEN-07
+
+Prompt:
+Fix the team leader's review comment on GEN-07: call AuditLogsService.record() from the admin services
+for moderator creation, password reset, account suspension and reactivation, provider deactivation and
+reactivation, and report resolution and content moderation.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed in three passes and built by me (no errors in the changed files;
+the only build errors are the missing local nodemailer install from develop). Changed files: admin.service.ts,
+admin-providers.service.ts, admin-reports.service.ts, admin.module.ts, reports.module.ts, and (approved) admin.controller.ts
+and admin-providers.controller.ts to pass the admin id. Nothing was left open.
+================================================
+================================================
+Date: 2026-11-17
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: HTL-23
+
+Prompt:
+Implement HTL-23: one rating 1 to 5 and an optional review of up to 1000 characters per completed hotel
+reservation, edit and delete, and recalculation of the hotel's average rating, following the requirement
+sheet and project PDF.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed in three passes and built by me (no errors in the
+changed files; the only build errors are the missing local nodemailer install from develop). Changed files:
+backend/src/hotel-bookings (reviews controller, service and DTOs, review route, module, review schema).
+Open items: hiding a review through GEN-10 does not recalculate the average yet; HTL-24 is separate; reported in the PR.
+================================================
+================================================
+Date: 2026-11-18
+Student: Maya Haitham
+Tool: Claude Code
+Related Requirement: HTL-24
+
+Prompt:
+Implement HTL-24: public GET /api/hotels/:id/reviews returning a hotel's average rating, number of ratings
+and its reviews newest first with pagination, following the requirement sheet and project PDF.
+
+How the output was used:
+The code was generated with Claude Code, then reviewed in three passes and built by me (no errors in the
+changed files; the only build errors are the missing local nodemailer install from develop). Changed files:
+backend/src/hotels (hotel-details.controller.ts, hotels.service.ts, two new DTO files).
+Open items: the stored average and count are only kept up to date once HTL-23 (#130) merges; reported in the PR.
+================================================
+

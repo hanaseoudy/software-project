@@ -20,7 +20,7 @@ export class HotelSearchController {
   @ApiOperation({
     summary: 'Search hotels by destination, dates and occupancy (HTL-11)',
     description:
-      'Open to guests and registered users. Send a city or a country, check-in, check-out, guests and rooms (default 1). Lists active hotels with at least that many rooms free for the whole stay whose combined maximum occupancy covers the guests. Check-out must be after check-in and check-in cannot be in the past. Results are paginated, 10 per page, sorted by hotel name.',
+      'Open to guests and registered users. Send a city or a country, check-in, check-out, guests and rooms (default 1). Lists active hotels with at least that many rooms free for the whole stay whose combined maximum occupancy covers the guests. Check-out must be after check-in and check-in cannot be in the past. Results are paginated, 10 per page, sorted by hotel name unless sortBy is given. HTL-12: optionally filter by minPrice and maxPrice (inclusive, price per night of the hotel\'s cheapest free room) and by minRating (1 to 5; hotels with no ratings are excluded), and sort with sortBy=price or sortBy=rating and sortOrder=asc or desc.',
   })
   @ApiOkResponse({
     description: 'One page of matching hotels (empty when nothing matches)',

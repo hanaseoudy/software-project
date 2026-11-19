@@ -65,7 +65,13 @@ export class ItinerariesController {
   }
  
   @Patch(':id')
-  @ApiOperation({ summary: 'Update itinerary (ITN-01)' })
+  @ApiOperation({ summary: 'Update itinerary and visibility (ITN-01, ITN-20)', description: 'Owner only. PUBLIC/PRIVATE changes use the existing parent-write transaction protocol and majority commit. Omitted visibility preserves ordinary PATCH behavior. Publishing never clears moderation hiding.' })
+  @ApiResponse({ status: 400, description: 'Invalid ID, visibility or other update field' })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  @ApiResponse({ status: 403, description: 'Itinerary belongs to another user' })
+  @ApiResponse({ status: 404, description: 'Itinerary not found' })
+  @ApiResponse({ status: 409, description: 'Concurrent-update retries exhausted' })
+  @ApiResponse({ status: 503, description: 'Commit outcome uncertain; refresh before retrying' })
   update(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,

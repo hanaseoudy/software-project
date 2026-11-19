@@ -5,6 +5,7 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsEnum,
   IsString,
   Matches,
   MaxLength,
@@ -13,8 +14,14 @@ import {
 } from 'class-validator';
 
 import { IsValidCalendarDate } from './is-valid-calendar-date.validator';
+import { ItineraryVisibility } from '../schemas/itinerary.schema';
 
 export class UpdateItineraryDto {
+  @ApiPropertyOptional({ enum: ItineraryVisibility, example: ItineraryVisibility.PUBLIC, description: 'Owner-only visibility change; omitted values are preserved' })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsEnum(ItineraryVisibility, { message: 'visibility must be PUBLIC or PRIVATE' })
+  visibility?: ItineraryVisibility;
+
   @ApiPropertyOptional({
     example: 'Updated Europe Trip',
     maxLength: 100,

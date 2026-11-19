@@ -1,10 +1,12 @@
 
 import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
-import { Types } from 'mongoose';
+import { Types, mongo } from 'mongoose';
 import { ItinerariesService } from './itineraries.service';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { ReorderItineraryDayDto } from './dto/reorder-itinerary-day.dto';
+import { UpdateItineraryDto } from './dto/update-itinerary.dto';
+import { ItineraryVisibility } from './schemas/itinerary.schema';
  
 describe('ITN-07 transaction retry policy', () => {
   const owner = new Types.ObjectId().toString();
@@ -406,4 +408,179 @@ describe('ITN-09 read-only group snapshots', () => {
     expect(session.endSession).toHaveBeenCalledTimes(1);
   });
 });
- 
+
+
+describe('ITN-20 visibility updates', () => {
+  const owner = new Types.ObjectId().toString(), id = new Types.ObjectId();
+  let service: ItinerariesService;
+  let document: { userId: Types.ObjectId; visibility: ItineraryVisibility | null; title: string; save: jest.Mock; toObject: jest.Mock };
+  let parent: { findById: jest.Mock; findOneAndUpdate: jest.Mock };
+  let session: { startTransaction: jest.Mock; commitTransaction: jest.Mock; abortTransaction: jest.Mock; endSession: jest.Mock; inTransaction: jest.Mock };
+  let connection: { startSession: jest.Mock };
+  beforeEach(() => {
+    document = { userId: new Types.ObjectId(owner), visibility: ItineraryVisibility.PRIVATE, title: 'Keep', save: jest.fn(), toObject: jest.fn() };
+    document.save.mockImplementation(async () => document);
+    document.toObject.mockImplementation(() => ({ title: document.title, visibility: document.visibility }));
+    session = { startTransaction: jest.fn(), commitTransaction: jest.fn().mockResolvedValue(undefined), abortTransaction: jest.fn().mockResolvedValue(undefined), endSession: jest.fn().mockResolvedValue(undefined), inTransaction: jest.fn().mockReturnValue(true) };
+    connection = { startSession: jest.fn().mockResolvedValue(session) };
+    parent = { findById: jest.fn().mockResolvedValue(document), findOneAndUpdate: jest.fn((filter, update) => update.$inc ? { lean: async () => ({ _id: id }) } : Promise.resolve({ ...update.$set, _id: id })) };
+    const countries = { find: jest.fn(() => ({ lean: async () => [{ code: 'EG' }] })) };
+    service = new ItinerariesService(parent as never, countries as never, {} as never, {} as never, {} as never, {} as never, connection as never, {} as never);
+  });
+  it.each([ItineraryVisibility.PUBLIC, ItineraryVisibility.PRIVATE])('commits %s with the shared parent write and only allowed supplied fields', async visibility => {
+    const dto = { visibility, title: 'Changed', countryIds: ['EG'], startDate: '2028-02-29', userId: 'attacker', isHidden: false };
+    const result = await service.update(owner, id.toString(), dto);
+    expect(result).toHaveProperty('visibility', visibility);
+    expect(parent.findOneAndUpdate.mock.calls[0][1]).toEqual({ $inc: { __v: 1 } });
+    expect(parent.findOneAndUpdate.mock.calls[1]).toEqual([
+      { _id: id, userId: new Types.ObjectId(owner) },
+      { $set: { visibility, title: 'Changed', countryIds: ['EG'], startDate: new Date('2028-02-29T00:00:00.000Z') } },
+      { session, returnDocument: 'after', runValidators: true },
+    ]);
+    expect(session.commitTransaction).toHaveBeenCalledTimes(1);
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+    expect(document.save).not.toHaveBeenCalled();
+  });
+  it('preserves ordinary PATCH behavior and does not acquire a transaction', async () => {
+    await service.update(owner, id.toString(), { title: 'Ordinary' });
+    expect(document.save).toHaveBeenCalledTimes(1);
+    expect(document.visibility).toBe(ItineraryVisibility.PRIVATE);
+    expect(connection.startSession).not.toHaveBeenCalled();
+  });
+  it('normalizes legacy null only in an ordinary PATCH response', async () => {
+    document.visibility = null;
+    const result = await service.update(owner, id.toString(), {});
+    expect(result).toHaveProperty('visibility', ItineraryVisibility.PRIVATE);
+    expect(document.visibility).toBeNull();
+  });
+  it.each([null, '', 'public', 'private', 'OTHER', 1, true, {}])('rejects invalid visibility %j at DTO and service boundaries', async value => {
+    expect((await validate(plainToInstance(UpdateItineraryDto, { visibility: value }))).some(error => error.property === 'visibility')).toBe(true);
+    await expect(service.update(owner, id.toString(), { visibility: value as never })).rejects.toMatchObject({ status: 400 });
+    expect(connection.startSession).not.toHaveBeenCalled();
+  });
+  it('accepts omitted visibility in the existing partial update DTO', async () => {
+    expect(await validate(plainToInstance(UpdateItineraryDto, { title: 'Valid' }))).toEqual([]);
+  });
+  it('keeps nonexistent/nonowner update status conventions and validates IDs', async () => {
+    await expect(service.update(owner, 'bad', { visibility: ItineraryVisibility.PUBLIC })).rejects.toMatchObject({ status: 400 });
+    parent.findById.mockResolvedValueOnce(null);
+    await expect(service.update(owner, id.toString(), { visibility: ItineraryVisibility.PUBLIC })).rejects.toMatchObject({ status: 404 });
+    document.userId = new Types.ObjectId();
+    await expect(service.update(owner, id.toString(), { visibility: ItineraryVisibility.PUBLIC })).rejects.toMatchObject({ status: 403 });
+    expect(connection.startSession).not.toHaveBeenCalled();
+  });
+  it('retries commit only after an ambiguous result and never repeats the visibility write', async () => {
+    session.commitTransaction.mockRejectedValueOnce(Object.assign(new Error('Ambiguous'), { hasErrorLabel: (label: string) => label === 'UnknownTransactionCommitResult' }));
+    await service.update(owner, id.toString(), { visibility: ItineraryVisibility.PUBLIC });
+    expect(parent.findOneAndUpdate).toHaveBeenCalledTimes(2);
+    expect(session.commitTransaction).toHaveBeenCalledTimes(2);
+  });
+  it('aborts a failed visibility write', async () => {
+    parent.findOneAndUpdate.mockImplementationOnce(() => ({ lean: async () => ({ _id: id }) })).mockRejectedValueOnce(new Error('Write failed'));
+    await expect(service.update(owner, id.toString(), { visibility: ItineraryVisibility.PRIVATE })).rejects.toThrow('Write failed');
+    expect(session.abortTransaction).toHaveBeenCalledTimes(1);
+    expect(session.commitTransaction).not.toHaveBeenCalled();
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ITN-20 public read consistency and allowlists', () => {
+  const id = new Types.ObjectId();
+  const stamp = new mongo.Timestamp({ t: 10, i: 1 });
+  let service: ItinerariesService;
+  let session: { endSession: jest.Mock };
+  let connection: { getClient: jest.Mock; startSession: jest.Mock; db: { command: jest.Mock; runCursorCommand: jest.Mock } };
+  let cursor: { toArray: jest.Mock; close: jest.Mock };
+  const item = () => ({ id: id.toString(), title: 'Public trip', countryIds: ['EG'], startDate: '2028-02-28', visibility: ItineraryVisibility.PUBLIC, dayCount: 1,
+    userId: 'secret', notes: 'secret', __v: 3, days: [{ id: 'day', dayNumber: 1, cityId: 'CAI', date: '2028-02-28', notes: 'secret' }] });
+  beforeEach(() => {
+    session = { endSession: jest.fn().mockResolvedValue(undefined) };
+    cursor = { toArray: jest.fn().mockResolvedValue([item()]), close: jest.fn().mockResolvedValue(undefined) };
+    connection = { getClient: jest.fn(), startSession: jest.fn().mockReturnValue(session), db: {
+      command: jest.fn().mockResolvedValue({ operationTime: stamp, cursor: { firstBatch: [{ visibility: 'PUBLIC', isHidden: false }] } }),
+      runCursorCommand: jest.fn().mockReturnValue(cursor),
+    } };
+    connection.getClient.mockReturnValue({ startSession: connection.startSession });
+    service = new ItinerariesService({ collection: { name: 'itineraries' } } as never, {} as never, { collection: { name: 'itinerarydays' } } as never, {} as never, {} as never, {} as never, connection as never, {} as never);
+  });
+  afterEach(() => jest.restoreAllMocks());
+  it('pins the detail snapshot to reply.operationTime and rechecks outside the snapshot', async () => {
+    const result = await service.findPublicOne(id.toString());
+    expect(connection.startSession).toHaveBeenCalledWith({ causalConsistency: false });
+    expect(connection.db.command).toHaveBeenCalledTimes(2);
+    for (const [command, options] of connection.db.command.mock.calls) {
+      expect(command).toMatchObject({ filter: { _id: id }, limit: 1, singleBatch: true, readConcern: { level: 'linearizable' } });
+      expect(options).toMatchObject({ session, readPreference: 'primary' });
+      expect(options.timeoutMS).toBeGreaterThan(0);
+      expect(options.timeoutMS).toBeLessThanOrEqual(5000);
+    }
+    expect(connection.db.runCursorCommand.mock.calls[0][0].readConcern).toEqual({ level: 'snapshot', atClusterTime: stamp });
+    expect(result).toEqual({ id: id.toString(), title: 'Public trip', countryIds: ['EG'], startDate: '2028-02-28', visibility: 'PUBLIC', dayCount: 1, days: [{ id: 'day', dayNumber: 1, cityId: 'CAI', date: '2028-02-28' }] });
+    expect(cursor.close).toHaveBeenCalledTimes(1);
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+  it('uses one visibility-filtered facet for counts and pagination and no barrier documents', async () => {
+    cursor.toArray.mockResolvedValueOnce([{ items: [item()], meta: [{ total: 11 }] }]);
+    const result = await service.findPublic(2);
+    expect(connection.db.command).toHaveBeenCalledTimes(1);
+    expect(connection.db.command.mock.calls[0][0]).toHaveProperty('find', 'itineraries');
+    const pipeline = connection.db.runCursorCommand.mock.calls[0][0].pipeline;
+    expect(pipeline[0]).toEqual({ $match: { visibility: 'PUBLIC', isHidden: { $ne: true } } });
+    expect(pipeline[2].$facet.items.slice(0, 2)).toEqual([{ $skip: 10 }, { $limit: 10 }]);
+    expect(pipeline[2].$facet.meta).toEqual([{ $count: 'total' }]);
+    expect(result).toMatchObject({ total: 11, page: 2, pageSize: 10, totalPages: 2 });
+    expect(Object.keys(result.items[0]).sort()).toEqual(['countryIds', 'dayCount', 'id', 'startDate', 'title', 'visibility']);
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+  it('returns empty discovery results', async () => {
+    cursor.toArray.mockResolvedValueOnce([{ items: [], meta: [] }]);
+    expect(await service.findPublic()).toEqual({ items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 });
+  });
+  it.each([null, {}, { visibility: null }, { visibility: 'PRIVATE' }, { visibility: 'PUBLIC', isHidden: true }])('rejects inaccessible initial state %j', async inaccessible => {
+    connection.db.command.mockResolvedValueOnce({ operationTime: stamp, cursor: { firstBatch: inaccessible ? [inaccessible] : [] } });
+    await expect(service.findPublicOne(id.toString())).rejects.toMatchObject({ status: 404 });
+    expect(connection.db.runCursorCommand).not.toHaveBeenCalled();
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+  it.each([{ final: [] }, { final: [{ visibility: 'PRIVATE' }] }, { final: [{ visibility: 'PUBLIC', isHidden: true }] }])('rejects revoked/deleted final state $final', async ({ final }) => {
+    connection.db.command.mockResolvedValueOnce({ operationTime: stamp, cursor: { firstBatch: [{ visibility: 'PUBLIC' }] } })
+      .mockResolvedValueOnce({ operationTime: stamp, cursor: { firstBatch: final } });
+    await expect(service.findPublicOne(id.toString())).rejects.toMatchObject({ status: 404 });
+    expect(cursor.close).toHaveBeenCalledTimes(1);
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+  it('never falls back if a timestamp is missing', async () => {
+    connection.db.command.mockResolvedValueOnce({ cursor: { firstBatch: [{ visibility: 'PUBLIC' }] } });
+    await expect(service.findPublicOne(id.toString())).rejects.toMatchObject({ status: 503 });
+    expect(connection.db.runCursorCommand).not.toHaveBeenCalled();
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+  it.each(['barrier', 'cursor', 'iteration', 'final'])('fails closed and cleans up after %s failure', async stage => {
+    const failure = Object.assign(new Error('private database details'), { code: 50 });
+    if (stage === 'barrier') connection.db.command.mockRejectedValueOnce(failure);
+    if (stage === 'cursor') connection.db.runCursorCommand.mockImplementationOnce(() => { throw failure; });
+    if (stage === 'iteration') cursor.toArray.mockRejectedValueOnce(failure);
+    if (stage === 'final') connection.db.command.mockResolvedValueOnce({ operationTime: stamp, cursor: { firstBatch: [{ visibility: 'PUBLIC' }] } }).mockRejectedValueOnce(failure);
+    await expect(service.findPublicOne(id.toString())).rejects.toMatchObject({ status: 503, message: 'Public itinerary data is temporarily unavailable. Please retry.' });
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+    expect(cursor.close).toHaveBeenCalledTimes(stage === 'iteration' || stage === 'final' ? 1 : 0);
+  });
+  it('uses one shared deadline rather than resetting it between reads', async () => {
+    let now = 0;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    connection.db.command.mockImplementationOnce(async () => { now = 5001; return { operationTime: stamp, cursor: { firstBatch: [{ visibility: 'PUBLIC' }] } }; });
+    await expect(service.findPublicOne(id.toString())).rejects.toMatchObject({ status: 503 });
+    expect(connection.db.runCursorCommand).not.toHaveBeenCalled();
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+  it('preserves cleanup when cursor closing fails', async () => {
+    cursor.close.mockRejectedValueOnce(new Error('Close failed'));
+    await expect(service.findPublicOne(id.toString())).rejects.toMatchObject({ status: 503 });
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+  it('rejects invalid IDs/pages before opening a session', async () => {
+    await expect(service.findPublicOne('bad')).rejects.toMatchObject({ status: 400 });
+    for (const page of [0, -1, 1.5, NaN, Infinity]) await expect(service.findPublic(page)).rejects.toMatchObject({ status: 400 });
+    expect(connection.startSession).not.toHaveBeenCalled();
+  });
+});

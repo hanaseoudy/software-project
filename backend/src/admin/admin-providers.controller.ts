@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Param, ParseEnumPipe, Patch, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Param, ParseEnumPipe, Patch, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -12,6 +12,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../users/schemas/user.schema';
@@ -62,8 +63,12 @@ export class AdminProvidersController {
     description: 'The provider is already deactivated',
     example: { message: 'Hotel is already deactivated', error: 'Conflict', statusCode: 409 },
   })
-  deactivateProvider(@Param('type', providerTypePipe) type: ProviderType, @Param('id') id: string) {
-    return this.adminProvidersService.deactivateProvider(type, id);
+  deactivateProvider(
+    @Req() req: AuthenticatedRequest,
+    @Param('type', providerTypePipe) type: ProviderType,
+    @Param('id') id: string,
+  ) {
+    return this.adminProvidersService.deactivateProvider(type, id, req.user?.sub);
   }
 
   @Patch(':type/:id/reactivate')
@@ -96,7 +101,11 @@ export class AdminProvidersController {
     description: 'The provider is already active',
     example: { message: 'Airline is already active', error: 'Conflict', statusCode: 409 },
   })
-  reactivateProvider(@Param('type', providerTypePipe) type: ProviderType, @Param('id') id: string) {
-    return this.adminProvidersService.reactivateProvider(type, id);
+  reactivateProvider(
+    @Req() req: AuthenticatedRequest,
+    @Param('type', providerTypePipe) type: ProviderType,
+    @Param('id') id: string,
+  ) {
+    return this.adminProvidersService.reactivateProvider(type, id, req.user?.sub);
   }
 }

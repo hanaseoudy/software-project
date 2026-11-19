@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { Comment, CommentSchema } from '../blog/schemas/comment.schema';
 import { Like, LikeSchema } from '../blog/schemas/like.schema';
 import { Post, PostSchema } from '../blog/schemas/post.schema';
@@ -35,6 +36,8 @@ import { Report, ReportSchema } from './schemas/report.schema';
     ]),
     // Also provides the User model (reporter names) and the JWT guard dependencies
     AuthModule,
+    // GEN-07: audit entries for report resolutions and content moderation
+    AuditLogsModule,
   ],
   controllers: [ReportsController, AdminReportsController],
   providers: [ReportsService, AdminReportsService],

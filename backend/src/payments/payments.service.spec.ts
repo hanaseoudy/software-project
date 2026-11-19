@@ -85,12 +85,20 @@ function setup(
     findById: findByIdMock(booking, hotelWithProvider),
     updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
   };
-  const paymentModel = {
+  const paymentModel: any = {
     findOne: jest.fn().mockResolvedValue(null),
     findById: jest.fn().mockResolvedValue(null),
     find: jest.fn().mockResolvedValue([]),
     create: jest.fn().mockImplementation(async (data: object) => makePayment({ ...data, stripePaymentIntentId: undefined })),
     updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    // Behaves like MongoDB's atomic findOneAndUpdate on the payment that findOne() returns:
+    // it only matches when the status is in the filter, and the first caller changes it.
+    findOneAndUpdate: jest.fn(async (filter: any, update: any) => {
+      const payment = await paymentModel.findOne(filter);
+      if (!payment || !filter.status.$in.includes(payment.status)) return null;
+      Object.assign(payment, update.$set);
+      return payment;
+    }),
   };
   const stripe = {
     paymentIntents: {
@@ -104,6 +112,12 @@ function setup(
   const config = { get: jest.fn((key: string) => (key === 'STRIPE_WEBHOOK_SECRET' ? options.webhookSecret : undefined)) };
   // PAY-02 PoliciesService: accepted unless a test says otherwise.
   const policies = { assertAccepted: jest.fn().mockResolvedValue(undefined) };
+  // PAY-03 RefundsService
+  const refunds = {
+    findByBooking: jest.fn().mockResolvedValue(null),
+    refundUnconfirmedPayment: jest.fn().mockResolvedValue(undefined),
+    handleStripeRefund: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new PaymentsService(
     paymentModel as any,
     bookingModel as any,
@@ -111,8 +125,9 @@ function setup(
     options.stripe === false ? null : (stripe as any),
     config as any,
     policies as any,
+    refunds as any,
   );
-  return { service, paymentModel, bookingModel, hotelModel, stripe, policies };
+  return { service, paymentModel, bookingModel, hotelModel, stripe, policies, refunds };
 }
 
 const dto = { bookingType: BookingType.FLIGHT, bookingId: bookingId.toString() };
@@ -259,6 +274,17 @@ describe('PaymentsService (PAY-01)', () => {
       expect(result.failureReason).toBe('Your card was declined.');
       expect(payment.save).not.toHaveBeenCalled();
     });
+
+    it('shows the refund status of the booking with its payment (PAY-03)', async () => {
+      const { service, paymentModel, refunds } = setup();
+      const payment = makePayment({ status: PaymentStatus.REFUNDED });
+      paymentModel.findById.mockResolvedValue(payment);
+      refunds.findByBooking.mockResolvedValue({ id: 'r1', status: 'refunded', amount: 120.5 });
+
+      const result = await service.findOne(userId, payment._id.toString());
+      expect(refunds.findByBooking).toHaveBeenCalledWith(BookingType.FLIGHT, bookingId);
+      expect(result.refund).toEqual(expect.objectContaining({ status: 'refunded' }));
+    });
   });
 
   describe('webhook', () => {
@@ -355,6 +381,127 @@ describe('PaymentsService (PAY-01)', () => {
       expect(payment.status).toBe(PaymentStatus.SUCCEEDED);
       expect(bookingModel.updateOne).toHaveBeenCalled();
       expect(second).toHaveBeenCalled(); // the other handlers still run
+    });
+
+    describe('the same payment_intent.succeeded delivered more than once', () => {
+      const succeededEvent = {
+        type: 'payment_intent.succeeded',
+        created: now,
+        data: { object: { id: 'pi_1', amount_received: 12050, currency: 'usd' } },
+      };
+
+      it('two deliveries at the same moment confirm the booking once and refund nothing', async () => {
+        const { service, stripe, paymentModel, bookingModel, refunds } = setup({ webhookSecret: 'whsec' });
+        const payment = makePayment();
+        paymentModel.findOne.mockResolvedValue(payment);
+        stripe.webhooks.constructEvent.mockReturnValue(succeededEvent);
+        // The second update finds the booking already confirmed.
+        bookingModel.updateOne.mockResolvedValueOnce({ modifiedCount: 1 }).mockResolvedValue({ modifiedCount: 0 });
+
+        await Promise.all([
+          service.handleWebhook(Buffer.from('{}'), 'sig'),
+          service.handleWebhook(Buffer.from('{}'), 'sig'),
+        ]);
+
+        expect(bookingModel.updateOne).toHaveBeenCalledTimes(1);
+        expect(refunds.refundUnconfirmedPayment).not.toHaveBeenCalled();
+        expect(payment.status).toBe(PaymentStatus.SUCCEEDED);
+      });
+
+      it.each([PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED])(
+        'a re-sent event does not change a %s payment',
+        async (status) => {
+          const { service, stripe, paymentModel, bookingModel, refunds } = setup({ webhookSecret: 'whsec' });
+          const payment = makePayment({ status });
+          paymentModel.findOne.mockResolvedValue(payment);
+          stripe.webhooks.constructEvent.mockReturnValue(succeededEvent);
+
+          await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+          expect(payment.status).toBe(status);
+          expect(bookingModel.updateOne).not.toHaveBeenCalled();
+          expect(refunds.refundUnconfirmedPayment).not.toHaveBeenCalled();
+        },
+      );
+
+      it('records the payment with one atomic update limited to pending, failed or expired', async () => {
+        const { service, stripe, paymentModel } = setup({ webhookSecret: 'whsec' });
+        paymentModel.findOne.mockResolvedValue(makePayment());
+        stripe.webhooks.constructEvent.mockReturnValue(succeededEvent);
+
+        await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+        expect(paymentModel.findOneAndUpdate).toHaveBeenCalledWith(
+          {
+            stripePaymentIntentId: 'pi_1',
+            status: { $in: [PaymentStatus.PENDING, PaymentStatus.FAILED, PaymentStatus.EXPIRED] },
+          },
+          { $set: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(now * 1000) } },
+          { returnDocument: 'after' },
+        );
+      });
+    });
+
+    describe('refunds for money taken without a confirmed booking (PAY-03)', () => {
+      const event = (amount = 12050) => ({
+        type: 'payment_intent.succeeded',
+        created: now,
+        data: { object: { id: 'pi_1', amount_received: amount, currency: 'usd' } },
+      });
+
+      it('refunds in full when the hold ended before payment', async () => {
+        const { service, stripe, paymentModel, bookingModel, refunds } = setup({ webhookSecret: 'whsec' });
+        const payment = makePayment();
+        paymentModel.findOne.mockResolvedValue(payment);
+        stripe.webhooks.constructEvent.mockReturnValue(event());
+        bookingModel.updateOne.mockResolvedValue({ modifiedCount: 0 });
+
+        await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+        expect(refunds.refundUnconfirmedPayment).toHaveBeenCalledWith(payment, 120.5, 'Booking not confirmed: hold ended');
+      });
+
+      it('refunds in full when the provider was deactivated', async () => {
+        const { service, stripe, paymentModel, refunds } = setup({ webhookSecret: 'whsec', airlineActive: false });
+        const payment = makePayment();
+        paymentModel.findOne.mockResolvedValue(payment);
+        stripe.webhooks.constructEvent.mockReturnValue(event());
+
+        await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+        expect(refunds.refundUnconfirmedPayment).toHaveBeenCalledWith(payment, 120.5, 'Booking not confirmed: provider deactivated');
+      });
+
+      it('refunds the amount actually received when it does not match', async () => {
+        const { service, stripe, paymentModel, bookingModel, refunds } = setup({ webhookSecret: 'whsec' });
+        const payment = makePayment();
+        paymentModel.findOne.mockResolvedValue(payment);
+        stripe.webhooks.constructEvent.mockReturnValue(event(100));
+
+        await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+        expect(bookingModel.updateOne).not.toHaveBeenCalled();
+        expect(refunds.refundUnconfirmedPayment).toHaveBeenCalledWith(payment, 1, 'Booking not confirmed: amount mismatch');
+      });
+
+      it('does not refund a confirmed booking', async () => {
+        const { service, stripe, paymentModel, refunds } = setup({ webhookSecret: 'whsec' });
+        paymentModel.findOne.mockResolvedValue(makePayment());
+        stripe.webhooks.constructEvent.mockReturnValue(event());
+
+        await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+        expect(refunds.refundUnconfirmedPayment).not.toHaveBeenCalled();
+      });
+
+      it.each(['refund.updated', 'refund.failed'])('passes %s webhooks to the refunds service', async (type) => {
+        const { service, stripe, refunds } = setup({ webhookSecret: 'whsec' });
+        stripe.webhooks.constructEvent.mockReturnValue({ type, created: now, data: { object: { id: 're_1', status: 'succeeded' } } });
+
+        await service.handleWebhook(Buffer.from('{}'), 'sig');
+
+        expect(refunds.handleStripeRefund).toHaveBeenCalledWith({ id: 're_1', status: 'succeeded' });
+      });
     });
 
     describe('deactivated providers (ACC-15)', () => {

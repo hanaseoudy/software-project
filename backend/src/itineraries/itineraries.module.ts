@@ -44,6 +44,7 @@ import { ActivitiesService } from './activities.service';
 import { TransportCostsController } from './transport-costs.controller';
 import { TransportCostsService } from './transport-costs.service';
 import { ItinerariesController } from './itineraries.controller';
+import { PublicItinerariesController } from './public-itineraries.controller';
 import { ItinerariesService } from './itineraries.service';
 
 @Module({
@@ -81,7 +82,7 @@ import { ItinerariesService } from './itineraries.service';
       },
     ]),
   ],
-  controllers: [ItinerariesController, ActivitiesController, TransportCostsController],
+  controllers: [PublicItinerariesController, ItinerariesController, ActivitiesController, TransportCostsController],
   providers: [ItinerariesService, ActivitiesService, TransportCostsService],
 })
 export class ItinerariesModule {}

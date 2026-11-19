@@ -75,6 +75,39 @@ AirlinesController, and test the policy updates. Reviewed and adjusted
 every snippet before committing.
 ================================================
 
+Date: 2026-11-17
+Student: Sara Gomaa
+Tool: Claude
+Related Requirement: FLT-11
+Prompt:
+I'm starting FLT-11 in my NestJS + MongoDB (Mongoose) project. For anything
+that is a DTO, service or controller, give me the code right away without
+asking questions. If something is new and isn't one of those (a new concept
+or a design decision), ask me about it first and we'll implement it together
+afterward. Keep the code simple, make minimal targeted changes, and explain
+every code block.
+
+Give me only the Swagger decorators for the GET /flights/search controller 
+endpoint (@ApiTags, @ApiOperation, response decorators) and the @ApiProperty
+decorators for the SearchFlightsDto fields. Don't change any other code.
+
+Here are my Flight schema and Airline schema: [paste both]. Flights store
+departureLocalDate as a "YYYY-MM-DD" string, and seats are tracked per cabin
+(totalSeats, bookedSeats, heldSeats). Write the service search method using
+these exact fields, and fix the DTO date validation so it matches the stored
+string format.
+How the output was used:
+The DTO, controller method and service search method were added to the existing
+flights module, and the DTO’s date check was tightened to match your stored 
+departureLocalDate string. Swagger decorators were then layered on the controller
+and DTO. When your Postman test returned nothing, the temporary logs narrowed
+the problem down: “active airlines: 0” showed the airline lookup was failing,
+and the follow-up log (3 test moderatorassignments) showed that the Airline 
+model was bound to the moderator assignments collection rather than airlines.
+That pointed to a wrong schema or import in the module wiring, not to your data
+or the search logic itself. The open item is the flight and cabin selection step,
+which I asked you about but you haven’t answered yet.
+================================================
 Date: 2026-11-13
 Student: Sara Gomaa 
 Tool: Gemini

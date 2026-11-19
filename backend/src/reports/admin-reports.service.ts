@@ -4,6 +4,7 @@ import {
   HttpException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -20,6 +21,8 @@ import { Itinerary, ItineraryDocument } from '../itineraries/schemas/itinerary.s
 import { TransportCost, TransportCostDocument } from '../itineraries/schemas/transport-cost.schema';
 import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { AuditEntryInput, AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AuditAction, AuditTargetType } from '../audit-logs/enums/audit-log.enums';
 import { ContentParamsDto, ListReportsQueryDto, ResolveReportDto } from './dto/admin-report-request.dto';
 import {
   AdminReportItemDto,
@@ -50,6 +53,8 @@ type CascadedComments = Types.ObjectId[];
 
 @Injectable()
 export class AdminReportsService {
+  private readonly logger = new Logger(AdminReportsService.name);
+
   constructor(
     @InjectModel(Report.name) private readonly reportModel: Model<ReportDocument>,
     @InjectModel(Post.name) private readonly postModel: Model<PostDocument>,
@@ -62,6 +67,7 @@ export class AdminReportsService {
     @InjectModel(BudgetEntry.name) private readonly budgetEntryModel: Model<BudgetEntryDocument>,
     @InjectModel(TransportCost.name) private readonly transportCostModel: Model<TransportCostDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    private readonly auditLogs: AuditLogsService,
   ) {}
 
   // GEN-10: the moderation queue. Open reports by default, oldest first, page size 10 (GEN-05).
@@ -133,6 +139,14 @@ export class AdminReportsService {
           .exec(),
       );
       if (!dismissed) throw this.alreadyClosed();
+      this.audit({
+        actorId: adminId,
+        action: AuditAction.REPORT_DISMISSED,
+        targetType: AuditTargetType.REPORT,
+        targetId: report._id,
+        reportId: report._id,
+        details: { contentType: report.contentType, contentId: result.contentId },
+      });
       return { ...result, status: ReportStatus.DISMISSED, otherReportsResolved: 0 };
     }
 
@@ -152,6 +166,15 @@ export class AdminReportsService {
         return this.resolveOpenReports(report.contentType, report.contentId, cascaded, session);
       }),
     );
+    // GEN-07: one entry for the resolution; the other open reports closed with it are counted, not logged one by one
+    this.audit({
+      actorId: adminId,
+      action: moderation === ModerationAction.HIDE ? AuditAction.CONTENT_HIDDEN : AuditAction.CONTENT_DELETED,
+      targetType: report.contentType,
+      targetId: report.contentId,
+      reportId: report._id,
+      details: { otherReportsResolved },
+    });
     return { ...result, status: ReportStatus.RESOLVED, otherReportsResolved };
   }
 
@@ -169,7 +192,23 @@ export class AdminReportsService {
           return this.resolveOpenReports(contentType, contentId, cascaded, session);
         }),
     );
+    this.audit({
+      actorId: adminId,
+      action: action === ModerationAction.HIDE ? AuditAction.CONTENT_HIDDEN : AuditAction.CONTENT_DELETED,
+      targetType: contentType,
+      targetId: contentId,
+      details: { reportsResolved },
+    });
     return { action, contentType, contentId: contentId.toString(), reportsResolved };
+  }
+
+  // GEN-07: the change is already saved; the audit write runs in the background and never fails the action
+  private audit(entry: AuditEntryInput): void {
+    try {
+      void this.auditLogs.record(entry);
+    } catch (err) {
+      this.logger.warn(`Could not record audit entry ${entry.action}: ${String(err)}`);
+    }
   }
 
   // Shared by report resolution and the direct admin actions
