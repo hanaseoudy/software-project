@@ -1,3 +1,5 @@
+import { BudgetEntriesService } from '../src/itineraries/budget-entries.service';
+import type { ItineraryBudgetTotalsResponseDto } from '../src/itineraries/dto/itinerary-budget-totals-response.dto';
 
 import { Test } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -1082,6 +1084,251 @@ describe('ITN-07 against an isolated local replica set', () => {
       expect(discovery.security ?? []).toEqual([]); expect(direct.security ?? []).toEqual([]);
       expect(document.paths['/api/itineraries/{id}'].patch!.security).toContainEqual({ access_token: [] });
       expect(document.components!.schemas!.UpdateItineraryDto).toMatchObject({ properties: { visibility: { enum: ['PRIVATE', 'PUBLIC'] } } });
+    });
+  });
+
+  describe('ITN-14 daily budget entries and reconciled totals', () => {
+    const createBudget = (id: string, dayId: string, body: unknown = { category: 'FOOD', amount: 0, currency: 'USD' }, cookies = auth) =>
+      request(app.getHttpServer()).post('/api/itineraries/' + id + '/days/' + dayId + '/budgets').set('Cookie', cookies).send(body);
+    const getTotals = (id: string, cookies = auth) => request(app.getHttpServer()).get('/api/itineraries/' + id + '/budget-summary').set('Cookie', cookies);
+    const patchBudget = (entry: string, body: unknown, cookies = auth) => request(app.getHttpServer()).patch('/api/budgets/' + entry).set('Cookie', cookies).send(body);
+    const deleteBudget = (entry: string, cookies = auth) => request(app.getHttpServer()).delete('/api/budgets/' + entry).set('Cookie', cookies);
+    const listBudget = (id: string, dayId: string, cookies = auth) => request(app.getHttpServer()).get('/api/itineraries/' + id + '/days/' + dayId + '/budgets').set('Cookie', cookies);
+    const money = (value: number) => BigInt(Math.round(value * 100));
+    function reconcile(body: ItineraryBudgetTotalsResponseDto) {
+      for (const total of body.totals) {
+        expect(Object.values(total.byCategory).reduce((sum, value) => sum + money(value), 0n)).toBe(money(total.total));
+        expect(body.days.flatMap(day => day.totals.filter(row => row.currency === total.currency)).reduce((sum, row) => sum + money(row.total), 0n)).toBe(money(total.total));
+        for (const category of Object.keys(total.byCategory) as (keyof typeof total.byCategory)[])
+          expect(body.days.flatMap(day => day.totals.filter(row => row.currency === total.currency)).reduce((sum, row) => sum + money(row.byCategory[category]), 0n)).toBe(money(total.byCategory[category]));
+      }
+      for (const day of body.days) for (const row of day.totals)
+        expect(Object.values(row.byCategory).reduce((sum, value) => sum + money(value), 0n)).toBe(money(row.total));
+    }
+    it.each(Object.values(BudgetCategory))('creates and lists category %s with zero, stable IDs and clean metadata', async category => {
+      const { id, days } = await seed(1);
+      const result = await createBudget(id, days[0]._id.toString(), { category, amount: 0, currency: ' usd ', description: ' Lunch ' }).expect(201);
+      expect(result.body).toEqual({ id: expect.any(String), dayId: days[0]._id.toString(), category, amount: 0, currency: 'USD', description: 'Lunch' });
+      expect((await listBudget(id, days[0]._id.toString()).expect(200)).body).toEqual([result.body]);
+      const totals = await getTotals(id).expect(200); reconcile(totals.body);
+      expect(totals.body.totals[0].total).toBe(0);
+    });
+    it('edits and deletes only the selected entry; totals and ITN-09 subtotals recalculate', async () => {
+      const { id, days } = await seed(2);
+      const one = await createBudget(id, days[0]._id.toString(), { category: 'FOOD', amount: 1.25, currency: 'USD', description: 'Lunch' }).expect(201);
+      const two = await createBudget(id, days[0]._id.toString(), { category: 'FOOD', amount: 2, currency: 'USD' }).expect(201);
+      const updated = await patchBudget(one.body.id, { amount: 3.5, category: 'ACCOMMODATION', currency: 'eur' }).expect(200);
+      expect(updated.body).toMatchObject({ id: one.body.id, dayId: days[0]._id.toString(), amount: 3.5, category: 'ACCOMMODATION', currency: 'EUR', description: 'Lunch' });
+      let totals = await getTotals(id).expect(200); reconcile(totals.body);
+      expect(totals.body.totals.map((row: { currency: string; total: number }) => [row.currency, row.total])).toEqual([['EUR', 3.5], ['USD', 2]]);
+      expect((await service.findGroups(owner, id)).groups[0].budgetSubtotals).toEqual([{ currency: 'EUR', total: 3.5 }, { currency: 'USD', total: 2 }]);
+      await deleteBudget(one.body.id).expect(200); await deleteBudget(one.body.id).expect(404);
+      expect(await models().budget.findById(two.body.id)).not.toBeNull();
+      totals = await getTotals(id).expect(200); reconcile(totals.body); expect(totals.body.totals).toHaveLength(1); expect(totals.body.totals[0].total).toBe(2);
+      expect((await service.findGroups(owner, id)).groups[0].budgetSubtotals).toEqual([{ currency: 'USD', total: 2 }]);
+    });
+    it('counts all three independent sources exactly once and reconciles every category/day/currency', async () => {
+      const { id, days } = await seed(3);
+      for (const [day, category, amount, currency] of [[0, 'FOOD', 0.1, 'USD'], [0, 'ACTIVITIES', 0.2, 'USD'], [1, 'ACCOMMODATION', 1.03, 'USD'], [1, 'IN_CITY_TRANSPORT', 2.4, 'EUR'], [1, 'FOOD', 3.6, 'EUR']] as const)
+        await createBudget(id, days[day]._id.toString(), { category, amount, currency }).expect(201);
+      for (const cost of [0.3, 0.4]) await request(app.getHttpServer()).post('/api/itineraries/' + id + '/days/' + days[0]._id + '/activities').set('Cookie', auth).send({ name: 'Ticket', description: 'Independent', cost, currency: 'USD' }).expect(201);
+      await models().activity.create({ dayId: days[0]._id, name: 'Free', description: 'No cost' });
+      for (const amount of [0.5, 0.6]) await request(app.getHttpServer()).post('/api/itineraries/' + id + '/transport-costs').set('Cookie', auth).send({ dayId: days[0]._id.toString(), mode: 'BUS', fromCityId: 'CAI', toCityId: 'GIZ', amount, currency: 'USD' }).expect(201);
+      const before = await snapshot(id), result = await getTotals(id).expect(200); reconcile(result.body);
+      expect(result.body.totals).toEqual([
+        { currency: 'EUR', total: 6, byCategory: { FOOD: 3.6, ACCOMMODATION: 0, IN_CITY_TRANSPORT: 2.4, ACTIVITIES: 0, INTERCITY_TRANSPORT: 0 } },
+        { currency: 'USD', total: 3.13, byCategory: { FOOD: 0.1, ACCOMMODATION: 1.03, IN_CITY_TRANSPORT: 0, ACTIVITIES: 0.9, INTERCITY_TRANSPORT: 1.1 } },
+      ]);
+      expect(result.body.days[0].totals[0].total).toBe(2.1); expect(result.body.days[2].totals).toEqual([]);
+      expect(await snapshot(id)).toBe(before);
+      expect((await service.findGroups(owner, id)).groups[0].budgetSubtotals).toEqual(result.body.totals.map((row: { currency: string; total: number }) => ({ currency: row.currency, total: row.total })));
+    });
+    it.each([{ amount: -1 }, { amount: 0.001 }, { amount: '1' }, { category: 'BAD' }, { category: 'INTERCITY_TRANSPORT' }, { currency: 'BTC' }, { currency: null }, { amount: null }, { description: null }, { userId: 'override' }, { dayId: new Types.ObjectId().toString() }])('rejects invalid create/update fields %j', async change => {
+      const { id, days } = await seed(1), valid = { category: 'FOOD', amount: 1, currency: 'USD' };
+      const entry = await createBudget(id, days[0]._id.toString(), valid).expect(201);
+      await createBudget(id, days[0]._id.toString(), { ...valid, ...change }).expect(400);
+      await patchBudget(entry.body.id, change).expect(400);
+      expect((await getTotals(id).expect(200)).body.totals[0].total).toBe(1);
+    });
+    it('rejects missing fields, empty PATCH, malformed and nonexistent IDs', async () => {
+      const { id, days } = await seed(1), day = days[0]._id.toString();
+      for (const body of [{}, { category: 'FOOD' }, { amount: 0, currency: 'USD' }]) await createBudget(id, day, body).expect(400);
+      await createBudget('bad', day).expect(400); await createBudget(id, 'bad').expect(400);
+      await listBudget(id, 'bad').expect(400); await getTotals('bad').expect(400);
+      await patchBudget('bad', { amount: 1 }).expect(400); await deleteBudget('bad').expect(400);
+      const entry = await createBudget(id, day).expect(201); await patchBudget(entry.body.id, {}).expect(400);
+      await getTotals(oid().toString()).expect(404); await createBudget(id, oid().toString()).expect(404);
+      await patchBudget(oid().toString(), { amount: 1 }).expect(404); await deleteBudget(oid().toString()).expect(404);
+    });
+    it('enforces authentication, owner-only public access and exact itinerary/day association on every route', async () => {
+      const a = await seed(1), b = await seed(1), day = a.days[0]._id.toString();
+      await models().parent.updateOne({ _id: a.id }, { $set: { visibility: 'PUBLIC' } });
+      const entry = await createBudget(a.id, day).expect(201);
+      for (const cookies of [[], otherAuth]) {
+        const status = cookies.length ? 404 : 401;
+        await createBudget(a.id, day, { category: 'FOOD', amount: 1, currency: 'USD' }, cookies).expect(status);
+        await listBudget(a.id, day, cookies).expect(status); await getTotals(a.id, cookies).expect(status);
+        await patchBudget(entry.body.id, { amount: 2 }, cookies).expect(status); await deleteBudget(entry.body.id, cookies).expect(status);
+      }
+      await createBudget(b.id, day).expect(404); await listBudget(b.id, day).expect(404);
+    });
+    it('returns empty arrays for an empty itinerary and no expenses for existing days', async () => {
+      const empty = await seed(0); expect((await getTotals(empty.id).expect(200)).body).toEqual({ itineraryId: empty.id, totals: [], days: [] });
+      const { id, days } = await seed(2); const result = await getTotals(id).expect(200);
+      expect(result.body.totals).toEqual([]); expect(result.body.days.map((day: { totals: unknown[] }) => day.totals)).toEqual([[], []]);
+      expect((await listBudget(id, days[0]._id.toString()).expect(200)).body).toEqual([]);
+    });
+    it('preserves day associations and derives UTC dates after reorder and start-date changes', async () => {
+      const { id, days } = await seed(3);
+      const entry = await createBudget(id, days[2]._id.toString(), { category: 'FOOD', amount: 1, currency: 'USD' }).expect(201);
+      await service.reorderDay(owner, id, days[2]._id.toString(), { newPosition: 1 });
+      let result = await getTotals(id).expect(200); reconcile(result.body);
+      expect(result.body.days.map((day: { date: string }) => day.date)).toEqual(['2028-02-28', '2028-02-29', '2028-03-01']);
+      expect(result.body.days[0]).toMatchObject({ dayId: days[2]._id.toString(), dayNumber: 1, totals: [{ currency: 'USD', total: 1 }] });
+      expect((await models().budget.findById(entry.body.id))!.dayId.toString()).toBe(days[2]._id.toString());
+      await service.update(owner, id, { startDate: '2028-12-31' }); result = await getTotals(id).expect(200);
+      expect(result.body.days.map((day: { date: string }) => day.date)).toEqual(['2028-12-31', '2029-01-01', '2029-01-02']);
+    });
+    it('cascades budget records on day and itinerary deletion', async () => {
+      const { id, days } = await seed(2);
+      const a = await createBudget(id, days[0]._id.toString()).expect(201), b = await createBudget(id, days[1]._id.toString()).expect(201);
+      await service.removeDay(owner, id, days[0]._id.toString()); expect(await models().budget.findById(a.body.id)).toBeNull();
+      await service.remove(owner, id); expect(await models().budget.findById(b.body.id)).toBeNull(); await getTotals(id).expect(404);
+    });
+    it.each(['create', 'update', 'delete'] as const)('rolls back parent and entry when %s fails after its database write', async kind => {
+      const { id, days } = await seed(1); const entry = await createBudget(id, days[0]._id.toString(), { category: 'FOOD', amount: 1, currency: 'USD' }).expect(201);
+      const before = await snapshot(id), collection = models().budget.collection;
+      const method = kind === 'create' ? 'insertOne' : kind === 'update' ? 'updateOne' : 'deleteOne';
+      const original = collection[method].bind(collection);
+      jest.spyOn(collection, method).mockImplementationOnce((async (...args: unknown[]) => {
+        await (original as (...values: unknown[]) => Promise<unknown>)(...args); throw new Error('ITN-14 injected failure');
+      }) as never);
+      if (kind === 'create') await createBudget(id, days[0]._id.toString()).expect(500);
+      else if (kind === 'update') await patchBudget(entry.body.id, { amount: 2 }).expect(500);
+      else await deleteBudget(entry.body.id).expect(500);
+      expect(await snapshot(id)).toBe(before);
+    });
+    it.each(['day', 'itinerary', 'reorder'] as const)('coordinates creation racing with %s operations without orphans', async kind => {
+      const { id, days } = await seed(2), dayId = days[0]._id.toString();
+      const mutation = kind === 'day' ? service.removeDay(owner, id, dayId) : kind === 'itinerary' ? service.remove(owner, id) : service.reorderDay(owner, id, dayId, { newPosition: 2 });
+      const [created, changed] = await Promise.allSettled([createBudget(id, dayId, { category: 'FOOD', amount: 1, currency: 'USD' }), mutation]);
+      expect(changed.status).toBe('fulfilled'); expect(created.status).toBe('fulfilled');
+      if (created.status === 'fulfilled') expect(kind === 'reorder' ? [201] : [201, 404]).toContain(created.value.status);
+      const records = await models().budget.find({ dayId });
+      expect(records.length).toBe(kind === 'reorder' ? 1 : 0);
+      if (kind === 'reorder') reconcile((await getTotals(id).expect(200)).body);
+    });
+    it('serializes concurrent creates and includes every entry once', async () => {
+      const { id, days } = await seed(1);
+      const results = await Promise.all(Array.from({ length: 4 }, () => createBudget(id, days[0]._id.toString(), { category: 'FOOD', amount: 0.1, currency: 'USD' })));
+      expect(results.map(result => result.status)).toEqual([201, 201, 201, 201]);
+      const result = await getTotals(id).expect(200); reconcile(result.body); expect(result.body.totals[0].total).toBe(0.4);
+    });
+    it('keeps a coherent snapshot when a budget edit commits between totals reads', async () => {
+      const { id, days } = await seed(1); const entry = await createBudget(id, days[0]._id.toString(), { category: 'FOOD', amount: 1, currency: 'USD' }).expect(201);
+      const original = models().parent.findOne.bind(models().parent);
+      let entered!: () => void, release!: () => void;
+      const ready = new Promise<void>(resolve => { entered = resolve; }), gate = new Promise<void>(resolve => { release = resolve; });
+      jest.spyOn(models().parent, 'findOne').mockImplementationOnce((...args) => {
+        const query = original(...args), exec = query.exec.bind(query);
+        jest.spyOn(query, 'exec').mockImplementationOnce(async () => { const result = await exec(); entered(); await gate; return result; });
+        return query;
+      });
+      const pending = app.get(BudgetEntriesService).totals(owner, id);
+      await ready;
+      try { await patchBudget(entry.body.id, { amount: 2 }).expect(200); } finally { release(); }
+      const previous = await pending; reconcile(previous); expect(previous.totals[0].total).toBe(1);
+      expect((await getTotals(id).expect(200)).body.totals[0].total).toBe(2);
+    });
+    it.each(['budget', 'activity', 'transport'] as const)('fails closed on malformed legacy %s costs', async source => {
+      for (const value of [-1, NaN, Infinity, '12', 0.001]) {
+        const { id, days } = await seed(1);
+        await models()[source].collection.insertOne({ dayId: days[0]._id, category: 'FOOD', [source === 'activity' ? 'cost' : 'amount']: value, currency: 'USD' } as never);
+        await getTotals(id).expect(409);
+      }
+    });
+    it('rejects unsupported legacy currencies/categories and unsafe totals', async () => {
+      for (const change of [{ currency: 'BTC' }, { category: 'BAD' }, { amount: 100000000000000 }]) {
+        const { id, days } = await seed(1);
+        await models().budget.collection.insertOne({ dayId: days[0]._id, category: 'FOOD', amount: 1, currency: 'USD', ...change });
+        await getTotals(id).expect(409);
+      }
+    });
+
+    it('reconciles all categories and currencies across the maximum 60 days', async () => {
+      const { id, days } = await seed(60);
+      const expected = new Map<string, bigint>();
+      const budget: Record<string, unknown>[] = [], activities: Record<string, unknown>[] = [], transport: Record<string, unknown>[] = [];
+      for (const [index, day] of days.entries()) for (const currency of ['USD', 'EUR']) {
+        for (const category of Object.values(BudgetCategory)) {
+          const cents = index + 1; budget.push({ dayId: day._id, category, amount: cents / 100, currency });
+          expected.set(currency, (expected.get(currency) ?? 0n) + BigInt(cents));
+        }
+        activities.push({ dayId: day._id, name: 'Ticket', description: 'Cost', cost: 0.07, currency });
+        transport.push({ dayId: day._id, mode: 'BUS', fromCityId: 'CAI', toCityId: 'GIZ', amount: 0.13, currency });
+        expected.set(currency, expected.get(currency)! + 20n);
+      }
+      await models().budget.insertMany(budget); await models().activity.insertMany(activities); await models().transport.insertMany(transport);
+      const result = await getTotals(id).expect(200); reconcile(result.body); expect(result.body.days).toHaveLength(60);
+      for (const row of result.body.totals) expect(money(row.total)).toBe(expected.get(row.currency));
+      expect((await service.findGroups(owner, id)).groups[0].budgetSubtotals).toEqual(result.body.totals.map((row: { currency: string; total: number }) => ({ currency: row.currency, total: row.total })));
+    });
+    it('uses one wire-level primary snapshot for ownership, days and totals and releases the session', async () => {
+      const { id } = await seed(1, true);
+      const commands: { lsid: unknown; readConcern?: { level?: string; atClusterTime?: unknown }; startTransaction?: unknown }[] = [];
+      const listener = (event: { databaseName: string; commandName: string; command: typeof commands[number] }) => {
+        if (event.databaseName === db.name && ['find', 'aggregate'].includes(event.commandName)) commands.push(event.command);
+      };
+      const original = db.startSession.bind(db), sessions: Awaited<ReturnType<typeof original>>[] = [];
+      jest.spyOn(db, 'startSession').mockImplementation(async options => { const session = await original(options); sessions.push(session); return session; });
+      db.getClient().on('commandStarted', listener);
+      try { const result = await app.get(BudgetEntriesService).totals(owner, id); reconcile(result); }
+      finally { db.getClient().off('commandStarted', listener); }
+      expect(commands).toHaveLength(3); expect(sessions).toHaveLength(1); expect(sessions[0].hasEnded).toBe(true);
+      for (const command of commands) { expect(command.lsid).toEqual(commands[0].lsid); expect(command.readConcern?.level).toBe('snapshot'); expect(command.startTransaction).toBeUndefined(); }
+      expect(commands[1].readConcern?.atClusterTime).toEqual(commands[2].readConcern?.atClusterTime);
+      expect(commands[1].readConcern?.atClusterTime).toBeDefined();
+    });
+    it('refuses missing required legacy amounts/currencies and ignores activities with no cost', async () => {
+      for (const source of ['budget', 'transport'] as const) {
+        const { id, days } = await seed(1);
+        await models()[source].collection.insertOne({ dayId: days[0]._id, category: 'FOOD', currency: 'USD' } as never);
+        await getTotals(id).expect(409);
+      }
+      const { id, days } = await seed(1);
+      await models().activity.collection.insertOne({ dayId: days[0]._id, cost: 1 } as never); await getTotals(id).expect(409);
+      await models().activity.deleteMany({ dayId: days[0]._id });
+      await models().activity.collection.insertOne({ dayId: days[0]._id, cost: null } as never);
+      expect((await getTotals(id).expect(200)).body.totals).toEqual([]);
+    });
+    it.each([
+      ['post', 'day'], ['get', 'day'], ['patch', 'entry'], ['delete', 'entry'], ['get', 'summary'],
+    ] as const)('returns 404 for obsolete %s %s route without changing stored budgets', async (method, kind) => {
+      const { id, days } = await seed(1);
+      const entry = await createBudget(id, days[0]._id.toString(), { category: 'FOOD', amount: 1, currency: 'USD' }).expect(201);
+      const before = await snapshot(id);
+      const route = kind === 'day' ? '/api/itineraries/' + id + '/days/' + days[0]._id + '/budget-entries'
+        : kind === 'entry' ? '/api/budget-entries/' + entry.body.id : '/api/itineraries/' + id + '/budget-totals';
+      const call = request(app.getHttpServer())[method](route).set('Cookie', auth);
+      if (method === 'post') call.send({ category: 'FOOD', amount: 2, currency: 'USD' });
+      if (method === 'patch') call.send({ amount: 2 });
+      await call.expect(404);
+      expect(await snapshot(id)).toBe(before);
+    });
+    it('documents all five authenticated endpoints and response-only transport category', () => {
+      const document = SwaggerModule.createDocument(app, createSwaggerConfig());
+      for (const [route, methods] of [['/api/itineraries/{id}/days/{dayId}/budgets', ['get', 'post']], ['/api/budgets/{id}', ['patch', 'delete']], ['/api/itineraries/{id}/budget-summary', ['get']]] as const) {
+        for (const method of methods) {
+          const operation = document.paths[route][method]!;
+          expect(operation.security).toContainEqual({ access_token: [] });
+          expect(operation.tags).toEqual(['budgets']);
+          expect(operation.responses).toHaveProperty(method === 'post' ? '201' : '200');
+        }
+      }
+      for (const obsolete of ['/api/itineraries/{id}/days/{dayId}/budget-entries', '/api/budget-entries/{id}', '/api/itineraries/{id}/budget-totals'])
+        expect(document.paths).not.toHaveProperty(obsolete);
+      expect(document.components!.schemas!.CreateBudgetEntryDto.properties!.category).toMatchObject({ enum: Object.values(BudgetCategory) });
+      expect(document.components!.schemas!.BudgetCategoryTotalsDto.properties).toHaveProperty('INTERCITY_TRANSPORT');
     });
   });
 

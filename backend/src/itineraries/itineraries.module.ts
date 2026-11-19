@@ -1,3 +1,5 @@
+import { BudgetEntriesController } from './budget-entries.controller';
+import { BudgetEntriesService } from './budget-entries.service';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
@@ -86,7 +88,15 @@ import { ItineraryExportService } from './itinerary-export.service';
       },
     ]),
   ],
-  controllers: [PublicItinerariesController, PublicItineraryCloneController, ItinerariesController, ActivitiesController, TransportCostsController, ItineraryExportController],
-  providers: [ItinerariesService, ActivitiesService, TransportCostsService, ItineraryExportService],
+  controllers: [
+    BudgetEntriesController,
+    PublicItinerariesController,
+    PublicItineraryCloneController,
+    ItinerariesController,
+    ActivitiesController,
+    TransportCostsController,
+    ItineraryExportController,
+  ],
+  providers: [BudgetEntriesService, ItinerariesService, ActivitiesService, TransportCostsService, ItineraryExportService],
 })
 export class ItinerariesModule {}
