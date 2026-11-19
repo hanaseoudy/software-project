@@ -7,6 +7,8 @@ import { Flight, FlightSchema } from '../flights/schemas/flight.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { FlightBookingConfirmationService } from './flight-booking-confirmation.service';
+import { FlightCancellationService } from './flight-cancellation.service';
+import { FlightChangeService } from './flight-change.service';
 import { FlightBookingsController } from './flight-bookings.controller';
 import { FlightBookingsService } from './flight-bookings.service';
 import { FlightCompletionService } from './flight-completion.service';
@@ -16,6 +18,7 @@ import {
   FlightBookingSchema,
 } from './schemas/flight-booking.schema';
 import { Refund, RefundSchema } from '../payments/schemas/refund.schema';
+import { FlightChange, FlightChangeSchema } from './schemas/flight-change.schema';
 
 @Module({
   imports: [
@@ -28,6 +31,7 @@ import { Refund, RefundSchema } from '../payments/schemas/refund.schema';
       { name: Airport.name, schema: AirportSchema },
       { name: FlightBooking.name, schema: FlightBookingSchema },
       { name: Refund.name, schema: RefundSchema },
+      { name: FlightChange.name, schema: FlightChangeSchema },
     ]),
   ],
   controllers: [FlightBookingsController],
@@ -36,6 +40,8 @@ import { Refund, RefundSchema } from '../payments/schemas/refund.schema';
     FlightHoldExpiryService,
     FlightCompletionService,
     FlightBookingConfirmationService,
+    FlightCancellationService,
+    FlightChangeService,
   ],
   exports: [FlightBookingsService, FlightBookingConfirmationService],
 })

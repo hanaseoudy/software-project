@@ -1,7 +1,30 @@
+import { ItineraryBookingLinksController } from './itinerary-booking-links.controller';
+import { ItineraryBookingLinksService } from './itinerary-booking-links.service';
+import { ItineraryBookingLink, ItineraryBookingLinkSchema } from './schemas/itinerary-booking-link.schema';
+import { FlightBooking, FlightBookingSchema } from '../flight-bookings/schemas/flight-booking.schema';
+import { HotelBooking, HotelBookingSchema } from '../hotel-bookings/schemas/hotel-booking.schema';
+import { Flight, FlightSchema } from '../flights/schemas/flight.schema';
+import { Airport, AirportSchema } from '../airports/schemas/airport.schema';
+import { Hotel, HotelSchema } from '../hotels/schemas/hotel.schema';
+import { FlightsModule } from '../flights/flights.module';
+import { AirportsModule } from '../airports/airports.module';
+import { ItineraryFlightsController } from './itinerary-flights.controller';
+import { ItineraryFlightsService } from './itinerary-flights.service';
+import { HotelsModule } from '../hotels/hotels.module';
+import { ItineraryHotelsController } from './itinerary-hotels.controller';
+import { ItineraryHotelsService } from './itinerary-hotels.service';
+import { BudgetEntriesController } from './budget-entries.controller';
+import { BudgetEntriesService } from './budget-entries.service';
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { UsersModule } from '../users/users.module';
+import { BudgetConversionService } from './budget-conversion.service';
+import { ExchangeRatesService } from './exchange-rates.service';
+import { ExchangeRateSnapshot, ExchangeRateSnapshotSchema } from './schemas/exchange-rate-snapshot.schema';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthModule } from '../auth/auth.module';
+import { UploadsModule } from '../uploads/uploads.module';
 
 import {
   Country,
@@ -44,13 +67,28 @@ import { ActivitiesService } from './activities.service';
 import { TransportCostsController } from './transport-costs.controller';
 import { TransportCostsService } from './transport-costs.service';
 import { ItinerariesController } from './itineraries.controller';
-import { PublicItinerariesController } from './public-itineraries.controller';
+import { PublicItinerariesController, PublicItineraryCloneController } from './public-itineraries.controller';
 import { ItinerariesService } from './itineraries.service';
+import { ItineraryExportController } from './itinerary-export.controller';
+import { ItineraryExportService } from './itinerary-export.service';
 
 @Module({
   imports: [
     AuthModule,
+    ConfigModule,
+    UsersModule,
+    FlightsModule,
+    AirportsModule,
+    HotelsModule,
+    UploadsModule,
     MongooseModule.forFeature([
+      { name: ItineraryBookingLink.name, schema: ItineraryBookingLinkSchema },
+      { name: FlightBooking.name, schema: FlightBookingSchema },
+      { name: HotelBooking.name, schema: HotelBookingSchema },
+      { name: Flight.name, schema: FlightSchema },
+      { name: Airport.name, schema: AirportSchema },
+      { name: Hotel.name, schema: HotelSchema },
+      { name: ExchangeRateSnapshot.name, schema: ExchangeRateSnapshotSchema },
       { name: Currency.name, schema: CurrencySchema },
       {
         name: Itinerary.name,
@@ -82,7 +120,29 @@ import { ItinerariesService } from './itineraries.service';
       },
     ]),
   ],
-  controllers: [PublicItinerariesController, ItinerariesController, ActivitiesController, TransportCostsController],
-  providers: [ItinerariesService, ActivitiesService, TransportCostsService],
+  controllers: [
+    ItineraryBookingLinksController,
+    ItineraryHotelsController,
+    ItineraryFlightsController,
+    BudgetEntriesController,
+    PublicItinerariesController,
+    PublicItineraryCloneController,
+    ItinerariesController,
+    ActivitiesController,
+    TransportCostsController,
+    ItineraryExportController,
+  ],
+  providers: [
+    ItineraryBookingLinksService,
+    ItineraryHotelsService,
+    BudgetEntriesService,
+    BudgetConversionService,
+    ExchangeRatesService,
+    ItinerariesService,
+    ActivitiesService,
+    TransportCostsService,
+    ItineraryExportService,
+    ItineraryFlightsService,
+  ],
 })
 export class ItinerariesModule {}

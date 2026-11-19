@@ -22,6 +22,7 @@ import { AdminModule } from './admin/admin.module';
 import { FlightsModule } from './flights/flights.module';
 import { FlightBookingsModule } from './flight-bookings/flight-bookings.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { FavouritesModule } from './favourites/favourites.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
     ReportsModule,
     FlightBookingsModule,
     AuditLogsModule,
+    FavouritesModule,
   ],
 
   controllers: [AppController],

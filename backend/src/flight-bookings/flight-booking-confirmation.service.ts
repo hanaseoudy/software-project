@@ -159,8 +159,19 @@ export class FlightBookingConfirmationService implements OnModuleInit {
     const converted: Types.ObjectId[] = [];
     try {
       for (const flightId of flightIds) {
+        // The filter must itself require enough held seats in this cabin:
+        // Mongoose always touches updatedAt, so modifiedCount would be 1 even
+        // when no seat was converted. matchedCount is the reliable check.
         const result = await this.flightModel.updateOne(
-          { _id: flightId },
+          {
+            _id: flightId,
+            cabins: {
+              $elemMatch: {
+                cabinClass: booking.cabinClass,
+                heldSeats: { $gte: seats },
+              },
+            },
+          },
           {
             $inc: {
               'cabins.$[c].heldSeats': -seats,
@@ -176,7 +187,7 @@ export class FlightBookingConfirmationService implements OnModuleInit {
             ],
           },
         );
-        if (result.modifiedCount !== 1) {
+        if (result.matchedCount !== 1) {
           throw new Error(
             `Flight ${String(flightId)}: could not convert ${seats} held seat(s) to booked`,
           );
@@ -187,7 +198,15 @@ export class FlightBookingConfirmationService implements OnModuleInit {
       // Put back what was already converted so a retry starts from the same state.
       for (const flightId of converted) {
         await this.flightModel.updateOne(
-          { _id: flightId },
+          {
+            _id: flightId,
+            cabins: {
+              $elemMatch: {
+                cabinClass: booking.cabinClass,
+                bookedSeats: { $gte: seats },
+              },
+            },
+          },
           {
             $inc: {
               'cabins.$[c].heldSeats': seats,

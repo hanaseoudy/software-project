@@ -19,6 +19,13 @@ export class HotelReviewDto {
 
   @ApiProperty({ example: '2026-11-01T10:00:00.000Z' })
   createdAt!: string;
+
+  @ApiProperty({
+    nullable: true,
+    description: "HTL-26: the hotel moderator's reply, or null when there is none",
+    example: { text: 'Thank you for staying with us.', repliedAt: '2026-11-18T10:00:00.000Z' },
+  })
+  reply!: { text: string; repliedAt: string } | null;
 }
 
 export class AvailableRoomDto {

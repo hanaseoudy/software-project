@@ -30,6 +30,7 @@ import { AuthModule } from '../auth/auth.module';
     AuthModule,
   ],
   providers: [UsersService, AccountDeactivationService],
+  exports: [UsersService],
   controllers: [UsersController, AccountDeactivationController]
 })
 export class UsersModule {}

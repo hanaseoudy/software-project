@@ -1232,6 +1232,29 @@ describe('HotelsService', () => {
       ]);
     });
  
+    it('shows the moderator reply on each review of the details page, or null', async () => {
+      hotelWithPolicy();
+      const userId = new Types.ObjectId();
+      const repliedAt = day('2026-11-02');
+      reviewModel.find.mockReturnValue(
+        chain([
+          {
+            _id: new Types.ObjectId(),
+            user: userId,
+            rating: 4,
+            comment: 'Nice',
+            createdAt: day('2026-11-01'),
+            reply: { text: 'Thank you!', moderator: new Types.ObjectId(), repliedAt },
+          },
+          { _id: new Types.ObjectId(), user: userId, rating: 3, createdAt: day('2026-10-30') },
+        ]),
+      );
+      userModel.find.mockReturnValue(chain([{ _id: userId, firstName: 'Sara', lastName: 'Mohamed' }]));
+      const result = await service.getDetails(idOf(), {});
+      expect(result.reviews[0].reply).toEqual({ text: 'Thank you!', repliedAt: repliedAt.toISOString() });
+      expect(result.reviews[1].reply).toBeNull();
+    });
+
     it.each([
       [{ checkIn: '2026-12-10' }, 'checkOut'],
       [{ checkOut: '2026-12-13' }, 'checkIn'],
