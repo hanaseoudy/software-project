@@ -1,3 +1,4 @@
+import { ItineraryBookingLinksService } from './itinerary-booking-links.service';
 import {
   BadRequestException,
   ConflictException,
@@ -51,6 +52,7 @@ export class BudgetEntriesService {
     @InjectModel(Currency.name)
     private readonly currencies: Model<CurrencyDocument>,
     @InjectConnection() private readonly connection: Connection,
+    private readonly bookingLinks: ItineraryBookingLinksService,
   ) {}
   private invalid(field: string, message: string): never {
     throw new BadRequestException({
@@ -341,6 +343,7 @@ export class BudgetEntriesService {
         throw new ConflictException(
           'Existing itinerary day numbering is invalid',
         );
+      const bookingExpenses = await this.bookingLinks.aggregationExpenses(parent._id, session);
       const sources = [
         {
           model: this.entries,
@@ -454,7 +457,7 @@ export class BudgetEntriesService {
           {
             $project: {
               expenses: {
-                $concatArrays: sources.map((source) => '$' + source.name),
+                $concatArrays: sources.map((source) => '$' + source.name as unknown).concat([bookingExpenses]),
               },
             },
           },

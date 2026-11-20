@@ -19,7 +19,7 @@ describe('ITN-07 transaction retry policy', () => {
     session = { startTransaction: jest.fn(), commitTransaction: jest.fn().mockResolvedValue(undefined), abortTransaction: jest.fn().mockResolvedValue(undefined), endSession: jest.fn().mockResolvedValue(undefined), inTransaction: jest.fn().mockReturnValue(true) };
     connection = { startSession: jest.fn().mockResolvedValue(session) };
     const parent = { findOneAndUpdate: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(id) }) }) };
-    service = new ItinerariesService(parent as never, {} as never, {} as never, {} as never, {} as never, {} as never, connection as never, {} as never, {} as never);
+    service = new ItinerariesService(parent as never, {} as never, {} as never, {} as never, {} as never, {} as never, connection as never, {} as never, {} as never, { aggregationExpenses: async () => ({ $literal: [] }), removeForDays: async () => undefined, removeForItinerary: async () => undefined } as never);
   });
   it('bounds transient transaction retries and returns 409', async () => {
     const work = jest.fn().mockRejectedValue(labelled('TransientTransactionError'));
@@ -156,7 +156,7 @@ describe('ITN-08 reorderDay', () => {
       }),
     };
     parentModel = { findOneAndUpdate: jest.fn(() => ({ lean: async () => parent })) };
-    service = new ItinerariesService(parentModel as never, {} as never, model as never, {} as never, {} as never, {} as never, { startSession: async () => session } as never, {} as never, {} as never);
+    service = new ItinerariesService(parentModel as never, {} as never, model as never, {} as never, {} as never, {} as never, { startSession: async () => session } as never, {} as never, {} as never, { aggregationExpenses: async () => ({ $literal: [] }), removeForDays: async () => undefined, removeForItinerary: async () => undefined } as never);
   });
   const reorder = (day: string, newPosition: number) => service.reorderDay(owner, itineraryId.toString(), day, { newPosition });
   it.each([[3, 2, [0, 3, 1, 2]], [0, 4, [1, 2, 3, 0]], [2, 1, [2, 0, 1, 3]]] as const)('moves index %s to position %s without collisions', async (index, position, order) => {
@@ -309,7 +309,7 @@ describe('ITN-09 read-only group snapshots', () => {
     const source = (name: string) => ({ collection: { name } });
     service = new ItinerariesService(parentModel as never, {} as never, dayModel as never,
       source('activities') as never, source('budgetentries') as never, source('transportcosts') as never,
-      connection as never, cityModel as never, {} as never);
+      connection as never, cityModel as never, {} as never, { aggregationExpenses: async () => ({ $literal: [] }), removeForDays: async () => undefined, removeForItinerary: async () => undefined } as never);
   });
   const read = () => service.findGroups(owner, id.toString());
   it('uses one snapshot session for every read and aggregation, without writes or transactions', async () => {
@@ -425,7 +425,7 @@ describe('ITN-20 visibility updates', () => {
     connection = { startSession: jest.fn().mockResolvedValue(session) };
     parent = { findById: jest.fn().mockResolvedValue(document), findOneAndUpdate: jest.fn((filter, update) => update.$inc ? { lean: async () => ({ _id: id }) } : Promise.resolve({ ...update.$set, _id: id })) };
     const countries = { find: jest.fn(() => ({ lean: async () => [{ code: 'EG' }] })) };
-    service = new ItinerariesService(parent as never, countries as never, {} as never, {} as never, {} as never, {} as never, connection as never, {} as never, {} as never);
+    service = new ItinerariesService(parent as never, countries as never, {} as never, {} as never, {} as never, {} as never, connection as never, {} as never, {} as never, { aggregationExpenses: async () => ({ $literal: [] }), removeForDays: async () => undefined, removeForItinerary: async () => undefined } as never);
   });
   it.each([ItineraryVisibility.PUBLIC, ItineraryVisibility.PRIVATE])('commits %s with the shared parent write and only allowed supplied fields', async visibility => {
     const dto = { visibility, title: 'Changed', countryIds: ['EG'], startDate: '2028-02-29', userId: 'attacker', isHidden: false };
@@ -503,7 +503,7 @@ describe('ITN-20 public read consistency and allowlists', () => {
     connection.getClient.mockReturnValue({ startSession: connection.startSession });
     service = new ItinerariesService({ collection: { name: 'itineraries' } } as never, {} as never, { collection: { name: 'itinerarydays' } } as never,
       { collection: { name: 'activities' } } as never, { collection: { name: 'budgetentries' } } as never, { collection: { name: 'transportcosts' } } as never,
-      connection as never, {} as never, { collection: { name: 'users' } } as never);
+      connection as never, {} as never, { collection: { name: 'users' } } as never, { aggregationExpenses: async () => ({ $literal: [] }), removeForDays: async () => undefined, removeForItinerary: async () => undefined } as never);
   });
   afterEach(() => jest.restoreAllMocks());
   it('pins the detail snapshot to reply.operationTime and rechecks outside the snapshot', async () => {
@@ -628,7 +628,7 @@ describe('ITN-21 public search filters', () => {
       runCursorCommand: jest.fn().mockReturnValue(cursor),
     } };
     service = new ItinerariesService({ collection: { name: 'itineraries' } } as never, { collection: { name: 'countries' } } as never,
-      { collection: { name: 'itinerarydays' } } as never, {} as never, {} as never, {} as never, connection as never, { collection: { name: 'cities' } } as never, {} as never);
+      { collection: { name: 'itinerarydays' } } as never, {} as never, {} as never, {} as never, connection as never, { collection: { name: 'cities' } } as never, {} as never, { aggregationExpenses: async () => ({ $literal: [] }), removeForDays: async () => undefined, removeForItinerary: async () => undefined } as never);
   });
 
   it('keeps the plain discovery pipeline unchanged without filters', async () => {

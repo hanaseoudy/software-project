@@ -1,3 +1,4 @@
+import { ItineraryBookingLink } from '../itineraries/schemas/itinerary-booking-link.schema';
 import {
   BadRequestException,
   ConflictException,
@@ -68,6 +69,7 @@ export class AdminReportsService {
     @InjectModel(TransportCost.name) private readonly transportCostModel: Model<TransportCostDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     private readonly auditLogs: AuditLogsService,
+    @InjectModel(ItineraryBookingLink.name) private readonly bookingLinks: Model<ItineraryBookingLink>,
   ) {}
 
   // GEN-10: the moderation queue. Open reports by default, oldest first, page size 10 (GEN-05).
@@ -297,6 +299,7 @@ export class AdminReportsService {
         await this.budgetEntryModel.deleteMany({ dayId: { $in: dayIds } }, { session }).exec();
         await this.transportCostModel.deleteMany({ dayId: { $in: dayIds } }, { session }).exec();
         await this.itineraryDayModel.deleteMany({ itineraryId: id }, { session }).exec();
+        await this.bookingLinks.deleteMany({ itineraryId: id }, { session }).exec();
         return [];
       }
     }

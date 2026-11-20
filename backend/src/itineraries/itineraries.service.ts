@@ -1,3 +1,4 @@
+import { ItineraryBookingLinksService } from './itinerary-booking-links.service';
 import {
   BadRequestException,
   ConflictException,
@@ -82,6 +83,7 @@ export class ItinerariesService {
     // ITN-21: author name for public itineraries and clone attribution
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    private readonly bookingLinks: ItineraryBookingLinksService,
   ) {}
 
   private authorName(user?: { firstName?: string; lastName?: string } | null): string | null {
@@ -492,6 +494,7 @@ export class ItinerariesService {
   }
 
   private async groupBudgetSubtotals(itineraryId: Types.ObjectId, groupDayIds: Types.ObjectId[][], session: ClientSession) {
+    const bookingExpenses = await this.bookingLinks.aggregationExpenses(itineraryId, session);
     const sources = [
       { model: this.activityModel, field: 'cost', name: 'activityCosts', optional: true },
       { model: this.budgetEntryModel, field: 'amount', name: 'budgetCosts', optional: false },
@@ -525,7 +528,7 @@ export class ItinerariesService {
       } })),
       { $project: {
         groupIndex: { $indexOfArray: [{ $map: { input: groupDayIds, as: 'dayIds', in: { $in: ['$_id', '$$dayIds'] } } }, true] },
-        expenses: { $concatArrays: sources.map(source => `$${source.name}`) },
+        expenses: { $concatArrays: sources.map(source => `$${source.name}` as unknown).concat([bookingExpenses]) },
       } },
       { $unwind: '$expenses' },
       { $group: {
@@ -735,11 +738,13 @@ export class ItinerariesService {
     await this.activityModel.deleteMany(filter, { session });
     await this.budgetEntryModel.deleteMany(filter, { session });
     await this.transportCostModel.deleteMany(filter, { session });
+    await this.bookingLinks.removeForDays(dayIds, session);
   }
 
   // ITN-07 only: native-currency totals. The full summary and FX conversion
   // endpoints belong to ITN-14 / ITN-18. Decimal aggregation avoids 0.1 + 0.2 drift.
   private async survivingBudgetTotals(itineraryId: Types.ObjectId, session: ClientSession) {
+    const bookingExpenses = await this.bookingLinks.aggregationExpenses(itineraryId, session);
     const sources = [
       { model: this.activityModel, field: 'cost', name: 'activityCosts' },
       { model: this.budgetEntryModel, field: 'amount', name: 'budgetCosts' },
@@ -755,7 +760,7 @@ export class ItinerariesService {
           { $project: { _id: 0, currency: '$_id', amount: 1 } },
         ],
       } })),
-      { $project: { expenses: { $concatArrays: sources.map(source => `$${source.name}`) } } },
+      { $project: { expenses: { $concatArrays: sources.map(source => `$${source.name}` as unknown).concat([bookingExpenses]) } } },
       { $unwind: '$expenses' },
       { $group: { _id: '$expenses.currency', total: { $sum: '$expenses.amount' } } },
       { $sort: { _id: 1 } },
@@ -911,6 +916,7 @@ export class ItinerariesService {
       ).lean();
       await this.deleteDayExpenses(days.map(day => day._id), session);
       await this.itineraryDayModel.deleteMany({ itineraryId: itinerary._id }, { session });
+      await this.bookingLinks.removeForItinerary(itinerary._id, session);
       const result = await this.itineraryModel.deleteOne(
         { _id: itinerary._id, userId: new Types.ObjectId(userId) }, { session },
       );

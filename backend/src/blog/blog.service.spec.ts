@@ -3,6 +3,11 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
 import { BlogService } from './blog.service';
 import { Post, PostStatus } from './schemas/post.schema';
+import { Like } from './schemas/like.schema';
+import { Comment } from './schemas/comment.schema';
+import { User } from '../users/schemas/user.schema';
+import { Itinerary } from '../itineraries/schemas/itinerary.schema';
+import { UploadsService } from '../uploads/uploads.service';
 
 describe('BlogService', () => {
   let service: BlogService;
@@ -24,7 +29,15 @@ describe('BlogService', () => {
     postModel.create.mockImplementation(async (data: Record<string, unknown>) => fakePost(data));
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [BlogService, { provide: getModelToken(Post.name), useValue: postModel }],
+      providers: [
+  BlogService,
+  { provide: getModelToken(Post.name), useValue: postModel },
+  { provide: getModelToken(Like.name), useValue: {} },
+  { provide: getModelToken(Comment.name), useValue: {} },
+  { provide: getModelToken(User.name), useValue: {} },
+  { provide: UploadsService, useValue: {} },
+  { provide: getModelToken(Itinerary.name), useValue: {} },
+],
     }).compile();
 
     service = module.get<BlogService>(BlogService);

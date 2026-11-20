@@ -1715,6 +1715,21 @@ The personal AI log was left unchanged throughout source implementation and test
 
 ================================================
 
+ITN-26 — Flight Search from Itinerary Destination and Dates
+Date: 2026-11-19; Student: Seif Allam; AI tool: OpenAI Codex
+Prompts (summaries, not verbatim): Inspect AGENTS.md, PDF flight/itinerary endpoints, mandatory ITN-26 dependencies, airport/city data, flight search, availability, passenger pricing, filtering, dates and tests. Present API design and exact file list, then wait. After approval, implement only 13 files, preserve the legacy unpaginated flight contract, test at least three destination-city airports, and run focused/regression/isolated integration checks, build, lint and diff checks. No shared Atlas or shared prompt log; no commit/push/PR.
+Used AI assistance to implement authenticated owner-only GET /api/itineraries/:id/flights, the exact PDF section 8.8 path. Query supports predefined departureAirport IATA code, ONE_WAY/ROUND_TRIP, date overrides, existing passenger/cabin/price/sort fields and outboundPage/returnPage.
+Resolved current itinerary order, canonical first-day city and valid predefined airport references in one primary snapshot. Defaulted outbound to itinerary start and return to last-day calendar date. Matched dates at each leg departure airport using existing departureLocalDate semantics; no client destination overrides.
+Extended FlightsService with searchToAirports and a shared searchRoutes path. Batched destination sets into one flight query per leg, preserving the existing cabin availability, passenger pricing, filters and formatter. Deduplicated by flight _id before global pagination, with stable ID ties for the new city-search path. Return legs depart from eligible city airports and arrive at the selected origin.
+GEN-05 discrepancy: existing /api/flights/search has no pagination. User explicitly approved per-leg {items,total,page,pageSize,totalPages} for the new itinerary endpoint while keeping legacy outbound/return arrays unchanged.
+Production GEN-12 airport data was not changed. The isolated integration suite extends only its mocked canonical reference dataset with LGW and STN, yielding three valid London airports alongside LHR for real MongoDB query/pagination tests.
+Troubleshooting: corrected strict TypeScript ObjectId filter/map typing during build verification; corrected the initial Jest working-directory invocation. No assertions were weakened.
+Verification: 74 focused ITN-26/shared-flight unit tests passed in 4 suites. Combined itinerary + flight unit regressions: 327 passed in 17 suites, including focused tests. Focused isolated ITN-26 integration: 54 passed. Combined itinerary integration: 187 passed in 2 suites, including all 54 new tests. Final runs had zero failures and zero skips.
+Integration covered three-airport global filtering/sorting/counts/pages, independent return pages, correct reverse routes, flight-ID deduplication versus equal flight numbers, real legacy request/response/pricing/availability parity, UTC/local-date boundaries, defaults/overrides, one-day trips, auth/ownership, invalid/stale references, reorder/edit/delete changes, coherent concurrent snapshots, fixed per-leg flight query counts and no itinerary/inventory/booking/hold writes.
+Backend build passed. Lint passed with six pre-existing unused-import warnings. git diff --check passed. Only existing locked npm dependencies installed locally; manifests/schemas/reference data unchanged.
+Testing used mocks and a dedicated disposable localhost MongoDB replica set with UUID databases and an existing local binary; no shared Atlas access. Owned test database processes and temporary data were cleaned up.
+Limits: production reference data currently has one airport per city. Three-airport behavior was verified with synthetic canonical fixtures and real MongoDB, not production data. Snapshot/availability reads do not reserve seats or prevent later edits; legacy availability consistency is retained. Global sorting/pagination loads matching flights in memory and has not been production-load benchmarked. Full unrelated backend suites were not run.
+Only the 13 approved files changed, including this worktree-local log. Previous entries preserved. Shared AI_PROMPTS.txt and other worktrees untouched. No commit, push or PR.
 Date: 2026-11-19
 Student: Seif Allam
 AI Tool: Codex
@@ -1732,7 +1747,6 @@ reuse of GEN-08 validation and storage, transaction-protected image references,
 and post-commit cleanup for unreferenced activity files. Added service and HTTP
 tests covering write retries, uncertain commits, legacy URLs and request validation.
 
-================================================
 
 Date: 2026-11-19
 Student: Seif Allam
@@ -1749,7 +1763,6 @@ Added filename-based removal to the existing activity transaction and cleanup fl
 Added Swagger documentation and regression coverage for authentication, repeated
 removal, unattached filenames, ambiguous references and traversal attempts.
 
-================================================
 
 ITN-14 — Daily Budget Entries and Itinerary Totals
 Date: 2026-11-19
@@ -1777,9 +1790,7 @@ Verification:
 - Used an isolated localhost MongoDB replica set with unique disposable databases and the existing local mongod binary; no Atlas or shared records accessed. Existing identical locked dependencies reused locally.
 - Full unrelated backend suites were not run for this task. No FX conversion or purchase-level deduplication; distinct stored records count separately. Consistent reads may reflect the snapshot established before an overlapping update.
 - No commit, push or PR. Shared AI_PROMPTS.txt and original software-project workspace were not modified.
-================================================
 
-================================================
 ITN-14 review fix — PDF section 8.8 endpoint names
 Date: 2026-11-19; Student: Seif Allam; AI tool: OpenAI Codex
 Prompt (summary, not verbatim): Inspect PDF section 8.8 and correct the five ITN-14 routes after approval; preserve all service/DTO/schema behavior, remove obsolete routes, update tests and Swagger, and append this worktree-only log. No commit or push.
@@ -1789,7 +1800,6 @@ Contracts, status codes, ownership, currency validation, monetary precision, tra
 Verification: focused ITN-14 unit tests 56 passed; itinerary unit regressions 275 passed; isolated itinerary integration tests 172 passed (including all 43 ITN-14 tests). No failures or skips. Five obsolete HTTP combinations return 404 and are absent from Swagger; all five corrected combinations and prior budget calculations pass.
 Backend build, lint and git diff --check passed. Lint retains five pre-existing unused-import warnings. Used a dedicated disposable localhost replica set; no shared Atlas access.
 Only the four approved files changed. Original workspace and shared AI_PROMPTS.txt untouched. No commit, push or PR.
-================================================
 
 ITN-25 — Hotel Search from Itinerary City-Group Dates
 Date: 2026-11-19; Student: Seif Allam; AI tool: OpenAI Codex
@@ -1804,4 +1814,33 @@ Backend build passed. Lint passed with six pre-existing unused-import warnings i
 Used only mocks and a dedicated disposable localhost MongoDB replica set with unique temporary databases and an existing mongod binary; no shared Atlas access. Test-owned database processes/data were cleaned up.
 Limits: past group dates are rejected by HTL-11. Overlapping edits may complete after the group snapshot; subsequent requests recalculate. Hotel availability retains HTL-11 consistency and does not reserve rooms. The selection must remain a current first-day boundary; otherwise refresh groups. No booking creation or itinerary mutation.
 Only the approved ten files changed, including this worktree-local personal log. All prior entries preserved. Shared AI_PROMPTS.txt and other worktrees unchanged. No commit, push or PR.
+
+================================================
+Date: 2026-11-19
+Student: Seif Allam
+Tool: Codex (ChatGPT)
+Related Requirement: ITN-18
+Prompt:
+Inspect the official ITN-18 endpoint and its ITN-14, ACC-09 and PAY-04 dependencies before editing. After approval, implement opt-in preferred-currency budget reporting with FXRatesAPI, daily MongoDB caching, bounded recovery for failed or abandoned refreshes, last-known-good fallback, exact rounding and reconciliation, and booking/payment isolation. Use the approved 14-file list and verify with mocked provider responses and an isolated local MongoDB replica set.
+How the output was used:
+Used the approved design to add conversion to the existing budget-summary route via convert=preferred. Reused the owner-only ITN-14 snapshot for budget entries, activity costs and intercity transport and the current ACC-09 profile preference with GEN-12 checks. The provider's rate date and freshness are exposed separately from the UTC refresh claim. Added atomic cross-instance claims, a 60-second cooldown, one recovery attempt per UTC day, and a fenced last-known-good snapshot. Missing required rates produce an explicit 503. Added unit and local replica-set coverage for conversion, refresh, concurrency, rollback, authorization, Swagger and booking/payment isolation. Live provider access and plan behavior were not verified.
+================================================
+
+================================================
+ITN-27 — Bonus: Link Bookings to Itinerary Days and Budgets
+Date: 2026-11-19; Student: Seif Allam; AI tool: OpenAI Codex
+Prompts (summaries, not verbatim): Inspect PDF/bonus scope, booking lifecycles, ITN-05/14/18, PAY-04, allocation, privacy, cascades and concurrency; propose exact API/design/files and wait. Implement the approved 21-file design only, preserve all booking/payment/refund records, run mocks/local replica-set tests, and do not commit/push/open a PR.
+Clarification: the current flight model has one direct outboundFlight and optional returnFlight, not connecting journeys. Reported that blocker before editing; user explicitly approved direct one-way/round-trip support and rejection of unsupported or malformed connecting structures. Outbound airport-local arrival and canonical city determine the sole flight anchor, never the return leg.
+Implemented POST/GET /api/itineraries/:id/bookings and DELETE /api/itineraries/:id/bookings/:linkId with existing JWT/owner checks. New ItineraryBookingLink collection has a global unique bookingType/bookingId index; price/currency overrides are rejected.
+Derived booking contributions in a batched read-only snapshot instead of copying BudgetEntry records. Flight totalPrice+baggageFees counts once under INTERCITY_TRANSPORT. Hotels require all occupied nights and canonical city match; full stored total is split in integer cents with remainder assigned to earliest nights under ACCOMMODATION.
+CONFIRMED/COMPLETED bookings require finalized references. Cancelled, incompatible or inaccessible sources remain inactive and contribute zero; inaccessible sources reveal no reference/status/currency/amount. Reordering and booking/date/city changes are revalidated on reads. No refund is subtracted a second time; cancellation fees/net cash accounting are not part of this budget policy.
+Integrated the same derived source once into ITN-14, ITN-09 and ITN-07 totals, automatically feeding ITN-18 display conversion while leaving original USD charges unchanged. Added atomic owner/moderation link cascades; deleting any associated day removes the entire link. Public views/clones do not copy or expose private associations.
+Transactions reuse the owned-parent write, snapshot/majority protocol, bounded transient retries and commit-only retries for ambiguous outcomes. Unique-index races roll back completely. Booking lifecycle writers remain independent; a simultaneous cancellation can leave an inactive association, whose later reports contribute zero.
+Troubleshooting: corrected generated MongoDB dollar-expression editing, strict Mongoose ObjectId filter types, a test profile-field mismatch (preferences.currency), and normalized duplicate day-ID validation. Assertions were preserved and rollback coverage expanded.
+Final verification: 53 focused ITN-27 unit tests passed. Combined itinerary/budget/conversion, flight/hotel booking and payment unit regressions: 867 passed in 56 suites. Isolated integration regressions: 405 passed in 7 suites, including all 30 ITN-27 cases. Zero failed/skipped tests in final runs.
+Integration exercised real unique-index enforcement, cross-account privacy, direct round-trip anchoring, malformed/connecting rejection, exact cent/night allocation across calendar boundaries, multiple currencies/conversion, inactive lifecycle behavior, concurrent duplicate/cancellation/deletion races, financial snapshots and rollback after insert/unlink/day/moderation cleanup failures.
+Backend build, lint and git diff --check passed. Lint retains six pre-existing warnings. Used mocks and an owned disposable localhost MongoDB replica set only; no shared Atlas access or live payment/FX provider calls. Existing locked dependencies restored without manifest or system-dependency changes.
+PR description draft: Add owner-controlled booking associations with live snapshot-derived budget allocations, exact hotel-night cents and atomic cleanup. Supports the current direct one-way/round-trip booking model; connecting flights are unsupported and rejected. Original booking/payment/refund prices remain unchanged.
+Limitations: manual duplicate purchases cannot be inferred, cancelled costs are excluded rather than treated as a refund ledger, snapshot overlap is possible, and large-link-count production performance was not benchmarked. Full unrelated backend suites were not run.
+Only the approved 21 files changed, including this worktree personal log. Previous entries preserved. Shared AI_PROMPTS.txt, booking lifecycle services and other worktrees untouched. No commit, push or PR.
 ================================================

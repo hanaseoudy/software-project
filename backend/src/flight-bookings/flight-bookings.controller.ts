@@ -1,4 +1,17 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Patch,
+  Query,
+  Req,
+  Res,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import {
   ApiBadRequestResponse,
@@ -12,10 +25,15 @@ import {
   ApiParam,
   ApiTags,
   ApiUnauthorizedResponse,
+  ApiResponse,
+  ApiExtraModels,
 } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
+import type {
+  AuthenticatedRequest,
+  AuthPayload,
+} from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { RequireVerifiedEmail } from '../common/decorators/require-verified-email.decorator';
 import { UserRole } from '../users/schemas/user.schema';
@@ -25,6 +43,9 @@ import { FlightCancellationService } from './flight-cancellation.service';
 import { FlightChangeService } from './flight-change.service';
 import { HoldFlightBookingDto } from './dto/hold-flight-booking.dto';
 import { FlightBookingsService } from './flight-bookings.service';
+import { ListMyBookingsDto } from './dto/list-my-bookings.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { SelectFlightSeatsDto } from './dto/select-flight-seats.dto';
 
 @ApiTags('Flight Bookings')
 @ApiCookieAuth()
@@ -37,31 +58,141 @@ export class FlightBookingsController {
     private readonly flightChangeService: FlightChangeService,
   ) {}
 
-  @Post('hold')
+  // POST /flight-bookings is the path of the requirements table (FLT-19/FLT-21);
+  // POST /flight-bookings/hold is kept for the existing clients. Same handler.
+  @Post(['', 'hold'])
   @UseGuards(RolesGuard)
   @RequireVerifiedEmail() // ACC-02: email must be verified before booking
   @Roles(UserRole.USER)
   @ApiOperation({
     summary:
-      'FLT-22: atomically hold seats; creates a PENDING_PAYMENT booking valid for 10 minutes',
+      'FLT-19/FLT-21/FLT-22: enter passengers and baggage and atomically hold seats; creates a PENDING_PAYMENT booking valid for 10 minutes (also available as POST /flight-bookings/hold)',
   })
   @ApiCreatedResponse({ description: 'Seats held, booking created' })
-  @ApiBadRequestResponse({ description: 'Invalid passengers, trip type or flight' })
+  @ApiBadRequestResponse({
+    description: 'Invalid passengers, trip type or flight',
+  })
   @ApiUnauthorizedResponse({ description: 'Not authenticated' })
-  @ApiForbiddenResponse({ description: 'Only registered users can create bookings' })
+  @ApiForbiddenResponse({
+    description: 'Only registered users can create bookings',
+  })
   @ApiNotFoundResponse({ description: 'Flight not found' })
   @ApiConflictResponse({ description: 'Not enough seats available' })
   hold(@Req() req: AuthenticatedRequest, @Body() dto: HoldFlightBookingDto) {
     return this.flightBookingsService.createHold(req.user!.sub, dto);
   }
 
+  @Patch(':id/seat')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.USER)
+  @ApiOperation({
+    summary: 'FLT-28: select seats for passengers on a pending flight booking',
+  })
+  @ApiParam({ name: 'id', description: 'Flight booking id' })
+  @ApiOkResponse({ description: 'Passenger seat selections saved' })
+  @ApiBadRequestResponse({ description: 'Invalid passenger or seat selection' })
+  @ApiUnauthorizedResponse({ description: 'Not authenticated' })
+  @ApiForbiddenResponse({ description: 'Only registered users can select seats' })
+  @ApiNotFoundResponse({ description: 'Booking not found or not owned by the user' })
+  @ApiConflictResponse({ description: 'Booking expired, already paid, or seat is occupied' })
+  selectSeats(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: SelectFlightSeatsDto,
+  ) {
+    return this.flightBookingsService.selectSeats(req.user!.sub, id, dto);
+  }
+
+  @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.USER) // check the real enum member name
+  @ApiExtraModels(ListMyBookingsDto)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'List my flight bookings by group (FLT-25)',
+    description:
+      "Returns one tray per request: upcoming, past or cancelled. 10 bookings per page. Only the logged-in user's own bookings are returned.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'One page of booking cards for the chosen group',
+    schema: {
+      example: {
+        items: [
+          {
+            id: '6af2f1a40198023d25121300',
+            bookingReference: 'FB7K2M9Q',
+            status: 'CONFIRMED',
+            tripType: 'ROUND_TRIP',
+            cabinClass: 'ECONOMY',
+            passengers: ['Sara Hassan', 'Omar Hassan'],
+            totalPrice: 620,
+            currency: 'USD',
+            outbound: {
+              flightNumber: 'MS777',
+              departureUtc: '2026-12-05T08:00:00.000Z',
+            },
+            return: {
+              flightNumber: 'MS778',
+              departureUtc: '2026-12-12T09:00:00.000Z',
+            },
+          },
+        ],
+        page: 1,
+        pageSize: 10,
+        total: 1,
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Invalid group or page value' })
+  @ApiResponse({ status: 401, description: 'Not logged in' })
+  @ApiResponse({
+    status: 404,
+    description: 'Booking not found, or it belongs to another user',
+  })
+  list(@Query() dto: ListMyBookingsDto, @CurrentUser() user: AuthPayload) {
+    return this.flightBookingsService.findMine(user.sub, dto);
+  }
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.USER)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Open one of my flight bookings (FLT-25)',
+    description:
+      'Full details of a single booking. A booking that belongs to another user is reported as not found.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'MongoDB ObjectId of the flight booking',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Full booking details, including flights, passengers and refund',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid booking id format' })
+  @ApiResponse({ status: 401, description: 'Not logged in' })
+  @ApiResponse({
+    status: 404,
+    description: 'Booking not found, or it belongs to another user',
+  })
+  details(@Param('id') id: string, @CurrentUser() user: AuthPayload) {
+    return this.flightBookingsService.findMineById(user.sub, id);
+  }
+
   @Get(':id/summary')
   @ApiOperation({
-    summary: 'FLT-21: booking summary before payment (flight, passengers, baggage, total)',
+    summary:
+      'FLT-21: booking summary before payment (flight, passengers, baggage, total)',
     description:
       'Only the owner of the booking can read it. total = seat fares + baggage fees (the amount charged at payment).',
   })
-  @ApiParam({ name: 'id', description: 'Flight booking id returned by POST /flight-bookings/hold' })
+  @ApiParam({
+    name: 'id',
+    description: 'Flight booking id returned by POST /flight-bookings/hold',
+  })
   @ApiOkResponse({
     description: 'Booking summary',
     schema: {
@@ -77,8 +208,18 @@ export class FlightBookingsController {
             segment: 'OUTBOUND',
             flightNumber: 'MS777',
             airlineName: 'EgyptAir',
-            departureAirport: { iataCode: 'CAI', name: 'Cairo International', city: 'Cairo', timezone: 'Africa/Cairo' },
-            arrivalAirport: { iataCode: 'DXB', name: 'Dubai International', city: 'Dubai', timezone: 'Asia/Dubai' },
+            departureAirport: {
+              iataCode: 'CAI',
+              name: 'Cairo International',
+              city: 'Cairo',
+              timezone: 'Africa/Cairo',
+            },
+            arrivalAirport: {
+              iataCode: 'DXB',
+              name: 'Dubai International',
+              city: 'Dubai',
+              timezone: 'Asia/Dubai',
+            },
             departureTime: '2026-12-05T10:00:00.000Z',
             arrivalTime: '2026-12-05T13:00:00.000Z',
             durationMinutes: 180,
@@ -97,7 +238,12 @@ export class FlightBookingsController {
           },
         ],
         baggage: { extraBags: 0, fees: 0 },
-        pricing: { currency: 'USD', fareTotal: 100, baggageFees: 0, total: 100 },
+        pricing: {
+          currency: 'USD',
+          fareTotal: 100,
+          baggageFees: 0,
+          total: 100,
+        },
       },
     },
   })
@@ -110,12 +256,15 @@ export class FlightBookingsController {
 
   @Get(':id/confirmation')
   @ApiOperation({
-    summary: 'FLT-23: confirmation page data (booking summary + booking reference)',
+    summary:
+      'FLT-23: confirmation page data (booking summary + booking reference)',
     description:
       'Only the owner can read it, and only after payment confirmed the booking (CONFIRMED or COMPLETED).',
   })
   @ApiParam({ name: 'id', description: 'Flight booking id' })
-  @ApiOkResponse({ description: 'Booking summary with bookingReference (e.g. FLT-7K3M9QXA)' })
+  @ApiOkResponse({
+    description: 'Booking summary with bookingReference (e.g. FLT-7K3M9QXA)',
+  })
   @ApiBadRequestResponse({ description: 'Invalid booking ID' })
   @ApiUnauthorizedResponse({ description: 'Not authenticated' })
   @ApiNotFoundResponse({ description: 'Booking not found (or not yours)' })
@@ -125,11 +274,15 @@ export class FlightBookingsController {
   }
 
   @Get(':id/e-ticket')
-  @ApiOperation({ summary: 'FLT-23: download the e-ticket (PDF) of a confirmed booking' })
+  @ApiOperation({
+    summary: 'FLT-23: download the e-ticket (PDF) of a confirmed booking',
+  })
   @ApiParam({ name: 'id', description: 'Flight booking id' })
   @ApiOkResponse({
     description: 'PDF file',
-    content: { 'application/pdf': { schema: { type: 'string', format: 'binary' } } },
+    content: {
+      'application/pdf': { schema: { type: 'string', format: 'binary' } },
+    },
   })
   @ApiBadRequestResponse({ description: 'Invalid booking ID' })
   @ApiUnauthorizedResponse({ description: 'Not authenticated' })
@@ -140,7 +293,10 @@ export class FlightBookingsController {
     @Param('id') id: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { filename, pdf } = await this.flightBookingsService.getETicket(req.user!.sub, id);
+    const { filename, pdf } = await this.flightBookingsService.getETicket(
+      req.user!.sub,
+      id,
+    );
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${filename}"`,

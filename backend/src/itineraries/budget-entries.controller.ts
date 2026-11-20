@@ -10,11 +10,16 @@ import {
   Patch,
   Post,
   Req,
+  Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiCookieAuth,
   ApiCreatedResponse,
+  ApiExtraModels,
+  ApiQuery,
+  getSchemaPath,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -29,6 +34,11 @@ import { CreateBudgetEntryDto } from './dto/create-budget-entry.dto';
 import { UpdateBudgetEntryDto } from './dto/update-budget-entry.dto';
 import { BudgetEntryResponseDto } from './dto/budget-entry-response.dto';
 import { ItineraryBudgetTotalsResponseDto } from './dto/itinerary-budget-totals-response.dto';
+import type { Response } from 'express';
+import { BudgetConversionService } from './budget-conversion.service';
+import { BudgetSummaryQueryDto } from './dto/budget-summary-query.dto';
+import { ConvertedBudgetSummaryResponseDto } from './dto/converted-budget-summary-response.dto';
+
 const errors = () =>
   applyDecorators(
     ApiResponse({
@@ -68,7 +78,10 @@ const errors = () =>
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class BudgetEntriesController {
-  constructor(private readonly budgets: BudgetEntriesService) {}
+  constructor(
+    private readonly budgets: BudgetEntriesService,
+    private readonly conversion: BudgetConversionService,
+  ) {}
   @Post('itineraries/:id/days/:dayId/budgets')
   @ApiOperation({
     summary: 'Create an owned daily budget entry (ITN-14)',
@@ -145,15 +158,36 @@ export class BudgetEntriesController {
   }
   @Get('itineraries/:id/budget-summary')
   @ApiOperation({
-    summary:
-      'Get owned itinerary totals by currency, day and category (ITN-14)',
+    summary: 'Get owned itinerary budget totals (ITN-14, ITN-18)',
     description:
-      'One primary snapshot. Budget entries, costed activities and intercity transport count once each. Activity costs use ACTIVITIES; INTERCITY_TRANSPORT is response-only. No FX or purchase-level deduplication. Exact integer minor-unit reconciliation; invalid legacy sub-cent/unsafe totals return 409. Empty days have totals: [].',
+      'Budget entries, costed activities, intercity transport and active ITN-27 booking allocations count once each in a primary snapshot. Direct flight reservations plus baggage use INTERCITY_TRANSPORT; full hotel stays use ACCOMMODATION. Inactive links contribute zero; original prices/payments are never changed. Set convert=preferred to include reconciled totals in the current profile currency and the provider rate date. Missing required FX pairs return 503. Invalid legacy amounts or unsafe totals return 409.',
   })
   @ApiParam({ name: 'id' })
-  @ApiOkResponse({ type: ItineraryBudgetTotalsResponseDto })
+  @ApiQuery({ name: 'convert', required: false, enum: ['preferred'] })
+  @ApiExtraModels(ItineraryBudgetTotalsResponseDto, ConvertedBudgetSummaryResponseDto)
+  @ApiOkResponse({
+    schema: {
+      anyOf: [
+        { $ref: getSchemaPath(ItineraryBudgetTotalsResponseDto) },
+        { $ref: getSchemaPath(ConvertedBudgetSummaryResponseDto) },
+      ],
+    },
+  })
   @errors()
-  totals(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+  @ApiResponse({
+    status: 503,
+    description: 'Consistent budget snapshot unavailable or EXCHANGE_RATES_UNAVAILABLE with missingPairs for a converted request',
+  })
+  totals(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Query() query?: BudgetSummaryQueryDto,
+    @Res({ passthrough: true }) response?: Response,
+  ) {
+    if (query?.convert === 'preferred') {
+      response?.setHeader('Cache-Control', 'private, no-store');
+      return this.conversion.totals(req.user!.sub, id);
+    }
     return this.budgets.totals(req.user!.sub, id);
   }
   private validateFields(body: unknown) {

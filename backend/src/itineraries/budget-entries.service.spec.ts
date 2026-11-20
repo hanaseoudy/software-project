@@ -46,6 +46,7 @@ describe('ITN-14 validation and transaction policy', () => {
       {} as never,
       currencies as never,
       connection as never,
+      { aggregationExpenses: async () => ({ $literal: [] }), removeForDays: async () => undefined, removeForItinerary: async () => undefined } as never,
     );
   });
   const record = (): BudgetEntry => ({
