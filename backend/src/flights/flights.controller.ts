@@ -158,7 +158,8 @@ export class FlightsController {
   @ApiResponse({ status: 404, description: 'Flight or cabin not found' })
   @ApiResponse({
     status: 409,
-    description: 'Flight not Scheduled, or seats below booked + held',
+    description:
+      'Flight not Scheduled, seats below booked + held, or seat counts changed during the update',
   })
   updateCabin(
     @Param('id') id: string,

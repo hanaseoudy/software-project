@@ -8,7 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { isValidObjectId, Model, Types } from 'mongoose';
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { TZDate } from '@date-fns/tz';
 import { Flight, FlightDocument, FlightStatus } from './schemas/flight.schema';
@@ -21,7 +21,6 @@ import {
 import { CreateFlightsDto } from './dto/create-flights.dto';
 import { formatFlightWithLocalTimes } from './utils/flight-time.formatter';
 import { AddCabinDto } from './dto/add-cabin.dto';
-import { isValidObjectId } from 'mongoose';
 import { SearchFlightsDto } from './dto/search-flights.dto';
 import {
   Airline,
@@ -76,7 +75,6 @@ export class FlightsService {
       arrivalAirport.timezone,
     );
 
-    console.log(departureUtc, arrivalUtc);
     const { departureAirport: dep, arrivalAirport: arr } =
       await this.getAirports(
         dto.departureAirport as unknown as Airport,
@@ -140,6 +138,7 @@ export class FlightsService {
     const flight = await this.loadOwnedScheduledFlight(flightId, userId);
     const cabin = flight.cabins.find((c) => String((c as any)._id) === cabinId);
     if (!cabin) throw new NotFoundException('Cabin not found on this flight');
+    const cabinWithId = cabin as typeof cabin & { _id: Types.ObjectId };
 
     if (dto.totalSeats !== undefined) {
       const inUse = cabin.bookedSeats + cabin.heldSeats;
@@ -148,13 +147,41 @@ export class FlightsService {
           `Cannot reduce seats below ${inUse} (already booked or held)`,
         );
       }
-      cabin.totalSeats = dto.totalSeats;
     }
-    if (dto.price !== undefined) cabin.price = dto.price;
 
-    await flight.save();
+    const set: Record<string, number> = {};
+    if (dto.totalSeats !== undefined) {
+      set['cabins.$.totalSeats'] = dto.totalSeats;
+    }
+    if (dto.price !== undefined) {
+      set['cabins.$.price'] = dto.price;
+    }
+
+    const updated = await this.flightsModel.findOneAndUpdate(
+      {
+        _id: flight._id,
+        airline: flight.airline,
+        status: FlightStatus.SCHEDULED,
+        cabins: {
+          $elemMatch: {
+            _id: cabinWithId._id,
+            totalSeats: cabin.totalSeats,
+            bookedSeats: cabin.bookedSeats,
+            heldSeats: cabin.heldSeats,
+          },
+        },
+      },
+      { $set: set },
+      { new: true, runValidators: true },
+    );
+    if (!updated) {
+      throw new ConflictException(
+        'Flight or cabin seat counts changed during the update; reload and retry',
+      );
+    }
+
     return formatFlightWithLocalTimes(
-      await flight.populate(['airline', 'departureAirport', 'arrivalAirport']),
+      await updated.populate(['airline', 'departureAirport', 'arrivalAirport']),
     );
   }
 
@@ -435,6 +462,13 @@ export class FlightsService {
    * and ensures the flight is still in Scheduled status before editing.
    */
   private async loadOwnedScheduledFlight(flightId: string, userId: string) {
+    if (!isValidObjectId(flightId)) {
+      throw new BadRequestException('Invalid flight ID format');
+    }
+    if (!isValidObjectId(userId)) {
+      throw new BadRequestException('Invalid user ID format');
+    }
+
     const flight = await this.flightsModel.findById(flightId);
     if (!flight) throw new NotFoundException('Flight not found');
 
@@ -559,11 +593,6 @@ export class FlightsService {
     departureUtc: Date,
     arrivalUtc: Date,
   ): void {
-    console.log(departureAirport.timezone);
-    console.log(departureUtc);
-    console.log(arrivalAirport.timezone);
-    console.log(arrivalUtc);
-
     if (departureAirport === arrivalAirport) {
       throw new BadRequestException(
         'Departure and Arrival airport cannot be the same.',

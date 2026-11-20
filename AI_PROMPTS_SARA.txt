@@ -146,3 +146,17 @@ FlightsService.updateCabin, and the protected FlightsController routes,
 then verified all happy-path, validation, conflict, and authorization cases
 in Postman. Reviewed and adjusted every snippet before committing.
 ================================================
+Date: 2026-11-20
+Student: Sara Gomaa
+Tool: Copilot SDK (VS Code)
+Related Requirement: FLT-05
+Prompt:
+Fix invalid flight IDs returning 500 instead of 400, remove the five leftover
+debug console.log statements, and make cabin seat-count updates concurrency-safe
+so changes during an update return 409.
+How the output was used:
+Added ObjectId validation to the shared scheduled-flight update loader, removed
+the five flight-service debug logs, changed cabin edits to an atomic conditional
+update matching the observed cabin capacity/booked/held counters, documented
+the conflict response, and added focused regression tests.
+================================================
