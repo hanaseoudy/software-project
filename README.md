@@ -2,11 +2,13 @@
 
 GIU Software Project I (Winter 2026). This web platform combines flight booking, hotel booking, itinerary planning, budgeting and a travel blog.
 
-**Milestone 1 (backend and API) is due 20/11.** It is a NestJS REST API on MongoDB Atlas, documented and demonstrated through Swagger UI. The Next.js frontend is Milestone 2 (11/12).
+**Milestone 1 (backend and API), due 20/11:** a NestJS REST API on MongoDB Atlas, documented and demonstrated through Swagger UI. Every mandatory endpoint in section 8 of the project description is implemented. The Next.js frontend is Milestone 2 (11/12).
 
 ## Team
-  team name: code red flag
-- Hana Seoudy 16008495(team leader)
+
+**Team name:** code red flag
+
+- Hana Seoudy 16008495 (team leader)
 - Nour Hossam 16006147
 - Mariam Haithem 17006299
 - Kenzy Sherif 17003702
@@ -45,6 +47,7 @@ software-project/
 - **Node.js 24** (the version CI uses) and npm
 - The team's shared MongoDB Atlas connection string (from the team leader)
 - A Stripe account in **test mode**, for the `sk_test_...` key and the webhook secret
+- A free **FXRatesAPI** key from [fxratesapi.com](https://fxratesapi.com) for budget currency conversion (ITN-18). This is **not** the same as FastForex or other exchange-rate services.
 
 ## Setup
 
@@ -75,6 +78,8 @@ Then fill in the values. `.env` is git-ignored, so never commit it.
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_FIRST_NAME`, `ADMIN_LAST_NAME` | The admin account created by the admin seed (ACC-18) |
 | `STRIPE_SECRET_KEY` | Stripe **test** secret key (`sk_test_...`) |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret (`whsec_...`) |
+| `FX_RATES_API_URL` | FXRatesAPI endpoint: `https://api.fxratesapi.com/latest` (ITN-18) |
+| `FX_RATES_API_KEY` | Your FXRatesAPI key. **Required:** without it, `budget-summary?convert=preferred` returns 503. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Optional email notifications. Leave `SMTP_HOST` empty to use a free Ethereal test inbox; the links are printed in the server log. |
 | `FRONTEND_URL` | Website address used in email links |
 | `PORT` | Optional API port (default: 3000) |
@@ -102,6 +107,8 @@ npm run build && npm run start:prod
 ```
 
 The API is served at `http://localhost:3000/api`.
+
+The backend connects to the shared Atlas database on startup. If it can't connect, see [Troubleshooting](#troubleshooting).
 
 ## Using Swagger UI
 
@@ -131,20 +138,22 @@ All routes are under `/api`. Each one is documented in Swagger with its requirem
 |---|---|---|
 | Auth and users | `/auth/register`, `/auth/login`, `/auth/logout`, `/auth/change-password`, `/auth/me`, `/users/me` | ACC-01, ACC-04 to ACC-12, ACC-19 |
 | Administration | `/admin/moderators`, `/admin/accounts`, `/admin/providers/:type/:id/...`, `/admin/bookings`, `/admin/reports`, `/admin/content`, `/admin/audit-logs` | ACC-07a, ACC-13 to ACC-18, GEN-07, GEN-10 |
-| Airlines, airports and flights | `/airlines`, `/airports`, `/flights`, `/flights/search`, `/flights/:id/cabins` | FLT-01 to FLT-04, FLT-08, FLT-09, FLT-11 to FLT-17 |
-| Flight bookings | `/flight-bookings/hold`, `/flight-bookings/:id/summary`, `/cancel`, `/e-ticket` | FLT-19 to FLT-23, FLT-26, FLT-27 |
+| Airlines, airports and flights | `/airlines`, `/airports`, `/flights`, `/flights/search`, `/flights/:id` (edit), `/flights/:id/cabins`, `/flights/:id/cancel`, `/flights/:id/bookings`, `/flights/:id/passengers/export` (CSV) | FLT-01 to FLT-09, FLT-11 to FLT-17, FLT-29 |
+| Flight bookings | `POST /flight-bookings` (also `/hold`), `GET /flight-bookings`, `/flight-bookings/:id`, `/summary`, `/confirmation`, `/e-ticket`, `/cancellation-quote`, `/cancel`, `/change-quote`, `/change`, `/seat` | FLT-19 to FLT-28 |
 | Hotels and rooms | `/hotels`, `/hotels/search`, `/hotels/:id/rooms`, `/availability`, `/policies`, `/reservations` | HTL-01 to HTL-15, HTL-22 |
 | Hotel bookings and reviews | `/hotel-bookings`, `/hotel-bookings/:id/cancel`, `/review`, `/reviews/:id` | HTL-16 to HTL-24 |
 | Payments and refunds | `/bookings/:type/:id/policies`, `/accept-policies`, `/payments`, `/payments/webhook`, `/refunds/:id` | PAY-01 to PAY-04 |
-| Itineraries | `/itineraries`, days, `/activities`, `/budgets`, `/transport-costs`, `/budget-summary`, `/public/search`, `/clone`, `/hotels`, `/flights`, `/pdf` | ITN-01 to ITN-16, ITN-20 to ITN-28 |
+| Itineraries | `/itineraries`, days, `/activities`, `/budgets`, `/transport-costs`, `/budget-summary` (`?convert=preferred` for currency conversion), `/public/search`, `/public/:id/clone`, `/hotels`, `/flights`, `/bookings`, `/pdf` | ITN-01 to ITN-28 |
 | Blog | `/posts`, `/comments`, `/posts/:id/like`, `/tags/:tag/posts`, `/authors/:id` | BLG-01 to BLG-12 |
-| Shared services | `/notifications`, `/reports`, `/uploads`, `/favourites` | GEN-01, GEN-08, GEN-09 |
+| Shared services | `/notifications` (list, unread count, mark read), `/reports`, `/uploads`, `/favourites` | GEN-01, GEN-08, GEN-09 |
 
 Main behaviour:
 - **Ownership:** users can only see their own bookings and private itineraries. Another user's item returns 404.
 - **Concurrency:** flight seats and hotel rooms are held atomically for 10 minutes while payment is pending, and expired holds are released.
 - **Validation:** errors are returned per field.
 - **Pagination:** lists use 10 items per page.
+- **Refunds:** user cancellations, hotel cancellations and airline flight cancellations all refund through the Stripe Refunds API (PAY-03). The refund status is shown on the booking details.
+- **Endpoint names:** two endpoints use a slightly different path from the project description, which it allows. Day reordering (ITN-08) is `PATCH /itineraries/:id/days/:dayId/reorder`, and flight changes (FLT-27, optional) are `GET /flight-bookings/:id/change-quote` + `POST /flight-bookings/:id/change`.
 
 ## Tests
 
@@ -154,14 +163,23 @@ From `backend/`:
 npm run lint
 npm run build
 
-# Unit tests. Jest loads ES modules, so pass the VM-modules flag:
-NODE_OPTIONS=--experimental-vm-modules npm test
+npm test            # unit tests (the script already sets the ES-module flag Jest needs)
 
-# End-to-end tests (need a local MongoDB replica set):
-NODE_OPTIONS=--experimental-vm-modules TEST_MONGODB_URI=mongodb://127.0.0.1:27017 npm run test:e2e
+# End-to-end tests (need a local MongoDB replica set, not the shared Atlas database):
+TEST_MONGODB_URI=mongodb://127.0.0.1:27017 npm run test:e2e
 ```
 
 CI (`.github/workflows/backend-ci.yml`) runs install, lint and build on every pull request.
+
+## Troubleshooting
+
+| Error in the server log | Meaning | Fix |
+|---|---|---|
+| `getaddrinfo ENOTFOUND ...mongodb.net` | Your computer couldn't look up the Atlas address (internet or DNS problem). It often recovers by itself within seconds. | Check your internet. If it keeps happening, set Windows DNS to `8.8.8.8` / `1.1.1.1`, or turn off your VPN. |
+| `connect ETIMEDOUT <ip>:27017` | Atlas was found but didn't answer. Usually your current IP isn't on the Atlas allow list, or your network blocks port 27017. | In Atlas: **Network Access → Add Current IP Address**. If it still fails, switch to a phone hotspot (some university and company networks block port 27017). |
+| `bad auth` / `Authentication failed` | Wrong username or password in `MONGODB_URI` | Ask the team leader for the correct connection string. |
+| `budget-summary?convert=preferred` returns 503 | No exchange rates available | Set `FX_RATES_API_KEY` (from fxratesapi.com) and restart. |
+| Payments are disabled at startup | `STRIPE_SECRET_KEY` isn't a test key | Use a key that starts with `sk_test_`. |
 
 ## Git workflow
 
