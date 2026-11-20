@@ -27,6 +27,7 @@ import { BookingGroup, ListMyBookingsDto } from './dto/list-my-bookings.dto';
 import { formatInTimeZone } from 'date-fns-tz';
 import { Refund } from '../payments/schemas/refund.schema';
 import { BookingType } from '../payments/enums/payment.enums';
+import { SelectFlightSeatsDto } from './dto/select-flight-seats.dto';
 
 export const HOLD_DURATION_MS = 10 * 60 * 1000; // FLT-22: 10-minute hold
 
@@ -290,6 +291,134 @@ export class FlightBookingsService {
    * FLT-22: reserve seats atomically and create a PENDING_PAYMENT booking
    * that expires after 10 minutes.
    */
+  async selectSeats(
+    userId: string,
+    bookingId: string,
+    dto: SelectFlightSeatsDto,
+  ) {
+    if (!Types.ObjectId.isValid(bookingId)) {
+      throw new BadRequestException('Invalid booking ID');
+    }
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
+    const booking = await this.bookingModel.findOne({
+      _id: new Types.ObjectId(bookingId),
+      user: new Types.ObjectId(userId),
+    });
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+    if (
+      booking.status !== FlightBookingStatus.PENDING_PAYMENT ||
+      !booking.holdExpiresAt ||
+      booking.holdExpiresAt <= new Date()
+    ) {
+      throw new ConflictException(
+        'Seats can only be selected for an active pending-payment booking',
+      );
+    }
+
+    const seatByPassenger = new Map<string, string>();
+    for (const selection of dto.passengers) {
+      if (seatByPassenger.has(selection.passengerId)) {
+        throw new BadRequestException(
+          'Each passenger can receive only one seat selection',
+        );
+      }
+      seatByPassenger.set(selection.passengerId, selection.seatNumber);
+    }
+
+    if (new Set(seatByPassenger.values()).size !== seatByPassenger.size) {
+      throw new ConflictException('A seat cannot be selected by multiple passengers');
+    }
+
+    const passengersById = new Map(
+      (booking.passengers as Array<any>).map((passenger) => [
+        String(passenger._id),
+        passenger,
+      ]),
+    );
+
+    const seatedPassengerCount = (booking.passengers as Array<any>).filter(
+      (passenger) =>
+        passenger.type === PassengerType.ADULT ||
+        passenger.type === PassengerType.CHILD,
+    ).length;
+    if (seatByPassenger.size !== seatedPassengerCount) {
+      throw new BadRequestException(
+        'A seat selection is required for every adult or child passenger',
+      );
+    }
+
+    for (const [passengerId, seatNumber] of seatByPassenger) {
+      const passenger = passengersById.get(passengerId);
+      if (!passenger) {
+        throw new BadRequestException(
+          `Passenger ${passengerId} does not belong to this booking`,
+        );
+      }
+      if (passenger.type === PassengerType.INFANT) {
+        throw new BadRequestException(
+          'Infants do not occupy a seat and cannot receive one',
+        );
+      }
+      passenger.seatNumber = seatNumber;
+    }
+
+    const legIds = [
+      booking.outboundFlight,
+      ...(booking.returnFlight ? [booking.returnFlight] : []),
+    ];
+    const seats = [...seatByPassenger.values()];
+    const now = new Date();
+
+    for (const legId of legIds) {
+      const occupant = await this.bookingModel.findOne({
+        _id: { $ne: booking._id },
+        $and: [
+          {
+            $or: [
+              { status: FlightBookingStatus.CONFIRMED },
+              {
+                status: FlightBookingStatus.PENDING_PAYMENT,
+                holdExpiresAt: { $gt: now },
+              },
+            ],
+          },
+          {
+            $or: [
+              { outboundFlight: legId },
+              { returnFlight: legId },
+            ],
+          },
+        ],
+        passengers: {
+          $elemMatch: { seatNumber: { $in: seats } },
+        },
+      });
+      if (occupant) {
+        throw new ConflictException(
+          'One or more selected seats are already occupied',
+        );
+      }
+    }
+
+    await booking.save();
+
+    return {
+      bookingId: String(booking._id),
+      status: booking.status,
+      passengers: booking.passengers.map((passenger: any) => ({
+        passengerId: String(passenger._id),
+        firstName: passenger.firstName,
+        lastName: passenger.lastName,
+        seatNumber: passenger.seatNumber ?? null,
+      })),
+    };
+  }
+
   async createHold(userId: string, dto: HoldFlightBookingDto) {
     const adults = dto.passengers.filter(
       (p) => p.type === PassengerType.ADULT,

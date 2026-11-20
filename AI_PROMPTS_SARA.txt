@@ -182,6 +182,17 @@ adjusted every snippet before committing.
 Date: 2026-11-20
 Student: Sara Gomaa
 Tool: Copilot SDK (VS Code)
+Related Requirement: FLT-28
+Prompt:
+Asked to implement the bonus FLT-28 seat-selection feature for flight
+bookings. Approved a PATCH endpoint, passengerId/seatNumber payload,
+seat format, ownership and hold checks, duplicate-seat handling, and
+occupation checks across confirmed or active pending bookings.
+How the output was used:
+Used the existing pending-payment booking flow, passenger subdocument IDs,
+and flight booking schema to add the selection DTO, protected controller
+route, seat validation service method, and focused unit test. Reviewed and
+adjusted the implementation before running validation.
 Related Requirement: FLT-05
 Prompt:
 Fix invalid flight IDs returning 500 instead of 400, remove the five leftover
@@ -192,7 +203,6 @@ Added ObjectId validation to the shared scheduled-flight update loader, removed
 the five flight-service debug logs, changed cabin edits to an atomic conditional
 update matching the observed cabin capacity/booked/held counters, documented
 the conflict response, and added focused regression tests.
-================================================
 Related Requirement: FLT-29
 Prompt:
 Asked to implement FLT-29 for airline moderators: view per-flight

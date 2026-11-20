@@ -5,6 +5,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Patch,
   Query,
   Req,
   Res,
@@ -43,6 +44,7 @@ import { HoldFlightBookingDto } from './dto/hold-flight-booking.dto';
 import { FlightBookingsService } from './flight-bookings.service';
 import { ListMyBookingsDto } from './dto/list-my-bookings.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { SelectFlightSeatsDto } from './dto/select-flight-seats.dto';
 
 @ApiTags('Flight Bookings')
 @ApiCookieAuth()
@@ -76,6 +78,27 @@ export class FlightBookingsController {
   @ApiConflictResponse({ description: 'Not enough seats available' })
   hold(@Req() req: AuthenticatedRequest, @Body() dto: HoldFlightBookingDto) {
     return this.flightBookingsService.createHold(req.user!.sub, dto);
+  }
+
+  @Patch(':id/seat')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.USER)
+  @ApiOperation({
+    summary: 'FLT-28: select seats for passengers on a pending flight booking',
+  })
+  @ApiParam({ name: 'id', description: 'Flight booking id' })
+  @ApiOkResponse({ description: 'Passenger seat selections saved' })
+  @ApiBadRequestResponse({ description: 'Invalid passenger or seat selection' })
+  @ApiUnauthorizedResponse({ description: 'Not authenticated' })
+  @ApiForbiddenResponse({ description: 'Only registered users can select seats' })
+  @ApiNotFoundResponse({ description: 'Booking not found or not owned by the user' })
+  @ApiConflictResponse({ description: 'Booking expired, already paid, or seat is occupied' })
+  selectSeats(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: SelectFlightSeatsDto,
+  ) {
+    return this.flightBookingsService.selectSeats(req.user!.sub, id, dto);
   }
 
   @Get()
