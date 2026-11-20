@@ -1,0 +1,191 @@
+AI usage log - Nour Hossam (Accounts & Admin)
+
+================================================
+Date: 2026-11-13
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-08 (TASK-15), ACC-13
+
+Prompt (summary of the conversation):
+Help me implement ACC-08: a logged-in user changes their password by entering
+the current password and a new one that meets the password rules. Follow the
+API contract endpoint PATCH /api/auth/change-password. It should also clear
+mustChangePassword so moderators created by ACC-13 can finish first login.
+
+How the output was used:
+Used the generated ChangePasswordDto, AuthService.changePassword and the
+controller route after reviewing them against ACC-08. The endpoint requires
+login (JwtAuthGuard), checks the current password (400 if wrong), rejects a
+new password equal to the current one (400), applies the register password
+rules, saves the new bcrypt hash, sets mustChangePassword to false, and logs
+out the user's other sessions while keeping the current one. Errors use the
+same "Validation failed" format as register.
+
+Verification:
+Added 9 unit tests (service and DTO); all 13 auth tests pass. Lint and build
+passed locally. Tested in Postman with the ACC-13 moderator: wrong current
+password 400, same password 400, weak password 400, success 200, login with
+the new password shows mustChangePassword false, and 401 when logged out.
+Swagger shows the endpoint and its responses.
+================================================
+
+Date: 2026-11-13
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-09 (TASK-16)
+
+Prompt (summary of the conversation):
+Help me implement ACC-09: any logged-in user edits their name, phone number
+and preferred currency, saving only if all fields pass validation. Follow the
+API contract endpoints GET /api/users/me and PATCH /api/users/me.
+
+How the output was used:
+Used the generated UpdateProfileDto, UsersService and UsersController after
+reviewing them against ACC-09. Both routes require login and always use the
+id from the login cookie. PATCH changes only the fields sent; the phone
+number is cleaned (spaces and dashes removed) and must be 7-15 digits, null
+removes it; the preferred currency must be in the supported list (EGP, USD,
+EUR, GBP, SAR, AED, JPY), which is a display setting for itinerary budgets
+(ITN-18), while bookings and payments stay in USD (PAY-04). If any field is
+invalid the whole request is rejected and nothing is saved. Email and role
+are stripped and cannot be changed. The scaffold users spec files were
+replaced with real tests.
+
+Verification:
+16 unit tests pass (service, controller, DTO). Lint and build passed locally.
+Tested in Postman: GET profile 200, full update 200, invalid phone and
+currency 400 with nothing saved (checked with GET), email/role only 400,
+and 401 when logged out. Swagger shows both endpoints.
+================================================
+Date: 2026-11-14
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-07a (TASK-14)
+
+Prompt (summary of the conversation):
+Help me implement ACC-07a: an admin resets a user's or moderator's password
+to a temporary password, and the account must set a new password that meets
+the password rules at its next login. Follow the API contract endpoint
+POST /api/admin/users/:id/reset-password and reuse the ACC-13 admin module.
+
+How the output was used:
+Used the generated ResetPasswordDto, AdminService.resetPassword and the
+controller route after reviewing them against ACC-07a. The admin-only
+endpoint validates the id (400), returns 404 for a missing account, refuses
+to reset an admin account (403), applies the password rules to the temporary
+password, saves the bcrypt hash, sets mustChangePassword to true, clears any
+ACC-05 lockout, and revokes all of the account's sessions. The account then
+changes the password with PATCH /api/auth/change-password (ACC-08).
+
+Verification:
+Added 9 unit tests (service and DTO); all 17 admin tests pass. Lint and build
+passed locally. Tested in Postman: reset 200, old password 401, login with
+the temporary password shows mustChangePassword true, moderator caller 403,
+admin target 403, unknown user 404, weak password 400. Swagger shows the
+endpoint and its responses.
+Related Requirement: ACC-08 (TASK-15) review fixes, ACC-13, ACC-07a
+
+Prompt (summary of the conversation):
+The team leader asked in the PR review to enforce mustChangePassword on the
+backend with an @AllowPendingPasswordChange() decorator, return 403 on normal
+protected routes until the password is changed, allow /auth/me and
+/auth/change-password, and give @IsString and @IsNotEmpty different messages.
+
+How the output was used:
+Added the decorator (SetMetadata), made JwtAuthGuard read mustChangePassword
+and the decorator through Reflector, marked the two auth routes, and split the
+validation messages. Updated the guard unit tests for the new constructor.
+
+Verification:
+27 auth and guard tests pass; lint and build pass. Postman: moderator with a
+temporary password gets 403 on GET /posts/mine, can change the password, and
+then gets 200.
+================================================
+TASK-23 (ACC-16) - Admin suspends and reactivates users
+Tool: Claude
+Prompt: Help me implement ACC-16 step by step: admin can suspend a registered user (they can't log in, bookings stay) and reactivate them later.
+What AI helped with:
+- suspendAccount / reactivateAccount in admin.service.ts (atomic status update, revoke active sessions on suspend, block suspending admins, 409 for invalid status changes)
+- PATCH /api/admin/accounts/:id/suspend and /reactivate routes with Swagger docs
+- Unit tests in account-status.spec.ts
+What I did:
+- Pasted and reviewed the code, ran tests (29 passed), lint and build
+- Tested all cases in Postman (suspend, suspend again, suspended login, reactivate, suspend admin, login after reactivate)
+TASK-22 (ACC-15) - Moderator suspension and provider activation controls
+Tool: Claude
+Prompt: Help me implement ACC-15 step by step: admin suspends/reactivates moderators, deactivates/reactivates a hotel or airline (hidden from search, cannot be booked, Confirmed bookings stay valid), and affected parties get an in-app notification.
+What AI helped with:
+- In-app notifications on account suspend/reactivate (ACCOUNT_SUSPENDED / ACCOUNT_REACTIVATED) in admin.service.ts
+- New AdminProvidersService + AdminProvidersController: PATCH /api/admin/providers/:type/:id/deactivate and /reactivate, notifying the provider's assigned moderators (PROVIDER_SUSPENDED / PROVIDER_REACTIVATED)
+- One check in flight-bookings.service.ts so flights of a deactivated airline cannot be booked (hotels already checked isActive)
+- Unit tests (admin-providers.service.spec.ts, updated account-status.spec.ts and admin.service.spec.ts)
+What I did:
+- Pasted and reviewed the code, ran tests (38 passed), lint and build
+- Tested in Postman (deactivate/reactivate airline, 409 repeats, 404 unknown hotel, 400 wrong type, suspend/reactivate moderator) and checked the notifications collection in MongoDB Compass
+Date: 2026-11-17
+Student: Nour Hossam
+Tool: Claude
+Related Requirement: ACC-05 (TASK-12)
+
+Prompt (summary of the conversation):
+The ACC-05 lockout code was already on develop, but the 5th failed login still
+returned the generic "Invalid email or password"; the lockout message only
+appeared on the 6th try. Help me make the 5th failure itself return the
+lockout message, as ACC-05 requires, and add tests for the lockout.
+
+How the output was used:
+recordFailedLogin now returns the lock time when that failure locks the
+account, and login returns 423 with the lockout message right away. The rest
+of the existing logic (5 attempts, 15 minutes, reset on success, atomic lock)
+is unchanged. Updated the Swagger description for 423.
+
+Verification:
+Added 6 unit tests (generic 401 before the 5th failure, 423 on the 5th, 423
+while locked without checking the password, login after the lock expires,
+counter reset, unknown email). All 20 auth tests pass; lint and build pass.
+Postman: 4th wrong password 401, 5th 423, right password while locked 423.
+Related Requirement: ACC-14 (TASK-21)
+
+Prompt (summary of the conversation):
+Help me implement ACC-14: an admin views a paginated list of all accounts
+(name, email, role, status, registration date) and can search by name or
+email and filter by role and status. Follow the API contract endpoint
+GET /api/admin/accounts and the team's GEN-05 pagination helper.
+
+How the output was used:
+Used the generated ListAccountsQueryDto, AdminAccountsService and
+AdminAccountsController after reviewing them against ACC-14. Admin only;
+newest first, 10 per page; search matches first name, last name or email
+(case-insensitive, every word must match, special characters treated as
+plain text); role and status are exact filters and can be combined. Only the
+needed columns are read, never the password. Kept in separate files so it
+does not conflict with the ACC-07a PR.
+
+Verification:
+13 new unit tests (service and DTO); all 21 admin tests pass. Lint and build
+passed locally. Postman: full list 200 with pagination, search=sara,
+role=moderator, and an invalid role 400.
+
+
+==================================================
+TASK-19 (ACC-12) - Account deactivation and content handling
+==================================================
+Tool: Claude
+Prompt: Help me implement ACC-12 step by step: a registered user deactivates their own account after confirmation, blocked while they have upcoming Confirmed bookings; afterwards they cannot log in, their posts and public itineraries are hidden, and their comments and reviews show "Deleted user".
+What AI helped with:
+- DELETE /api/users/me (AccountDeactivationController + AccountDeactivationService): password confirmation, upcoming Confirmed hotel/flight booking check, status -> deactivated, revoke all sessions, clear cookies, public itineraries -> private
+- reviewerName helper so hotel reviews of deactivated accounts show "Deleted user" (small change in hotels.service.ts)
+- Unit tests (account-deactivation.service.spec.ts, reviewer-name.spec.ts)
+- Checked that login already refuses deactivated accounts and the blog already hides their posts and shows "Deleted user" on comments
+What I did:
+- Pasted and reviewed the code, ran tests (399 passed in users + hotels), lint and build
+- Tested in Postman with a throwaway user (wrong/missing password, deactivate, logged out, cannot log in, moderator refused)
+==================================================
+Swagger descriptions (ACC-16, ACC-09)
+==================================================
+Tool: Claude
+Prompt: Check my endpoints against CLAUDE.md (every endpoint needs a Swagger summary and description) and add the missing descriptions.
+What AI helped with:
+- Added the missing @ApiOperation descriptions for PATCH /api/admin/accounts/:id/reactivate and GET /api/users/me (documentation only, no behaviour change)
+What I did:
+- Pasted the changes, ran the build, and checked both endpoints on /api/docs

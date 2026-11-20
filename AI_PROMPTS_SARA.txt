@@ -1,0 +1,263 @@
+================================================
+   Date: 2026-11-10
+   Student: Sara Gomaa
+   Tool: Claude
+   Related Requirement: FLT-01, GEN-08
+   Prompt:
+   Asked Claude to question me step by step through FLT-01 (airline profile
+   create/view/edit): schema review against the user stories, DTO
+   validation, ownership checks, error codes, logo upload.
+   How the output was used:
+   Used the explanations and corrections to write the DTOs, service and
+   controller myself. Reviewed and adjusted every snippet before committing.
+================================================
+
+================================================
+
+Date: 2026-11-12
+Student: Sara Gomaa
+Tool: Claude
+Related Requirement: FLT-03
+Prompt:
+Asked to guide me through FLT-03 (airline moderator creates a flight) by
+questioning me and correcting my answers. Topics: where a new flight's
+airline comes from (POST /api/flights has no airline id in the URL), which
+fields the moderator sends versus which the system calculates, how to
+identify airports (IATA code lookup), and how to accept times entered in
+each airport's local time and store them in UTC.
+How the output was used:
+- Learned that the airline must come from the logged-in moderator's
+  ModeratorAssignment, never from the request body, and wrote the lookup
+  (403 if the moderator has no assigned airline).
+- Registered the ModeratorAssignment model in FlightsModule and injected it
+  into FlightsService.
+- Designed CreateFlightDto: moderator sends flightNumber, departure/arrival
+  airport IATA codes and local date-times (format YYYY-MM-DDTHH:mm, no
+  timezone); airline, status, cabins, departureLocalDate and
+  durationMinutes are filled in by the system.
+- Used the suggested regex for the local time format and reviewed it
+  before use.
+================================================
+
+================================================
+Date: 2026-11-13
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-04
+Prompt:
+Asked to guide me step by step through FLT-04 (cabin categories and
+baggage allowance per flight): choosing between embedded subdocuments
+and a separate collection based on CabinSchema, DTO validation rules,
+duplicate cabin class checks, moderator ownership verification,
+AuthModule import troubleshooting, and Swagger error responses.
+How the output was used:
+Used the explanations and code examples to implement AddCabinDto,
+FlightsService.addCabin, and POST /api/flights/:id/cabins in
+FlightsController, and verified the endpoint in Postman. Reviewed and
+adjusted every snippet before committing.
+================================================
+
+Date: 2026-11-13
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-08
+Prompt:
+Asked to walk through implementing FLT-08 (airline extra baggage policy)
+across the DTO, service, and controller layers: validating extraBagPrice
+(> 0) and maxExtraBagsPerPassenger (>= 0) against the embedded
+BaggagePolicy schema, enforcing moderator ownership, documenting
+PUT /api/airlines/:id/baggage-policy in Swagger, and generating sample
+JSON payloads for testing.
+How the output was used:
+Used the guidance and snippets to create SetBaggagePolicyDto, add
+setBaggagePolicy to AirlinesService, expose the protected route in
+AirlinesController, and test the policy updates. Reviewed and adjusted
+every snippet before committing.
+================================================
+
+Date: 2026-11-17
+Student: Sara Gomaa
+Tool: Claude
+Related Requirement: FLT-11
+Prompt:
+I'm starting FLT-11 in my NestJS + MongoDB (Mongoose) project. For anything
+that is a DTO, service or controller, give me the code right away without
+asking questions. If something is new and isn't one of those (a new concept
+or a design decision), ask me about it first and we'll implement it together
+afterward. Keep the code simple, make minimal targeted changes, and explain
+every code block.
+
+Give me only the Swagger decorators for the GET /flights/search controller 
+endpoint (@ApiTags, @ApiOperation, response decorators) and the @ApiProperty
+decorators for the SearchFlightsDto fields. Don't change any other code.
+
+Here are my Flight schema and Airline schema: [paste both]. Flights store
+departureLocalDate as a "YYYY-MM-DD" string, and seats are tracked per cabin
+(totalSeats, bookedSeats, heldSeats). Write the service search method using
+these exact fields, and fix the DTO date validation so it matches the stored
+string format.
+How the output was used:
+The DTO, controller method and service search method were added to the existing
+flights module, and the DTO’s date check was tightened to match your stored 
+departureLocalDate string. Swagger decorators were then layered on the controller
+and DTO. When your Postman test returned nothing, the temporary logs narrowed
+the problem down: “active airlines: 0” showed the airline lookup was failing,
+and the follow-up log (3 test moderatorassignments) showed that the Airline 
+model was bound to the moderator assignments collection rather than airlines.
+That pointed to a wrong schema or import in the module wiring, not to your data
+or the search logic itself. The open item is the flight and cabin selection step,
+which I asked you about but you haven’t answered yet.
+================================================
+Date: 2026-11-13
+Student: Sara Gomaa 
+Tool: Gemini
+Related Requirement: FLT-09
+Prompt:
+Asked to explain the FLT-09 cancellation tier lookup rules, generate
+SetCancellationPolicyDto, AirlinesService.setCancellationPolicy, and
+PUT /api/airlines/:id/cancellation-policy aligned with the embedded
+CancellationPolicy and CancellationRule schemas, refactor controller
+decorators to use @Role(UserRole.MODERATOR) and @CurrentUser(), and
+provide Postman test cases for valid tiers, empty rules, duplicate
+thresholds, boundary values, and authorization errors.
+How the output was used:
+Used the explanations and snippets to implement SetCancellationPolicyDto,
+add setCancellationPolicy (with uniqueness checks and descending threshold
+sorting) to AirlinesService, expose and document the protected route in
+AirlinesController, and verify all edge cases in Postman. Reviewed and
+adjusted every snippet before committing.
+================================================
+Date: 2026-11-19
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-05, GEN-01
+Prompt:
+Asked to guide me through implementing FLT-05 (PATCH /api/flights/:id and
+PATCH /api/flights/:id/cabins/:cabinId): validating partial flight time and
+airport updates with timezone conversions, locking airport edits against
+active FlightBooking records, preventing cabin totalSeats reductions below
+bookedSeats + heldSeats, integrating NotificationsService.createForMany to
+notify Confirmed passengers on schedule changes, resolving TypeScript
+strict lookup types, and generating Postman test cases.
+How the output was used:
+Used the explanations, MongoDB seed documents, and code snippets to build
+UpdateFlightDto, UpdateCabinDto, FlightsService.update,
+FlightsService.updateCabin, and the protected FlightsController routes,
+then verified all happy-path, validation, conflict, and authorization cases
+in Postman. Reviewed and adjusted every snippet before committing.
+================================================
+Date: 2026-11-19
+Student: Sara Gomaa
+Tool: Claude
+Related Requirement: FLT-25
+Prompt:
+Asked how to build "view my flight bookings" (Upcoming, Past, Cancelled and
+details). Pasted my FlightBooking schema and flight bookings service.
+How the output was used:
+- Claude provided the grouping logic, the list and details service methods
+  and the controller. I questioned why the date was missing from the
+  response, and the code was corrected to include the local date and local
+  times per airport time zone.
+- Replaced the duplicate details query with the existing loadOwnedSummary
+  method, and fixed field names (departureTime/arrivalTime) to match my
+  schema.
+================================================
+Date: 2026-11-18
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-15
+Prompt:
+Asked to review my FlightsService search and findLeg implementation,
+extend SearchFlightsDto with minPrice, maxPrice, sortBy, and sortOrder,
+implement inclusive price range filtering, minPrice > maxPrice validation,
+multi-criteria sorting by lowest matching cabin fare, duration, and
+departureTime, wire in airport-local time formatting, and generate
+Postman test queries.
+How the output was used:
+Used the suggestions and annotated snippets to update SearchFlightsDto
+and FlightsService (search, findLeg, and sortFlights) and verified all
+filtering, sorting, and 400 validation cases in Postman. Reviewed and
+adjusted every snippet before committing.
+================================================
+Date: 2026-11-20
+Student: Sara Gomaa
+Tool: Copilot SDK (VS Code)
+Related Requirement: FLT-28
+Prompt:
+Asked to implement the bonus FLT-28 seat-selection feature for flight
+bookings. Approved a PATCH endpoint, passengerId/seatNumber payload,
+seat format, ownership and hold checks, duplicate-seat handling, and
+occupation checks across confirmed or active pending bookings.
+How the output was used:
+Used the existing pending-payment booking flow, passenger subdocument IDs,
+and flight booking schema to add the selection DTO, protected controller
+route, seat validation service method, and focused unit test. Reviewed and
+adjusted the implementation before running validation.
+Related Requirement: FLT-05
+Prompt:
+Fix invalid flight IDs returning 500 instead of 400, remove the five leftover
+debug console.log statements, and make cabin seat-count updates concurrency-safe
+so changes during an update return 409.
+How the output was used:
+Added ObjectId validation to the shared scheduled-flight update loader, removed
+the five flight-service debug logs, changed cabin edits to an atomic conditional
+update matching the observed cabin capacity/booked/held counters, documented
+the conflict response, and added focused regression tests.
+Related Requirement: FLT-29
+Prompt:
+Asked to implement FLT-29 for airline moderators: view per-flight
+CONFIRMED and CANCELLED bookings, passenger names, cabin, seat numbers,
+status, remaining seats per cabin, and CSV export. Asked for an implementation
+plan first and explicit approval before editing. The repository skill file
+was supplied but could not be opened by the session tools.
+How the output was used:
+Used the Mandatory CSV requirement and existing moderator assignment,
+flight, cabin, and flight booking schemas to add ownership checks,
+Swagger-documented JSON and CSV routes, a flight service report method,
+and a focused unit test. Reviewed and adjusted the implementation before
+running validation.
+================================================
+Date: 2026-11-19
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-06, PAY-03, GEN-01
+Prompt:
+Asked for implementation guidance and Postman test cases for FLT-06
+(POST /api/flights/:id/cancel): validating explicit cancellation
+confirmation in CancelFlightDto, cancelling Scheduled flights while
+hiding them from search, issuing 100% refunds (PAY-03) for Confirmed
+bookings across one-way and round-trip legs, releasing pending seat
+holds, integrating NotificationsService.createForMany (GEN-01), and
+resolving NestJS module dependency exports between FlightsModule and
+ItinerariesModule.
+How the output was used:
+Used the explanations and code snippets to build CancelFlightDto,
+FlightsService.cancelFlight, and the protected POST /api/flights/:id/cancel
+route in FlightsController, wired FlightsModule exports, and verified all
+happy-path, refund, notification, and error cases in Postman. Reviewed and
+adjusted every snippet before committing.
+================================================
+Date: 2026-11-20
+Student: Sara Gomaa
+Tool: Cursor (Grok 4.7)
+Related Requirement: FLT-06, PAY-03
+
+Prompt:
+Reviewer said FLT-06 only inserts a refund document and never calls Stripe.
+Explain how to replace that with RefundsService.issueRefund() so refund
+status, Stripe refund id, payment status and refund notifications are
+handled, then apply the fix.
+
+How the output was used:
+Reviewed the change against FLT-06 and PAY-03 and the existing
+RefundsService.issueRefund() / refundQuote() used by FLT-26 and HTL-21.
+FlightsModule now imports PaymentsModule. cancelFlight saves each
+confirmed booking as CANCELLED, then calls issueRefund() with a 100%
+provider-initiated quote (totalPrice + baggage fees). A refund failure
+is logged and does not stop the other bookings. Pending holds are still
+released without a refund. The existing flight-cancelled notification
+stays; the refund notification is sent by RefundsService.
+
+Verification:
+npm run build in backend completed successfully. No Stripe call or
+database refund was executed.
