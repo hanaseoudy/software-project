@@ -17,6 +17,7 @@ import {
   FlightBooking,
   FlightBookingSchema,
 } from './schemas/flight-booking.schema';
+import { Refund, RefundSchema } from '../payments/schemas/refund.schema';
 import { FlightChange, FlightChangeSchema } from './schemas/flight-change.schema';
 
 @Module({
@@ -29,6 +30,7 @@ import { FlightChange, FlightChangeSchema } from './schemas/flight-change.schema
       { name: Airline.name, schema: AirlineSchema },
       { name: Airport.name, schema: AirportSchema },
       { name: FlightBooking.name, schema: FlightBookingSchema },
+      { name: Refund.name, schema: RefundSchema },
       { name: FlightChange.name, schema: FlightChangeSchema },
     ]),
   ],
