@@ -11,6 +11,10 @@ import { FlightsController } from './flights.controller';
 import { FlightsService } from './flights.service';
 import { AuthModule } from '../auth/auth.module';
 import { JwtService } from '@nestjs/jwt';
+import {
+  FlightBooking,
+  FlightBookingSchema,
+} from '../flight-bookings/schemas/flight-booking.schema';
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -18,6 +22,7 @@ import { JwtService } from '@nestjs/jwt';
       { name: Airport.name, schema: AirportSchema },
       { name: Flight.name, schema: FlightSchema },
       { name: ModeratorAssignment.name, schema: ModeratorAssignmentSchema },
+      { name: FlightBooking.name, schema: FlightBookingSchema },
     ]),
     AuthModule,
   ],

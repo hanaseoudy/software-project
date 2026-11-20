@@ -160,3 +160,20 @@ Used the suggestions and annotated snippets to update SearchFlightsDto
 and FlightsService (search, findLeg, and sortFlights) and verified all
 filtering, sorting, and 400 validation cases in Postman. Reviewed and
 adjusted every snippet before committing.
+================================================
+Date: 2026-11-20
+Student: Sara Gomaa
+Tool: Copilot SDK (VS Code)
+Related Requirement: FLT-29
+Prompt:
+Asked to implement FLT-29 for airline moderators: view per-flight
+CONFIRMED and CANCELLED bookings, passenger names, cabin, seat numbers,
+status, remaining seats per cabin, and CSV export. Asked for an implementation
+plan first and explicit approval before editing. The repository skill file
+was supplied but could not be opened by the session tools.
+How the output was used:
+Used the Mandatory CSV requirement and existing moderator assignment,
+flight, cabin, and flight booking schemas to add ownership checks,
+Swagger-documented JSON and CSV routes, a flight service report method,
+and a focused unit test. Reviewed and adjusted the implementation before
+running validation.

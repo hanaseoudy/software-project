@@ -82,6 +82,7 @@ describe('FLT-11/12 legacy and ITN-26 shared flight search', () => {
       airports as never,
       {} as never,
       {} as never,
+      {} as never,
     );
   });
   it('preserves the single-pair legacy array contract and local/UTC formatting', async () => {
