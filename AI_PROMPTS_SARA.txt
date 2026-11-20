@@ -160,3 +160,18 @@ Used the suggestions and annotated snippets to update SearchFlightsDto
 and FlightsService (search, findLeg, and sortFlights) and verified all
 filtering, sorting, and 400 validation cases in Postman. Reviewed and
 adjusted every snippet before committing.
+================================================
+Date: 2026-11-20
+Student: Sara Gomaa
+Tool: Copilot SDK (VS Code)
+Related Requirement: FLT-28
+Prompt:
+Asked to implement the bonus FLT-28 seat-selection feature for flight
+bookings. Approved a PATCH endpoint, passengerId/seatNumber payload,
+seat format, ownership and hold checks, duplicate-seat handling, and
+occupation checks across confirmed or active pending bookings.
+How the output was used:
+Used the existing pending-payment booking flow, passenger subdocument IDs,
+and flight booking schema to add the selection DTO, protected controller
+route, seat validation service method, and focused unit test. Reviewed and
+adjusted the implementation before running validation.
