@@ -62,6 +62,7 @@ export class AuthService {
         email: dto.email,
         passwordHash,
         termsAcceptedAt: new Date(),
+        emailVerified: false, // ACC-02: booking stays blocked until the email link is opened
       });
 
       return {
@@ -296,6 +297,7 @@ async refresh(refreshToken: string | undefined) {
       role: user.role,
       providerType,
       mustChangePassword: user.mustChangePassword,
+      emailVerified: user.emailVerified !== false, // ACC-02
     };
   }
 

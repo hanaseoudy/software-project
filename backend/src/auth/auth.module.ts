@@ -4,9 +4,12 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { ModeratorAssignment, ModeratorAssignmentSchema } from '../users/schemas/moderatorassignment.schema';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { MailModule } from '../mail/mail.module';
 import { Session, SessionSchema } from './schemas/session.schema';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { EmailVerificationService } from './email-verification.service';
+import { PasswordResetService } from './password-reset.service';
 
 @Module({
   imports: [
@@ -16,9 +19,10 @@ import { AuthService } from './auth.service';
       { name: Session.name, schema: SessionSchema },
     ]),
     JwtModule.register({}),
+    MailModule, // ACC-02 verification email, ACC-07 password reset email
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard],
+  providers: [AuthService, EmailVerificationService, PasswordResetService, JwtAuthGuard],
   exports: [JwtModule, MongooseModule, JwtAuthGuard],
 })
 export class AuthModule {}
