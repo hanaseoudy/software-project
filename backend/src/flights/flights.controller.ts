@@ -32,6 +32,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AddCabinDto } from './dto/add-cabin.dto';
 import { SearchFlightsDto } from './dto/search-flights.dto';
+import { CancelFlightDto } from './dto/cancel-flight.dto';
 
 @ApiTags('Flights')
 @Controller('flights')
@@ -65,6 +66,45 @@ export class FlightsController {
     @Body() dto: CreateFlightsDto,
   ) {
     return this.flights.create(userId.sub, dto);
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Cancel a Scheduled flight after confirmation (FLT-06)',
+    description:
+      'Cancels a Scheduled flight owned by the moderator, issues 100% refunds (PAY-03) for Confirmed bookings, releases pending seat holds, and notifies passengers.',
+  })
+  @ApiParam({ name: 'id', description: 'MongoDB ObjectId of the flight' })
+  @ApiResponse({
+    status: 200,
+    description: 'Flight cancelled, bookings refunded, and holds released.',
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid flight ID, missing confirmation, or flight already departed.',
+  })
+  @ApiResponse({ status: 401, description: 'Not logged in' })
+  @ApiResponse({
+    status: 403,
+    description: 'Not a moderator of this flight’s airline',
+  })
+  @ApiResponse({ status: 404, description: 'Flight not found' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Flight is not in Scheduled status (already Cancelled or Departed)',
+  })
+  cancelFlight(
+    @Param('id') id: string,
+    @Body() dto: CancelFlightDto,
+    @CurrentUser() user: AuthPayload,
+  ) {
+    return this.flights.cancelFlight(id, user.sub, dto);
   }
 
   @Post(':id/cabins')
