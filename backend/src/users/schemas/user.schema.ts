@@ -89,6 +89,13 @@ export class User {
   @Prop({ type: Date, select: false })
   emailVerificationExpiresAt?: Date;
 
+  /** ACC-07: SHA-256 of the current password reset token; a newer request replaces it. */
+  @Prop({ type: String, select: false })
+  passwordResetTokenHash?: string;
+
+  @Prop({ type: Date, select: false })
+  passwordResetExpiresAt?: Date;
+
   @Prop({ type: Number, default: 0, select: false })
   failedLoginAttempts: number;
 

@@ -20,6 +20,9 @@ import { ACCESS_COOKIE, REFRESH_COOKIE } from './auth.cookies';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { PasswordResetService } from './password-reset.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordWithTokenDto } from './dto/reset-password-with-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterResponseDto } from './dto/register-response.dto';
 import { LoginDto } from './dto/login.dto';
@@ -33,6 +36,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private emailVerification: EmailVerificationService,
+    private passwordReset: PasswordResetService,
   ) {}
 
   @Post('register')
@@ -100,6 +104,44 @@ export class AuthController {
   })
   resendVerification(@Req() req: AuthenticatedRequest) {
     return this.emailVerification.resend(req.user!.sub);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Ask for a password reset link by email (ACC-07)',
+    description:
+      'Always returns the same message, whether or not the email is registered. The link is valid for 30 minutes, works once, and a newer request makes older links stop working.',
+  })
+  @ApiOkResponse({
+    description: 'Same reply for every email',
+    schema: { example: { message: 'If an account exists for this email, a password reset link has been sent.' } },
+  })
+  @ApiBadRequestResponse({
+    description: 'The email is not a valid email address',
+    type: ValidationErrorResponseDto,
+    example: { message: 'Validation failed', errors: { email: ['Email is invalid'] } },
+  })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.passwordReset.requestReset(dto.email);
+  }
+
+  @Post('reset-password')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Set a new password with the token from the reset email (ACC-07)',
+    description: 'The link works once and expires after 30 minutes. All sessions of the account are logged out.',
+  })
+  @ApiOkResponse({
+    description: 'Password changed',
+    schema: { example: { message: 'Password reset. You can now log in with your new password.' } },
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid new password, or a wrong, used, replaced or expired token',
+    example: { message: 'This reset link is invalid or has expired', error: 'Bad Request', statusCode: 400 },
+  })
+  resetPassword(@Body() dto: ResetPasswordWithTokenDto) {
+    return this.passwordReset.resetPassword(dto.token, dto.newPassword);
   }
 
   @Post('login')
