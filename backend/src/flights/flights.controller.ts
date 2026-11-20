@@ -1,3 +1,4 @@
+
 import {
   Body,
   Controller,
@@ -5,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   Res,
@@ -31,14 +33,16 @@ import type { AuthPayload } from '../common/guards/jwt-auth.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AddCabinDto } from './dto/add-cabin.dto';
+import { UpdateFlightDto } from './dto/update-flights.dto';
+import { UpdateCabinDto } from './dto/update-cabin.dto';
 import { SearchFlightsDto } from './dto/search-flights.dto';
 import { CancelFlightDto } from './dto/cancel-flight.dto';
-
+ 
 @ApiTags('Flights')
 @Controller('flights')
 export class FlightsController {
   constructor(private readonly flights: FlightsService) {}
-
+ 
   @ApiOperation({
     summary: 'Create a new flight (Airline Moderator only)',
     description:
@@ -67,7 +71,7 @@ export class FlightsController {
   ) {
     return this.flights.create(userId.sub, dto);
   }
-
+ 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -106,7 +110,39 @@ export class FlightsController {
   ) {
     return this.flights.cancelFlight(id, user.sub, dto);
   }
-
+ 
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Edit times/airports of own Scheduled flight (FLT-05)',
+  })
+  @ApiResponse({ status: 200, description: 'Flight updated' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid id, date, or schedule (e.g. arrival not after departure)',
+  })
+  @ApiResponse({ status: 401, description: 'Not logged in' })
+  @ApiResponse({
+    status: 403,
+    description: "Not a moderator of this flight's airline",
+  })
+  @ApiResponse({ status: 404, description: 'Flight not found' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Flight not Scheduled, airports locked by bookings, or duplicate flight number on that date',
+  })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateFlightDto,
+    @CurrentUser() user: AuthPayload,
+  ) {
+    return this.flights.update(id, user.sub, dto);
+  }
+ 
   @Post(':id/cabins')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiCookieAuth()
@@ -147,7 +183,37 @@ export class FlightsController {
     // req.user.sub is the moderator's ID extracted from the JWT token
     return this.flights.addCabin(flightId, user.sub, dto);
   }
-
+ 
+  @Patch(':id/cabins/:cabinId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR)
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Edit price/seat count of a cabin (FLT-05)' })
+  @ApiResponse({ status: 200, description: 'Cabin updated' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid id, empty body, or invalid values',
+  })
+  @ApiResponse({ status: 401, description: 'Not logged in' })
+  @ApiResponse({
+    status: 403,
+    description: "Not a moderator of this flight's airline",
+  })
+  @ApiResponse({ status: 404, description: 'Flight or cabin not found' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Flight not Scheduled, seats below booked + held, or seat counts changed during the update',
+  })
+  updateCabin(
+    @Param('id') id: string,
+    @Param('cabinId') cabinId: string,
+    @Body() dto: UpdateCabinDto,
+    @CurrentUser() user: AuthPayload,
+  ) {
+    return this.flights.updateCabin(id, cabinId, user.sub, dto);
+  }
+ 
   @Get(':id/bookings')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR)
@@ -174,7 +240,7 @@ export class FlightsController {
   ) {
     return this.flights.getModeratorFlightBookings(flightId, user.sub);
   }
-
+ 
   @Get(':id/passengers/export')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR)
@@ -206,7 +272,7 @@ export class FlightsController {
     });
     return new StreamableFile(Buffer.from(csv, 'utf8'));
   }
-
+ 
   @ApiOperation({
     summary: 'Search flights (public)',
     description:
@@ -226,7 +292,7 @@ export class FlightsController {
   search(@Query() query: SearchFlightsDto) {
     return this.flights.search(query);
   }
-
+ 
   @Get(':id')
   @ApiOperation({ summary: 'Get flight details by ID (FLT-17)' })
   @ApiParam({ name: 'id', description: 'MongoDB ObjectId of the flight' })
@@ -240,3 +306,4 @@ export class FlightsController {
     return this.flights.findOne(id);
   }
 }
+ 
