@@ -7,8 +7,11 @@ import {
   Param,
   Post,
   Query,
+  Res,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FlightsService } from './flights.service';
 import { UserRole } from '../users/schemas/user.schema';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -106,7 +109,7 @@ export class FlightsController {
 
   @Post(':id/cabins')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @ApiCookieAuth('access_token')
+  @ApiCookieAuth()
   @Roles(UserRole.MODERATOR)
   @ApiOperation({ summary: 'Add a cabin to an existing flight (FLT-04)' })
   @ApiParam({ name: 'id', description: 'The MongoDB ObjectId of the flight' })
@@ -143,6 +146,65 @@ export class FlightsController {
   ) {
     // req.user.sub is the moderator's ID extracted from the JWT token
     return this.flights.addCabin(flightId, user.sub, dto);
+  }
+
+  @Get(':id/bookings')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR)
+  @ApiCookieAuth('access_token')
+  @ApiOperation({
+    summary: 'View flight bookings and remaining seats (FLT-29)',
+    description:
+      'Airline moderators can view CONFIRMED and CANCELLED bookings for a flight operated by their assigned airline.',
+  })
+  @ApiParam({ name: 'id', description: 'MongoDB ObjectId of the flight' })
+  @ApiOkResponse({
+    description: 'Flight bookings and seats remaining by cabin',
+  })
+  @ApiBadRequestResponse({ description: 'Invalid flight ID' })
+  @ApiResponse({ status: 401, description: 'Not logged in' })
+  @ApiResponse({
+    status: 403,
+    description: 'Moderator is not assigned to this flight airline',
+  })
+  @ApiResponse({ status: 404, description: 'Flight not found' })
+  getFlightBookings(
+    @Param('id') flightId: string,
+    @CurrentUser() user: AuthPayload,
+  ) {
+    return this.flights.getModeratorFlightBookings(flightId, user.sub);
+  }
+
+  @Get(':id/passengers/export')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR)
+  @ApiCookieAuth()
+  @ApiOperation({
+    summary: 'Export flight passenger list as CSV (FLT-29)',
+  })
+  @ApiParam({ name: 'id', description: 'MongoDB ObjectId of the flight' })
+  @ApiOkResponse({
+    description: 'CSV passenger list',
+    content: { 'text/csv': { schema: { type: 'string', format: 'binary' } } },
+  })
+  @ApiBadRequestResponse({ description: 'Invalid flight ID' })
+  @ApiResponse({ status: 401, description: 'Not logged in' })
+  @ApiResponse({
+    status: 403,
+    description: 'Moderator is not assigned to this flight airline',
+  })
+  @ApiResponse({ status: 404, description: 'Flight not found' })
+  async exportPassengerList(
+    @Param('id') flightId: string,
+    @CurrentUser() user: AuthPayload,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.flights.getModeratorPassengerCsv(flightId, user.sub);
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="flight-${flightId}-passengers.csv"`,
+    });
+    return new StreamableFile(Buffer.from(csv, 'utf8'));
   }
 
   @ApiOperation({

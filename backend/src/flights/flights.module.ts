@@ -10,6 +10,7 @@ import {
 import { FlightsController } from './flights.controller';
 import { FlightsService } from './flights.service';
 import { AuthModule } from '../auth/auth.module';
+import { JwtService } from '@nestjs/jwt';
 import { NotificationsModule } from '../notifications/notifications.module';
 import {
   FlightBooking,

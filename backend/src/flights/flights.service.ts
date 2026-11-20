@@ -547,6 +547,102 @@ export class FlightsService {
     return flight;
   }
 
+  async getModeratorFlightBookings(flightId: string, moderatorId: string) {
+    const flight = await this.loadModeratorFlight(flightId, moderatorId);
+    const bookings = await this.findModeratorFlightBookings(flightId);
+
+    return {
+      flightId: String(flight._id),
+      flightNumber: flight.flightNumber,
+      cabinsRemaining: flight.cabins.map((cabin) => ({
+        cabinClass: cabin.cabinClass,
+        seatsRemaining: Math.max(
+          0,
+          cabin.totalSeats - cabin.bookedSeats - cabin.heldSeats,
+        ),
+      })),
+      bookings: bookings.map((booking) => ({
+        bookingReference: booking.bookingReference ?? null,
+        cabinClass: booking.cabinClass,
+        status: booking.status,
+        passengers: booking.passengers.map((passenger) => ({
+          firstName: passenger.firstName,
+          lastName: passenger.lastName,
+          seatNumber: passenger.seatNumber ?? null,
+        })),
+      })),
+    };
+  }
+
+  async getModeratorPassengerCsv(flightId: string, moderatorId: string) {
+    const report = await this.getModeratorFlightBookings(flightId, moderatorId);
+    const escapeCsv = (value: unknown) =>
+      `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows: unknown[][] = [
+      ['Booking Reference', 'Passenger Name', 'Cabin', 'Seat', 'Status'],
+      ...report.bookings.flatMap((booking) =>
+        booking.passengers.map((passenger) => [
+          booking.bookingReference,
+          `${passenger.firstName} ${passenger.lastName}`,
+          booking.cabinClass,
+          passenger.seatNumber,
+          booking.status,
+        ]),
+      ),
+    ];
+
+    return rows
+      .map((row) =>
+        row.map((value: unknown) => escapeCsv(value)).join(','),
+      )
+      .join('\r\n');
+  }
+
+  private async loadModeratorFlight(
+    flightId: string,
+    moderatorId: string,
+  ): Promise<FlightDocument> {
+    if (!isValidObjectId(flightId)) {
+      throw new BadRequestException('Invalid flight ID format');
+    }
+    if (!isValidObjectId(moderatorId)) {
+      throw new BadRequestException('Invalid user ID format');
+    }
+
+    const flight = await this.flightsModel.findById(flightId).lean();
+    if (!flight) {
+      throw new NotFoundException('Flight not found');
+    }
+
+    const airlineId = await this.getModeratorAirlineId(moderatorId);
+    if (flight.airline.toString() !== airlineId.toString()) {
+      throw new ForbiddenException(
+        'You do not have permission to view this flight',
+      );
+    }
+
+    return flight as unknown as FlightDocument;
+  }
+
+  private async findModeratorFlightBookings(flightId: string) {
+    const flightObjectId = new Types.ObjectId(flightId);
+    return this.flightBookingModel
+      .find({
+        $or: [
+          { outboundFlight: flightObjectId },
+          { returnFlight: flightObjectId },
+        ],
+        status: {
+          $in: [
+            FlightBookingStatus.CONFIRMED,
+            FlightBookingStatus.CANCELLED,
+          ],
+        },
+      })
+      .sort({ bookingReference: 1 })
+      .lean();
+  }
+
   private async findLeg(
     fromCode: string | readonly string[],
     toCode: string | readonly string[],
