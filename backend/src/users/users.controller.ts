@@ -37,7 +37,10 @@ export class UsersController {
   constructor(private usersService: UsersService) {}
 
   @Get('me')
-  @ApiOperation({ summary: "Get the logged-in user's profile (ACC-09, ACC-11)" })
+  @ApiOperation({
+    summary: "Get the logged-in user's profile (ACC-09, ACC-11)",
+    description: 'Returns name, email, phone number, role and preferred currency of the logged-in user. Never returns the password.',
+  })
   @ApiOkResponse({ description: 'The profile', schema: { example: PROFILE_EXAMPLE } })
   @ApiUnauthorizedResponse(NOT_AUTHENTICATED)
   getProfile(@CurrentUser() user: AuthPayload) {

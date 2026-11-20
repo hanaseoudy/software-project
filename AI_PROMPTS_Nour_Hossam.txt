@@ -180,3 +180,12 @@ What AI helped with:
 What I did:
 - Pasted and reviewed the code, ran tests (399 passed in users + hotels), lint and build
 - Tested in Postman with a throwaway user (wrong/missing password, deactivate, logged out, cannot log in, moderator refused)
+==================================================
+Swagger descriptions (ACC-16, ACC-09)
+==================================================
+Tool: Claude
+Prompt: Check my endpoints against CLAUDE.md (every endpoint needs a Swagger summary and description) and add the missing descriptions.
+What AI helped with:
+- Added the missing @ApiOperation descriptions for PATCH /api/admin/accounts/:id/reactivate and GET /api/users/me (documentation only, no behaviour change)
+What I did:
+- Pasted the changes, ran the build, and checked both endpoints on /api/docs
