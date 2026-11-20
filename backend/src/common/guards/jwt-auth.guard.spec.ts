@@ -59,4 +59,27 @@ describe('JwtAuthGuard', () => {
       expect(req.user?.role).toBe(UserRole.MODERATOR);
     });
   });
+
+  describe('verified email for booking (ACC-02)', () => {
+    const withUser = (extra: object) =>
+      users.findById.mockReturnValue({ select: () => ({ lean: async () => ({ status: AccountStatus.ACTIVE, role: UserRole.USER, ...extra }) }) });
+    const onBookingRoute = () =>
+      reflector.getAllAndOverride.mockImplementation((key: string) => key === 'requireVerifiedEmail');
+
+    it('blocks a booking route with 403 until the email is verified', async () => {
+      withUser({ emailVerified: false });
+      onBookingRoute();
+      await expect(guard.canActivate(context)).rejects.toMatchObject({ status: 403, message: 'Please verify your email address before booking' });
+      expect(req.user).toBeUndefined();
+    });
+    it('allows other routes for an unverified user', async () => {
+      withUser({ emailVerified: false });
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+    });
+    it.each([true, undefined])('allows a booking route when emailVerified is %s', async (emailVerified) => {
+      withUser({ emailVerified });
+      onBookingRoute();
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+    });
+  });
 });

@@ -1,4 +1,3 @@
-
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
@@ -75,6 +74,20 @@ export class User {
   preferences: {
     currency: SupportedCurrency;
   };
+
+  /**
+   * ACC-02: false from registration until the user opens the link in the verification email.
+   * Accounts created before ACC-02 have no value and count as verified.
+   */
+  @Prop({ type: Boolean })
+  emailVerified?: boolean;
+
+  /** ACC-02: SHA-256 of the current verification token (the token itself is only in the email). */
+  @Prop({ type: String, select: false })
+  emailVerificationTokenHash?: string;
+
+  @Prop({ type: Date, select: false })
+  emailVerificationExpiresAt?: Date;
 
   @Prop({ type: Number, default: 0, select: false })
   failedLoginAttempts: number;

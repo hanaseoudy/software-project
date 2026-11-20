@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -7,6 +7,7 @@ import {
   ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -17,6 +18,8 @@ import { AllowPendingPasswordChange } from '../common/decorators/allow-pending-p
 import type { AuthenticatedRequest } from '../common/guards/jwt-auth.guard';
 import { ACCESS_COOKIE, REFRESH_COOKIE } from './auth.cookies';
 import { AuthService } from './auth.service';
+import { EmailVerificationService } from './email-verification.service';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RegisterResponseDto } from './dto/register-response.dto';
 import { LoginDto } from './dto/login.dto';
@@ -27,7 +30,10 @@ import { ValidationErrorResponseDto } from './dto/validation-error-response.dto'
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private emailVerification: EmailVerificationService,
+  ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new user account (ACC-01)' })
@@ -52,8 +58,48 @@ export class AuthController {
       errors: { email: ['Email is already registered'] },
     },
   })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  async register(@Body() dto: RegisterDto) {
+    const user = await this.authService.register(dto);
+    // ACC-02: sent in the background; a slow or failing email never blocks the registration.
+    void this.emailVerification.sendVerificationEmail(user.id);
+    return user;
+  }
+
+  @Get('verify-email')
+  @ApiOperation({
+    summary: 'Verify the email address with the token from the email link (ACC-02)',
+    description: 'The link is valid for 24 hours and works once. A newer link replaces the old one. Booking is allowed afterwards.',
+  })
+  @ApiQuery({ name: 'token', required: true, description: 'The token from the verification link (?token=...)' })
+  @ApiOkResponse({ description: 'Email verified', schema: { example: { message: 'Email verified' } } })
+  @ApiBadRequestResponse({
+    description: 'Missing, wrong, already used or expired token',
+    example: { message: 'This verification link is invalid or has expired', error: 'Bad Request', statusCode: 400 },
+  })
+  verifyEmail(@Query() dto: VerifyEmailDto) {
+    return this.emailVerification.verify(dto.token);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth(ACCESS_COOKIE)
+  @ApiOperation({
+    summary: 'Send a new verification email to the logged-in user (ACC-02)',
+    description:
+      'For a user whose link expired or got lost. A new 24-hour link is emailed and the previous link stops working. Not in the project PDF; added so an unverified user is never stuck without a way to book.',
+  })
+  @ApiOkResponse({ description: 'A new link was sent; the old one stops working', schema: { example: { message: 'Verification email sent' } } })
+  @ApiUnauthorizedResponse({
+    description: 'Not logged in',
+    example: { message: 'Not authenticated', error: 'Unauthorized', statusCode: 401 },
+  })
+  @ApiConflictResponse({
+    description: 'The email address is already verified',
+    example: { message: 'Your email address is already verified', error: 'Conflict', statusCode: 409 },
+  })
+  resendVerification(@Req() req: AuthenticatedRequest) {
+    return this.emailVerification.resend(req.user!.sub);
   }
 
   @Post('login')

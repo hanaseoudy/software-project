@@ -9,6 +9,7 @@ import { ACCESS_COOKIE } from '../../auth/auth.cookies';
 import { Session, SessionDocument } from '../../auth/schemas/session.schema';
 import { AccountStatus, User, UserDocument } from '../../users/schemas/user.schema';
 import { ALLOW_PENDING_PASSWORD_CHANGE_KEY } from '../decorators/allow-pending-password-change.decorator';
+import { REQUIRE_VERIFIED_EMAIL_KEY } from '../decorators/require-verified-email.decorator';
 
 export interface AuthPayload {
   sub: string;
@@ -60,7 +61,7 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Not authenticated');
     }
 
-    const user = await this.userModel.findById(payload.sub).select('status role mustChangePassword').lean();
+    const user = await this.userModel.findById(payload.sub).select('status role mustChangePassword emailVerified').lean();
     if (!user || user.status !== AccountStatus.ACTIVE) {
       await this.sessionModel.updateOne({ _id: session._id }, { $set: { revokedAt: now } });
       throw new UnauthorizedException('Not authenticated');
@@ -70,8 +71,20 @@ export class JwtAuthGuard implements CanActivate {
     if (user.mustChangePassword && !this.allowsPendingPasswordChange(context)) {
       throw new ForbiddenException('You must change your temporary password before continuing');
     }
+
+    // ACC-02: booking needs a verified email. Accounts created before ACC-02 have no value and are allowed.
+    if (user.emailVerified === false && this.requiresVerifiedEmail(context)) {
+      throw new ForbiddenException('Please verify your email address before booking');
+    }
     request.user = { sub: payload.sub, sid: payload.sid, role: user.role };
     return true;
+  }
+
+  private requiresVerifiedEmail(context: ExecutionContext) {
+    return this.reflector.getAllAndOverride<boolean>(REQUIRE_VERIFIED_EMAIL_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
   }
 
   private allowsPendingPasswordChange(context: ExecutionContext) {
