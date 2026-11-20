@@ -1,6 +1,11 @@
 import { PLATFORM_CURRENCY } from '../../common/constants/currency.constants';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types, Schema as MongooseSchema } from 'mongoose';
+import {
+  Document,
+  Types,
+  Schema as MongooseSchema,
+  HydratedDocument,
+} from 'mongoose';
 import { Passenger, PassengerSchema } from './passenger.schema';
 
 export enum FlightBookingStatus {
@@ -18,9 +23,16 @@ export enum CabinClass {
   FIRST = 'FIRST',
 }
 
+export type FlightBookingDocument = HydratedDocument<FlightBooking>;
+
 @Schema({ timestamps: true })
 export class FlightBooking extends Document {
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  })
   user: Types.ObjectId;
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Flight', required: true })

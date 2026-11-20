@@ -182,7 +182,6 @@ What I did:
 - Tested in Postman with a throwaway user (wrong/missing password, deactivate, logged out, cannot log in, moderator refused)
 ==================================================
 TASK-114 (ACC-02, Bonus) - Email verification before booking
-==================================================
 Tool: Claude
 Prompt: Help me implement ACC-02 step by step: send a verification link by email after registration and block booking until the email is verified, using the existing GEN-01-B MailService and the endpoint in the project PDF (GET /api/auth/verify-email).
 What AI helped with:
@@ -194,9 +193,7 @@ What AI helped with:
 What I did:
 - Pasted and reviewed the code, ran tests (363 passed in auth/common/bookings/users), lint and build
 - Tested in Postman with the Ethereal test inbox: blocked booking, resend, old link rejected, verify, single use, 409 when already verified, booking allowed after verifying
-==================================================
 TASK-115 (ACC-07, Bonus) - Secure email-based password recovery
-==================================================
 Tool: Claude
 Prompt: Help me implement ACC-07 step by step: a user who forgot their password requests a reset link by email; the link expires after 30 minutes, is single-use, is invalidated by a newer request, and the response does not reveal whether the email exists. Use the endpoints from the project PDF (POST /api/auth/forgot-password, POST /api/auth/reset-password).
 What AI helped with:
@@ -206,3 +203,10 @@ What AI helped with:
 What I did:
 - Pasted and reviewed the code, ran tests (369 passed in auth/common/bookings/users), lint and build
 - Tested in Postman with the Ethereal test inbox: same reply for unknown email, older link rejected after a newer request, weak password rejected, reset works once, old password rejected, new password works
+Swagger descriptions (ACC-16, ACC-09)
+Tool: Claude
+Prompt: Check my endpoints against CLAUDE.md (every endpoint needs a Swagger summary and description) and add the missing descriptions.
+What AI helped with:
+- Added the missing @ApiOperation descriptions for PATCH /api/admin/accounts/:id/reactivate and GET /api/users/me (documentation only, no behaviour change)
+What I did:
+- Pasted the changes, ran the build, and checked both endpoints on /api/docs

@@ -88,7 +88,11 @@ export class AuthController {
   @HttpCode(200)
   @UseGuards(JwtAuthGuard)
   @ApiCookieAuth(ACCESS_COOKIE)
-  @ApiOperation({ summary: 'Send a new verification email to the logged-in user (ACC-02)' })
+  @ApiOperation({
+    summary: 'Send a new verification email to the logged-in user (ACC-02)',
+    description:
+      'For a user whose link expired or got lost. A new 24-hour link is emailed and the previous link stops working. Not in the project PDF; added so an unverified user is never stuck without a way to book.',
+  })
   @ApiOkResponse({ description: 'A new link was sent; the old one stops working', schema: { example: { message: 'Verification email sent' } } })
   @ApiUnauthorizedResponse({
     description: 'Not logged in',

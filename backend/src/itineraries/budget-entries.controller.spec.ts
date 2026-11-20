@@ -11,7 +11,8 @@ describe('ITN-14 controller', () => {
     remove: jest.fn(),
     totals: jest.fn(),
   };
-  const controller = new BudgetEntriesController(service as never);
+  const conversion = { totals: jest.fn() };
+  const controller = new BudgetEntriesController(service as never, conversion as never);
   const req = { user: { sub: 'owner' }, body: {} } as AuthenticatedRequest;
   beforeEach(() => jest.clearAllMocks());
   it('forwards every route with the authenticated owner', () => {
@@ -28,6 +29,13 @@ describe('ITN-14 controller', () => {
     });
     expect(service.remove).toHaveBeenCalledWith('owner', 'entry');
     expect(service.totals).toHaveBeenCalledWith('owner', 'parent');
+  });
+  it('only activates conversion and private cache headers for the opt-in request', () => {
+    const response = { setHeader: jest.fn() };
+    controller.totals(req, 'parent', { convert: 'preferred' }, response as never);
+    expect(conversion.totals).toHaveBeenCalledWith('owner', 'parent');
+    expect(response.setHeader).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+    expect(service.totals).not.toHaveBeenCalled();
   });
   it.each(['dayId', 'itineraryId', 'userId', '__v'])(
     'rejects raw field %s before mutation',
