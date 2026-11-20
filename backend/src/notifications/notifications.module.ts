@@ -3,9 +3,13 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { MailModule } from '../mail/mail.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
-import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
-import { Notification, NotificationSchema } from './schemas/notification.schema';
+import {
+  Notification,
+  NotificationSchema,
+} from './schemas/notification.schema';
+import { NotificationsController } from './notifications.controller';
+
 
 @Module({
   imports: [

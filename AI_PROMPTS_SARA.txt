@@ -126,7 +126,25 @@ add setCancellationPolicy (with uniqueness checks and descending threshold
 sorting) to AirlinesService, expose and document the protected route in
 AirlinesController, and verify all edge cases in Postman. Reviewed and
 adjusted every snippet before committing.
-
+================================================
+Date: 2026-11-19
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-05, GEN-01
+Prompt:
+Asked to guide me through implementing FLT-05 (PATCH /api/flights/:id and
+PATCH /api/flights/:id/cabins/:cabinId): validating partial flight time and
+airport updates with timezone conversions, locking airport edits against
+active FlightBooking records, preventing cabin totalSeats reductions below
+bookedSeats + heldSeats, integrating NotificationsService.createForMany to
+notify Confirmed passengers on schedule changes, resolving TypeScript
+strict lookup types, and generating Postman test cases.
+How the output was used:
+Used the explanations, MongoDB seed documents, and code snippets to build
+UpdateFlightDto, UpdateCabinDto, FlightsService.update,
+FlightsService.updateCabin, and the protected FlightsController routes,
+then verified all happy-path, validation, conflict, and authorization cases
+in Postman. Reviewed and adjusted every snippet before committing.
 ================================================
 Date: 2026-11-19
 Student: Sara Gomaa
@@ -175,3 +193,71 @@ Used the existing pending-payment booking flow, passenger subdocument IDs,
 and flight booking schema to add the selection DTO, protected controller
 route, seat validation service method, and focused unit test. Reviewed and
 adjusted the implementation before running validation.
+Related Requirement: FLT-05
+Prompt:
+Fix invalid flight IDs returning 500 instead of 400, remove the five leftover
+debug console.log statements, and make cabin seat-count updates concurrency-safe
+so changes during an update return 409.
+How the output was used:
+Added ObjectId validation to the shared scheduled-flight update loader, removed
+the five flight-service debug logs, changed cabin edits to an atomic conditional
+update matching the observed cabin capacity/booked/held counters, documented
+the conflict response, and added focused regression tests.
+Related Requirement: FLT-29
+Prompt:
+Asked to implement FLT-29 for airline moderators: view per-flight
+CONFIRMED and CANCELLED bookings, passenger names, cabin, seat numbers,
+status, remaining seats per cabin, and CSV export. Asked for an implementation
+plan first and explicit approval before editing. The repository skill file
+was supplied but could not be opened by the session tools.
+How the output was used:
+Used the Mandatory CSV requirement and existing moderator assignment,
+flight, cabin, and flight booking schemas to add ownership checks,
+Swagger-documented JSON and CSV routes, a flight service report method,
+and a focused unit test. Reviewed and adjusted the implementation before
+running validation.
+================================================
+Date: 2026-11-19
+Student: Sara Gomaa
+Tool: Gemini
+Related Requirement: FLT-06, PAY-03, GEN-01
+Prompt:
+Asked for implementation guidance and Postman test cases for FLT-06
+(POST /api/flights/:id/cancel): validating explicit cancellation
+confirmation in CancelFlightDto, cancelling Scheduled flights while
+hiding them from search, issuing 100% refunds (PAY-03) for Confirmed
+bookings across one-way and round-trip legs, releasing pending seat
+holds, integrating NotificationsService.createForMany (GEN-01), and
+resolving NestJS module dependency exports between FlightsModule and
+ItinerariesModule.
+How the output was used:
+Used the explanations and code snippets to build CancelFlightDto,
+FlightsService.cancelFlight, and the protected POST /api/flights/:id/cancel
+route in FlightsController, wired FlightsModule exports, and verified all
+happy-path, refund, notification, and error cases in Postman. Reviewed and
+adjusted every snippet before committing.
+================================================
+Date: 2026-11-20
+Student: Sara Gomaa
+Tool: Cursor (Grok 4.7)
+Related Requirement: FLT-06, PAY-03
+
+Prompt:
+Reviewer said FLT-06 only inserts a refund document and never calls Stripe.
+Explain how to replace that with RefundsService.issueRefund() so refund
+status, Stripe refund id, payment status and refund notifications are
+handled, then apply the fix.
+
+How the output was used:
+Reviewed the change against FLT-06 and PAY-03 and the existing
+RefundsService.issueRefund() / refundQuote() used by FLT-26 and HTL-21.
+FlightsModule now imports PaymentsModule. cancelFlight saves each
+confirmed booking as CANCELLED, then calls issueRefund() with a 100%
+provider-initiated quote (totalPrice + baggage fees). A refund failure
+is logged and does not stop the other bookings. Pending holds are still
+released without a refund. The existing flight-cancelled notification
+stays; the refund notification is sent by RefundsService.
+
+Verification:
+npm run build in backend completed successfully. No Stripe call or
+database refund was executed.

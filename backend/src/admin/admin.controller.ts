@@ -154,7 +154,10 @@ export class AdminController {
   }
 
   @Patch('accounts/:id/reactivate')
-  @ApiOperation({ summary: 'Reactivate a suspended user or moderator account (ACC-16, ACC-15)' })
+  @ApiOperation({
+    summary: 'Reactivate a suspended user or moderator account (ACC-16, ACC-15)',
+    description: 'Only a suspended account can be reactivated. The account can log in again and gets an in-app notification.',
+  })
   @ApiOkResponse({
     description: 'Account reactivated; it can log in again',
     schema: { example: { id: '6aef52048e9d356647b49fdc', email: 'nour@example.com', role: 'user', status: 'active' } },
