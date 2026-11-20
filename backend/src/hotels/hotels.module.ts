@@ -58,6 +58,6 @@ controllers: [
     HotelSearchService,
     HotelRoomAvailabilityService,
   ],
-  exports: [MongooseModule, HotelsService],
+  exports: [MongooseModule, HotelsService, HotelSearchService],
 })
 export class HotelsModule {}

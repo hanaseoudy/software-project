@@ -15,13 +15,20 @@ import {
   FlightBookingStatus,
 } from './schemas/flight-booking.schema';
 import { PassengerType } from './schemas/passenger.schema';
-import { BaggageRuleError, calculateLegBaggageFees } from './utils/baggage-fees';
+import {
+  BaggageRuleError,
+  calculateLegBaggageFees,
+} from './utils/baggage-fees';
 import { buildETicketPdf } from './utils/e-ticket-pdf';
 import { buildBookingSummary } from './utils/booking-summary';
+import { INFANT_FARE_RATIO } from './utils/flight-change';
 import type { SummaryFlight } from './utils/booking-summary';
+import { BookingGroup, ListMyBookingsDto } from './dto/list-my-bookings.dto';
+import { formatInTimeZone } from 'date-fns-tz';
+import { Refund } from '../payments/schemas/refund.schema';
+import { BookingType } from '../payments/enums/payment.enums';
 
 export const HOLD_DURATION_MS = 10 * 60 * 1000; // FLT-22: 10-minute hold
-const INFANT_FARE_RATIO = 0.1; // infants pay 10% (see Cabin.price comment)
 
 @Injectable()
 export class FlightBookingsService {
@@ -31,8 +38,107 @@ export class FlightBookingsService {
     private readonly bookingModel: Model<FlightBooking>,
     @InjectModel(Airport.name) private readonly airportModel: Model<Airport>,
     @InjectModel(Airline.name) private readonly airlineModel: Model<Airline>,
+    @InjectModel(Refund.name) private readonly refundModel: Model<Refund>,
   ) {}
 
+  private readonly PAGE_SIZE = 10;
+
+  private readonly FLIGHT_POPULATE = ['outboundFlight', 'returnFlight'].map(
+    (path) => ({
+      path,
+      populate: [
+        { path: 'airline', select: 'name code logoUrl' },
+        { path: 'departureAirport', select: 'iataCode city timezone' },
+        { path: 'arrivalAirport', select: 'iataCode city timezone' },
+      ],
+    }),
+  );
+
+  async findMine(userId: string, dto: ListMyBookingsDto) {
+    const bookings = await this.bookingModel
+      .find({
+        user: userId,
+        status: {
+          $in: [
+            FlightBookingStatus.CONFIRMED,
+            FlightBookingStatus.COMPLETED,
+            FlightBookingStatus.CANCELLED,
+          ],
+        },
+      })
+      .populate(this.FLIGHT_POPULATE)
+      .lean();
+
+    const now = new Date();
+    const inGroup = bookings
+      .filter((b) => b.outboundFlight)
+      .filter((b) => this.groupOf(b, now) === dto.group)
+      .sort((a: any, b: any) => {
+        const diff =
+          a.outboundFlight.departureTime - b.outboundFlight.departureTime;
+        return dto.group === BookingGroup.UPCOMING ? diff : -diff;
+      });
+
+    const start = (dto.page - 1) * this.PAGE_SIZE;
+    return {
+      items: inGroup
+        .slice(start, start + this.PAGE_SIZE)
+        .map((b) => this.toCard(b)),
+      page: dto.page,
+      pageSize: this.PAGE_SIZE,
+      total: inGroup.length,
+    };
+  }
+
+  async findMineById(userId: string, bookingId: string) {
+    const { summary, bookingReference, refund } = await this.loadOwnedSummary(
+      userId,
+      bookingId,
+    );
+    return { ...summary, bookingReference, refund };
+  }
+
+  private groupOf(b: any, now: Date): BookingGroup {
+    if (b.status === FlightBookingStatus.CANCELLED)
+      return BookingGroup.CANCELLED;
+    if (
+      b.status === FlightBookingStatus.COMPLETED ||
+      b.outboundFlight.departureTime < now
+    ) {
+      return BookingGroup.PAST;
+    }
+    return BookingGroup.UPCOMING;
+  }
+
+  private toCard(b: any) {
+    const fmt = (utc: Date, tz: string) =>
+      formatInTimeZone(utc, tz, "yyyy-MM-dd'T'HH:mm");
+
+    const leg = (f: any) => ({
+      flightNumber: f.flightNumber,
+      airline: f.airline,
+      from: f.departureAirport,
+      to: f.arrivalAirport,
+      departureLocal: fmt(f.departureTime, f.departureAirport.timezone),
+      departureUtc: f.departureTime,
+      arrivalLocal: fmt(f.arrivalTime, f.arrivalAirport.timezone),
+      arrivalUtc: f.arrivalTime,
+    });
+
+    return {
+      id: b._id,
+      bookingReference: b.bookingReference,
+      status: b.status,
+      tripType: b.tripType,
+      date: b.outboundFlight.departureLocalDate, // assumed field name, check your Flight schema
+      cabinClass: b.cabinClass,
+      passengers: b.passengers.map((p: any) => `${p.firstName} ${p.lastName}`),
+      totalPrice: b.totalPrice,
+      currency: b.currency,
+      outbound: leg(b.outboundFlight),
+      ...(b.returnFlight && { return: leg(b.returnFlight) }),
+    };
+  }
   /**
    * FLT-21: booking summary shown before payment (flight, passengers, baggage,
    * total). Only the owner of the booking can read it.
@@ -46,13 +152,19 @@ export class FlightBookingsService {
    * reference. Only available once the booking is confirmed (or completed).
    */
   async getConfirmation(userId: string, bookingId: string) {
-    const { summary, bookingReference } = await this.loadConfirmed(userId, bookingId);
+    const { summary, bookingReference } = await this.loadConfirmed(
+      userId,
+      bookingId,
+    );
     return { ...summary, bookingReference };
   }
 
   /** FLT-23: downloadable e-ticket (PDF) of a confirmed booking. */
   async getETicket(userId: string, bookingId: string) {
-    const { summary, bookingReference } = await this.loadConfirmed(userId, bookingId);
+    const { summary, bookingReference } = await this.loadConfirmed(
+      userId,
+      bookingId,
+    );
     return {
       filename: `e-ticket-${bookingReference}.pdf`,
       pdf: await buildETicketPdf(summary, bookingReference),
@@ -60,7 +172,10 @@ export class FlightBookingsService {
   }
 
   private async loadConfirmed(userId: string, bookingId: string) {
-    const { summary, bookingReference } = await this.loadOwnedSummary(userId, bookingId);
+    const { summary, bookingReference } = await this.loadOwnedSummary(
+      userId,
+      bookingId,
+    );
     const confirmed =
       summary.status === FlightBookingStatus.CONFIRMED ||
       summary.status === FlightBookingStatus.COMPLETED;
@@ -69,7 +184,9 @@ export class FlightBookingsService {
     }
     if (!bookingReference) {
       // Paid, but the reference is still being generated (the hourly job completes it).
-      throw new ConflictException('Booking reference is not ready yet, try again shortly');
+      throw new ConflictException(
+        'Booking reference is not ready yet, try again shortly',
+      );
     }
     return { summary, bookingReference };
   }
@@ -83,6 +200,7 @@ export class FlightBookingsService {
         _id: new Types.ObjectId(bookingId),
         user: new Types.ObjectId(userId),
       })
+      .populate('refund')
       .lean();
     if (!booking) {
       throw new NotFoundException('Booking not found');
@@ -108,10 +226,37 @@ export class FlightBookingsService {
       outbound,
       inbound,
     );
-    return { summary, bookingReference: booking.bookingReference };
+
+    const refundDoc = booking.refund
+      ? await this.refundModel.findById(booking.refund).lean()
+      : await this.refundModel
+          .findOne({
+            bookingId: booking._id,
+            bookingType: BookingType.FLIGHT,
+          })
+          .sort({ createdAt: -1 })
+          .lean();
+
+    const refund = refundDoc
+      ? {
+          id: refundDoc._id,
+          amount: refundDoc.amount,
+          currency: refundDoc.currency,
+          status: refundDoc.status,
+          reason: refundDoc.reason ?? null,
+          appliedPolicy: refundDoc.appliedPolicy ?? null,
+          stripeRefundId: refundDoc.stripeRefundId ?? null,
+          processedAt: refundDoc.processedAt ?? null,
+          createdAt: (refundDoc as any).createdAt,
+        }
+      : null;
+
+    return { summary, bookingReference: booking.bookingReference, refund };
   }
 
-  private async loadSummaryFlight(flightId: Types.ObjectId): Promise<SummaryFlight> {
+  private async loadSummaryFlight(
+    flightId: Types.ObjectId,
+  ): Promise<SummaryFlight> {
     const flight = await this.flightModel.findById(flightId).lean();
     if (!flight) {
       throw new NotFoundException('Flight of this booking no longer exists');
@@ -146,9 +291,15 @@ export class FlightBookingsService {
    * that expires after 10 minutes.
    */
   async createHold(userId: string, dto: HoldFlightBookingDto) {
-    const adults = dto.passengers.filter((p) => p.type === PassengerType.ADULT).length;
-    const children = dto.passengers.filter((p) => p.type === PassengerType.CHILD).length;
-    const infants = dto.passengers.filter((p) => p.type === PassengerType.INFANT).length;
+    const adults = dto.passengers.filter(
+      (p) => p.type === PassengerType.ADULT,
+    ).length;
+    const children = dto.passengers.filter(
+      (p) => p.type === PassengerType.CHILD,
+    ).length;
+    const infants = dto.passengers.filter(
+      (p) => p.type === PassengerType.INFANT,
+    ).length;
     const seats = adults + children; // infants do not occupy a seat
 
     if (adults < 1) {
@@ -158,10 +309,14 @@ export class FlightBookingsService {
       throw new BadRequestException('Each infant needs an accompanying adult');
     }
     if (dto.tripType === 'ROUND_TRIP' && !dto.returnFlightId) {
-      throw new BadRequestException('returnFlightId is required for ROUND_TRIP');
+      throw new BadRequestException(
+        'returnFlightId is required for ROUND_TRIP',
+      );
     }
     if (dto.tripType === 'ONE_WAY' && dto.returnFlightId) {
-      throw new BadRequestException('returnFlightId is not allowed for ONE_WAY');
+      throw new BadRequestException(
+        'returnFlightId is not allowed for ONE_WAY',
+      );
     }
 
     const legIds = [dto.outboundFlightId];
@@ -176,8 +331,13 @@ export class FlightBookingsService {
     for (const flightId of legIds) {
       const flight = await this.loadFlight(flightId);
       flights.push(flight);
-      if (flight.status !== FlightStatus.SCHEDULED || flight.departureTime <= new Date()) {
-        throw new BadRequestException(`Flight ${flight.flightNumber} is not available for booking`);
+      if (
+        flight.status !== FlightStatus.SCHEDULED ||
+        flight.departureTime <= new Date()
+      ) {
+        throw new BadRequestException(
+          `Flight ${flight.flightNumber} is not available for booking`,
+        );
       }
       const cabin = flight.cabins.find(
         (c) => c.cabinClass === (dto.cabinClass as string),
@@ -195,7 +355,9 @@ export class FlightBookingsService {
       const airline = await this.airlineModel.findById(flight.airline).lean();
       // ACC-15: a deactivated airline's flights cannot be booked.
       if (airline?.isActive === false) {
-        throw new BadRequestException(`Flight ${flight.flightNumber} is not available for booking`);
+        throw new BadRequestException(
+          `Flight ${flight.flightNumber} is not available for booking`,
+        );
       }
       try {
         baggageFees += calculateLegBaggageFees(
@@ -270,8 +432,18 @@ export class FlightBookingsService {
    * depart after the outbound flight arrives.
    */
   private validateRoundTrip(
-    outbound: { _id: Types.ObjectId; departureAirport: Types.ObjectId; arrivalAirport: Types.ObjectId; arrivalTime: Date },
-    inbound: { _id: Types.ObjectId; departureAirport: Types.ObjectId; arrivalAirport: Types.ObjectId; departureTime: Date },
+    outbound: {
+      _id: Types.ObjectId;
+      departureAirport: Types.ObjectId;
+      arrivalAirport: Types.ObjectId;
+      arrivalTime: Date;
+    },
+    inbound: {
+      _id: Types.ObjectId;
+      departureAirport: Types.ObjectId;
+      arrivalAirport: Types.ObjectId;
+      departureTime: Date;
+    },
   ) {
     if (outbound._id.equals(inbound._id)) {
       throw new BadRequestException(

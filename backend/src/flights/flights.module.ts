@@ -10,12 +10,13 @@ import {
 import { FlightsController } from './flights.controller';
 import { FlightsService } from './flights.service';
 import { AuthModule } from '../auth/auth.module';
+import { JwtService } from '@nestjs/jwt';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { NotificationsService } from '../notifications/notifications.service';
 import {
   FlightBooking,
   FlightBookingSchema,
 } from '../flight-bookings/schemas/flight-booking.schema';
+import { PaymentsModule } from '../payments/payments.module';
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -27,8 +28,10 @@ import {
     ]),
     AuthModule,
     NotificationsModule,
+    PaymentsModule,
   ],
   controllers: [FlightsController],
   providers: [FlightsService],
+  exports: [FlightsService], // <-- Must be exported so ItinerariesModule can inject it
 })
 export class FlightsModule {}

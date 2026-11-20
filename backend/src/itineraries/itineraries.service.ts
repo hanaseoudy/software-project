@@ -1,3 +1,4 @@
+import { ItineraryBookingLinksService } from './itinerary-booking-links.service';
 import {
   BadRequestException,
   ConflictException,
@@ -35,6 +36,30 @@ import { ItineraryGroupsResponseDto } from './dto/itinerary-groups-response.dto'
 import { groupConsecutiveDays } from './utils/city-groups';
 import { CurrencySchema } from '../reference-data/schemas/currency.schema';
 import { ReorderItineraryDayDto } from './dto/reorder-itinerary-day.dto';
+import { escapeRegex } from '../blog/tag-rules';
+import { User, UserDocument } from '../users/schemas/user.schema';
+
+// ITN-21: snapshot row for the public detail (author is looked up, then reduced to a name).
+type PublicDetailRow = Omit<PublicItineraryDetailDto, 'author'> & {
+  authorUser?: { firstName?: string; lastName?: string }[];
+};
+
+// ITN-21: same activity order as the PDF export: timed activities first, by time.
+function byActivityTime(a: { time?: string }, b: { time?: string }): number {
+  if (a.time && b.time) return a.time.localeCompare(b.time);
+  if (a.time) return -1;
+  if (b.time) return 1;
+  return 0;
+}
+
+// ITN-21: public search filters (validated by PublicItinerarySearchQueryDto)
+export interface PublicItinerarySearchFilters {
+  keyword?: string;
+  minDays?: number;
+  maxDays?: number;
+  country?: string;
+  city?: string;
+}
 
 @Injectable()
 export class ItinerariesService {
@@ -55,7 +80,16 @@ export class ItinerariesService {
     private readonly connection: Connection,
     @InjectModel(City.name)
     private readonly cityModel: Model<CityDocument>,
+    // ITN-21: author name for public itineraries and clone attribution
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
+    private readonly bookingLinks: ItineraryBookingLinksService,
   ) {}
+
+  private authorName(user?: { firstName?: string; lastName?: string } | null): string | null {
+    const name = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+    return name || null;
+  }
 
   private async validateCountries(countryIds: string[]): Promise<void> {
     if (!Array.isArray(countryIds) || countryIds.length === 0 ||
@@ -149,7 +183,66 @@ export class ItinerariesService {
       visibility: itinerary.visibility ?? ItineraryVisibility.PRIVATE,
       dayCount: formattedDays.length,
       days: formattedDays,
+      // ITN-21: a clone credits the original author
+      ...(itinerary.clonedFromId ? { originalAuthorName: itinerary.originalAuthorName ?? null } : {}),
     };
+  }
+
+  // ITN-21: copy a Public itinerary into a new Private one owned by the caller.
+  // One transaction: the clone is created completely or not at all. New ids are
+  // used everywhere, so later edits to either itinerary never affect the other.
+  async clonePublic(userId: string, itineraryId: string) {
+    this.validateObjectId(itineraryId);
+    const sourceId = new Types.ObjectId(itineraryId);
+    const ownerId = new Types.ObjectId(userId);
+    const session = await this.connection.startSession();
+    let cloneId: Types.ObjectId | undefined;
+    try {
+      await session.withTransaction(async () => {
+        const source = await this.itineraryModel.findOne(
+          { _id: sourceId, visibility: ItineraryVisibility.PUBLIC, isHidden: { $ne: true } }, null, { session },
+        ).lean();
+        if (!source) throw new NotFoundException('Public itinerary unavailable');
+        const author = await this.userModel.findById(source.userId, { firstName: 1, lastName: 1 }, { session }).lean();
+
+        const [clone] = await this.itineraryModel.create([{
+          userId: ownerId, title: source.title, countryIds: source.countryIds, startDate: source.startDate,
+          visibility: ItineraryVisibility.PRIVATE, isHidden: false,
+          clonedFromId: source._id, originalAuthorId: source.userId,
+          originalAuthorName: this.authorName(author) ?? undefined,
+        }], { session });
+
+        // Day notes are not part of the public view, so they are not copied.
+        const days = await this.itineraryDayModel.find({ itineraryId: source._id }, null, { session }).sort({ dayNumber: 1 }).lean();
+        const newDayIds = new Map(days.map(day => [String(day._id), new Types.ObjectId()]));
+        const dayFor = (dayId: Types.ObjectId) => newDayIds.get(String(dayId))!;
+        if (days.length) {
+          await this.itineraryDayModel.insertMany(days.map(day => ({
+            _id: dayFor(day._id), itineraryId: clone._id, dayNumber: day.dayNumber, cityId: day.cityId,
+          })), { session });
+          const inDays = { dayId: { $in: days.map(day => day._id) } };
+          const [activities, budgetEntries, transportCosts] = await Promise.all([
+            this.activityModel.find(inDays, null, { session }).sort({ _id: 1 }).lean(),
+            this.budgetEntryModel.find(inDays, null, { session }).sort({ _id: 1 }).lean(),
+            this.transportCostModel.find(inDays, null, { session }).sort({ _id: 1 }).lean(),
+          ]);
+          if (activities.length) await this.activityModel.insertMany(activities.map(a => ({
+            dayId: dayFor(a.dayId), name: a.name, description: a.description, time: a.time,
+            cost: a.cost, currency: a.currency, images: [...(a.images ?? [])],
+          })), { session });
+          if (budgetEntries.length) await this.budgetEntryModel.insertMany(budgetEntries.map(b => ({
+            dayId: dayFor(b.dayId), category: b.category, description: b.description, amount: b.amount, currency: b.currency,
+          })), { session });
+          if (transportCosts.length) await this.transportCostModel.insertMany(transportCosts.map(t => ({
+            dayId: dayFor(t.dayId), fromCityId: t.fromCityId, toCityId: t.toCityId, mode: t.mode, amount: t.amount, currency: t.currency,
+          })), { session });
+        }
+        cloneId = clone._id;
+      }, { readConcern: { level: 'snapshot' }, writeConcern: { w: 'majority' }, readPreference: 'primary' });
+    } finally {
+      await session.endSession();
+    }
+    return this.findOne(userId, cloneId!.toString());
   }
 
   // ITN-20: raw driver commands retain reply.operationTime and atClusterTime.
@@ -212,14 +305,53 @@ export class ItinerariesService {
     };
   }
 
-  async findPublic(page = 1) {
+  // ITN-21: extra pipeline stages for keyword, duration, country and city.
+  // Returns no stages without filters, so plain ITN-20 discovery is unchanged.
+  private publicSearchStages(filters: PublicItinerarySearchFilters): Document[] {
+    const { keyword, minDays, maxDays, country, city } = filters;
+    if (minDays !== undefined && maxDays !== undefined && minDays > maxDays) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: { minDays: ['Minimum days cannot be greater than maximum days'] },
+      });
+    }
+    const stages: Document[] = [];
+    if (country) stages.push({ $match: { countryIds: country } });
+    if (!keyword && !city && minDays === undefined && maxDays === undefined) return stages;
+
+    stages.push({ $lookup: { from: this.itineraryDayModel.collection.name, let: { itinerary: '$_id' }, as: 'searchDays', pipeline: [
+      { $match: { $expr: { $eq: ['$itineraryId', '$$itinerary'] } } }, { $project: { _id: 0, cityId: 1 } },
+    ] } });
+    if (city) stages.push({ $match: { 'searchDays.cityId': { $regex: `^${escapeRegex(city)}$`, $options: 'i' } } });
+    const duration: Document[] = [];
+    if (minDays !== undefined) duration.push({ $gte: [{ $size: '$searchDays' }, minDays] });
+    if (maxDays !== undefined) duration.push({ $lte: [{ $size: '$searchDays' }, maxDays] });
+    if (duration.length) stages.push({ $match: { $expr: { $and: duration } } });
+    if (keyword) {
+      const pattern = { $regex: escapeRegex(keyword), $options: 'i' };
+      stages.push(
+        { $lookup: { from: this.countryModel.collection.name, localField: 'countryIds', foreignField: 'code', as: 'searchCountries' } },
+        { $lookup: { from: this.cityModel.collection.name, localField: 'searchDays.cityId', foreignField: 'cityId', as: 'searchCities' } },
+        { $match: { $or: [
+          { title: pattern }, { countryIds: pattern }, { 'searchCountries.name': pattern },
+          { 'searchDays.cityId': pattern }, { 'searchCities.name': pattern },
+        ] } },
+      );
+    }
+    stages.push({ $project: { searchDays: 0, searchCountries: 0, searchCities: 0 } });
+    return stages;
+  }
+
+  async findPublic(page = 1, filters: PublicItinerarySearchFilters = {}) {
     if (!Number.isSafeInteger(page) || page < 1) throw new BadRequestException('Invalid page');
+    const searchStages = this.publicSearchStages(filters);
     return this.withPublicRead(async (session, deadline) => {
       // An arbitrary unique-key lookup is a read-only freshness barrier, not
       // a catalog document. Nothing is created when the lookup returns empty.
       const { time } = await this.publicBarrier(session, deadline);
       const [result] = await this.publicSnapshot<{ items: PublicItinerarySummaryDto[]; meta: { total: number }[] }>([
         { $match: { visibility: ItineraryVisibility.PUBLIC, isHidden: { $ne: true } } },
+        ...searchStages,
         { $sort: { updatedAt: -1, _id: -1 } },
         { $facet: {
           items: [
@@ -250,21 +382,34 @@ export class ItinerariesService {
         item?.visibility === ItineraryVisibility.PUBLIC && item.isHidden !== true;
       const first = await this.publicBarrier(session, deadline, id);
       if (!available(first.itinerary)) throw new NotFoundException('Public itinerary unavailable');
-      const [result] = await this.publicSnapshot<PublicItineraryDetailDto>([
+      // ITN-21: each day's activities, budget entries and transport costs, read in the same snapshot.
+      const dayItems = (from: string, as: string, fields: Document) => ({ $lookup: { from, let: { day: '$_id' }, as, pipeline: [
+        { $match: { $expr: { $eq: ['$dayId', '$$day'] } } }, { $sort: { _id: 1 } },
+        { $project: { _id: 0, id: { $toString: '$_id' }, ...fields } },
+      ] } });
+      const [result] = await this.publicSnapshot<PublicDetailRow>([
         { $match: { _id: id, visibility: ItineraryVisibility.PUBLIC, isHidden: { $ne: true } } },
         { $lookup: { from: this.itineraryDayModel.collection.name, let: { itinerary: '$_id', start: '$startDate' }, as: 'days', pipeline: [
           { $match: { $expr: { $eq: ['$itineraryId', '$$itinerary'] } } }, { $sort: { dayNumber: 1 } },
+          dayItems(this.activityModel.collection.name, 'activities', { name: 1, description: 1, time: 1, cost: 1, currency: 1, images: 1 }),
+          dayItems(this.budgetEntryModel.collection.name, 'budgetEntries', { category: 1, description: 1, amount: 1, currency: 1 }),
+          dayItems(this.transportCostModel.collection.name, 'transportCosts', { mode: 1, fromCityId: 1, toCityId: 1, amount: 1, currency: 1 }),
           { $project: {
             _id: 0, id: { $toString: '$_id' }, dayNumber: 1, cityId: 1,
             date: { $dateToString: { format: '%Y-%m-%d', timezone: 'UTC', date: {
               $dateAdd: { startDate: '$$start', unit: 'day', amount: { $subtract: ['$dayNumber', 1] }, timezone: 'UTC' },
             } } },
+            activities: 1, budgetEntries: 1, transportCosts: 1,
           } },
+        ] } },
+        // ITN-21: author name only; the owner's id and other account fields stay private.
+        { $lookup: { from: this.userModel.collection.name, let: { author: '$userId' }, as: 'authorUser', pipeline: [
+          { $match: { $expr: { $eq: ['$_id', '$$author'] } } }, { $project: { _id: 0, firstName: 1, lastName: 1 } },
         ] } },
         { $project: {
           _id: 0, id: { $toString: '$_id' }, title: 1, countryIds: 1,
           startDate: { $dateToString: { date: '$startDate', format: '%Y-%m-%d', timezone: 'UTC' } },
-          visibility: { $literal: ItineraryVisibility.PUBLIC }, dayCount: { $size: '$days' }, days: 1,
+          visibility: { $literal: ItineraryVisibility.PUBLIC }, dayCount: { $size: '$days' }, days: 1, authorUser: 1,
         } },
       ], first.time, session, deadline);
       if (!result) throw new NotFoundException('Public itinerary unavailable');
@@ -274,7 +419,19 @@ export class ItinerariesService {
       if (!available(final.itinerary)) throw new NotFoundException('Public itinerary unavailable');
       return {
         ...this.publicSummary(result),
-        days: result.days.map(day => ({ id: day.id, dayNumber: day.dayNumber, cityId: day.cityId, date: day.date })),
+        author: { name: this.authorName(result.authorUser?.[0]) },
+        days: result.days.map(day => ({
+          id: day.id, dayNumber: day.dayNumber, cityId: day.cityId, date: day.date,
+          activities: (day.activities ?? []).map(a => ({
+            id: a.id, name: a.name, description: a.description, time: a.time, cost: a.cost, currency: a.currency, images: a.images ?? [],
+          })).sort(byActivityTime),
+          budgetEntries: (day.budgetEntries ?? []).map(b => ({
+            id: b.id, category: b.category, description: b.description, amount: b.amount, currency: b.currency,
+          })),
+          transportCosts: (day.transportCosts ?? []).map(t => ({
+            id: t.id, mode: t.mode, fromCityId: t.fromCityId, toCityId: t.toCityId, amount: t.amount, currency: t.currency,
+          })),
+        })),
       };
     });
   }
@@ -337,6 +494,7 @@ export class ItinerariesService {
   }
 
   private async groupBudgetSubtotals(itineraryId: Types.ObjectId, groupDayIds: Types.ObjectId[][], session: ClientSession) {
+    const bookingExpenses = await this.bookingLinks.aggregationExpenses(itineraryId, session);
     const sources = [
       { model: this.activityModel, field: 'cost', name: 'activityCosts', optional: true },
       { model: this.budgetEntryModel, field: 'amount', name: 'budgetCosts', optional: false },
@@ -370,7 +528,7 @@ export class ItinerariesService {
       } })),
       { $project: {
         groupIndex: { $indexOfArray: [{ $map: { input: groupDayIds, as: 'dayIds', in: { $in: ['$_id', '$$dayIds'] } } }, true] },
-        expenses: { $concatArrays: sources.map(source => `$${source.name}`) },
+        expenses: { $concatArrays: sources.map(source => `$${source.name}` as unknown).concat([bookingExpenses]) },
       } },
       { $unwind: '$expenses' },
       { $group: {
@@ -580,11 +738,13 @@ export class ItinerariesService {
     await this.activityModel.deleteMany(filter, { session });
     await this.budgetEntryModel.deleteMany(filter, { session });
     await this.transportCostModel.deleteMany(filter, { session });
+    await this.bookingLinks.removeForDays(dayIds, session);
   }
 
   // ITN-07 only: native-currency totals. The full summary and FX conversion
   // endpoints belong to ITN-14 / ITN-18. Decimal aggregation avoids 0.1 + 0.2 drift.
   private async survivingBudgetTotals(itineraryId: Types.ObjectId, session: ClientSession) {
+    const bookingExpenses = await this.bookingLinks.aggregationExpenses(itineraryId, session);
     const sources = [
       { model: this.activityModel, field: 'cost', name: 'activityCosts' },
       { model: this.budgetEntryModel, field: 'amount', name: 'budgetCosts' },
@@ -600,7 +760,7 @@ export class ItinerariesService {
           { $project: { _id: 0, currency: '$_id', amount: 1 } },
         ],
       } })),
-      { $project: { expenses: { $concatArrays: sources.map(source => `$${source.name}`) } } },
+      { $project: { expenses: { $concatArrays: sources.map(source => `$${source.name}` as unknown).concat([bookingExpenses]) } } },
       { $unwind: '$expenses' },
       { $group: { _id: '$expenses.currency', total: { $sum: '$expenses.amount' } } },
       { $sort: { _id: 1 } },
@@ -756,6 +916,7 @@ export class ItinerariesService {
       ).lean();
       await this.deleteDayExpenses(days.map(day => day._id), session);
       await this.itineraryDayModel.deleteMany({ itineraryId: itinerary._id }, { session });
+      await this.bookingLinks.removeForItinerary(itinerary._id, session);
       const result = await this.itineraryModel.deleteOne(
         { _id: itinerary._id, userId: new Types.ObjectId(userId) }, { session },
       );

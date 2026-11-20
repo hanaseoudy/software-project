@@ -1,3 +1,4 @@
+import { ItineraryBookingLink, ItineraryBookingLinkSchema } from '../itineraries/schemas/itinerary-booking-link.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
@@ -20,6 +21,7 @@ import { Report, ReportSchema } from './schemas/report.schema';
 @Module({
   imports: [
     MongooseModule.forFeature([
+      { name: ItineraryBookingLink.name, schema: ItineraryBookingLinkSchema },
       { name: Report.name, schema: ReportSchema },
       // GEN-09 reads these to check that the reported item exists and is visible;
       // GEN-10 hides or deletes them (same model names and schemas as their owner modules)
