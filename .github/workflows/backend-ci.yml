@@ -88,6 +88,16 @@ jobs:
           done
           echo "MongoDB replica set did not become primary" && exit 1
 
+      # One ITN-20 test starts its own small replica set and needs a mongod
+      # binary. Copy it out of the same disposable container (no downloads).
+      - name: Provide mongod binary for the ITN-20 quorum test
+        working-directory: .
+        run: |
+          docker cp ci-mongo:/usr/bin/mongod "$RUNNER_TEMP/mongod"
+          chmod +x "$RUNNER_TEMP/mongod"
+          "$RUNNER_TEMP/mongod" --version | head -1
+          echo "ITN20_MONGOD_PATH=$RUNNER_TEMP/mongod" >> "$GITHUB_ENV"
+
       - name: Install dependencies
         run: npm ci
 
