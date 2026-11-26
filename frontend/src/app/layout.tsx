@@ -20,7 +20,9 @@ export const metadata: Metadata = {
   description: "Plan trips, book flights and hotels, and track your travel budget.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+// Explicit props type: the global LayoutProps helper only exists after `next dev`/`next build`
+// generates it, and CI type-checks before building.
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${fraunces.variable} ${dmSans.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">{children}</body>
