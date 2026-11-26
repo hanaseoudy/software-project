@@ -530,3 +530,27 @@ the 5th failure. I approved updating only that test: attempts 1-4 expect
 are unchanged. No backend code was changed. Verified by the CI e2e run on
 PR #168.
 ================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: GEN-02 to GEN-06, GEN-11, GEN-13 to GEN-17, ACC-05; Project PDF Sections 10 and 11
+
+Prompt:
+Update CLAUDE.md and AGENTS.md so that anyone working with AI going forward
+does not repeat the e2e test mistake, uses the correct design system, and
+follows anything else necessary.
+
+How the output was used:
+Claude added to CLAUDE.md a Milestone 2 frontend section (GEN-17 design
+system with the agreed palette and fonts, reuse of the shared foundation,
+cookie auth, env-based backend URL, Swagger as the API contract, GEN rules),
+the rule to update unit and e2e tests together when approved behaviour
+changes (ACC-05 example), how to write and run e2e tests on a disposable
+local replica set, the PR/CI rules (Jira key, PR template, required checks,
+team-leader-only merges) and the personal prompt-log rule. It replaced the
+outdated Jest ES-module limitation with the verified current test status.
+AGENTS.md got the short version of the same rules, and the README CI line was
+corrected. I review these documents in PR #168.
+================================================
