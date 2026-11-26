@@ -187,7 +187,7 @@ Booking and inventory changes must remain safe under concurrent requests (atomic
 
 ## 6. Frontend conventions (Milestone 2)
 
-These rules apply to every page in `frontend/`. The team leader builds the shared foundation (FND tasks) first; feature pages reuse it.
+These rules apply to every page in `frontend/`. Shared components are built in their own Jira tasks (FND-*, PAYC-*), by whoever is assigned to them, before the pages that use them; feature pages reuse them.
 
 ### Design system (GEN-17), mandatory
 
@@ -219,7 +219,9 @@ Before building anything, check whether a shared piece already exists, and use i
 - loading, success and error feedback;
 - image upload, the local-time formatter, the booking status badge, the reference-data pickers, and the report / admin content actions.
 
-If a shared piece you need is missing or doesn't fit, **stop and ask** rather than writing your own copy or editing the shared one. Shared components are owned by the team leader.
+Anyone can build a shared component when it is their assigned task. Build it to be reusable: typed props, no page-specific logic, and a short usage example in the PR.
+
+If a shared piece you need is missing or doesn't fit, **stop and ask** rather than writing a page-specific copy. To change a shared component that someone else built, agree it with its author or the team leader first, because other pages depend on it.
 
 ### Rules
 
