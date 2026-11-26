@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   backend-checks:
-    name: Backend build and lint
+    name: Backend lint, build and unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -41,5 +41,57 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # nest build compiles with tsc, so this step is also the type-check.
       - name: Build
         run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+  backend-e2e:
+    name: Backend e2e tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      # A throwaway MongoDB that exists only inside this CI run. It runs as a
+      # single-node replica set because the backend uses transactions.
+      # The shared Atlas database is never used by CI.
+      - name: Start disposable MongoDB
+        working-directory: .
+        run: |
+          docker run -d --name ci-mongo -p 127.0.0.1:27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          for i in $(seq 1 30); do
+            if docker exec ci-mongo mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' | grep -q 1; then break; fi
+            sleep 2
+          done
+          docker exec ci-mongo mongosh --quiet --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "127.0.0.1:27017" }] })'
+          for i in $(seq 1 30); do
+            if docker exec ci-mongo mongosh --quiet --eval 'db.hello().isWritablePrimary' | grep -q true; then exit 0; fi
+            sleep 2
+          done
+          echo "MongoDB replica set did not become primary" && exit 1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: E2E tests
+        run: npm run test:e2e -- --runInBand
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27017
