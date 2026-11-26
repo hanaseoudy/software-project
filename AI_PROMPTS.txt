@@ -1696,3 +1696,34 @@ New controller spec (2 tests): both paths are registered on the one handler, and
 creates the booking for the logged-in user. Whole flight-bookings test folder passes
 (118 tests). Tested in Postman (see the PR).
 ================================================
+ 
+================================================
+Date: 2026-11-26
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAYC-2 / TASK-144 (FLT-22, HTL-18, PAY-01)
+
+Prompt (summary of the conversation):
+Sent the PAYC-2 Jira task: a shared <HoldCountdown /> client component that shows the
+time left from holdExpiresAt and, on expiry, explains that the booking expired and offers
+a way back to search. Used on the flight and hotel summary and pay pages. Depends on
+FND-1 (already merged). Asked the AI to check the dependencies and requirements first.
+
+How the output was used:
+Added frontend/src/components/payments/hold-countdown.tsx: a live mm:ss timer from the
+backend's holdExpiresAt (10-minute hold, FLT-22 / HTL-18), highlighted in Mustard for the
+last 2 minutes; on expiry an alert explains that the seats or rooms were released and
+links back to /flights or /hotels (or a custom searchHref); optional onExpire callback so
+a page can hide its Pay/Continue button. One shared clock for all timers; nothing
+time-based is rendered on the server (no hydration mismatch). GEN-17 tokens and fonts,
+the shared buttonVariants for the link. Reviewed the code before committing.
+
+Verification:
+13 component tests (fake timers): counting down, flight/hotel wording, warning state,
+expiry message, links, onExpire called once (and again for a new hold), invalid date, server render, and that it
+never shows more time than is left. Frontend lint, type-check, build and all 79 tests
+pass. Checked in a real browser (Playwright) on a temporary page, not committed: the
+timer ticks, the expired state appears on time, the link opens /flights, no horizontal
+scroll at 375 px. The browser check caught a rounding issue (10:01 shown for a fresh
+10:00 hold), which was fixed.
+================================================
