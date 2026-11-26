@@ -559,6 +559,25 @@ corrected. I review these documents in PR #168.
 Date: 2026-11-26
 Student: Hana Seoudy
 Tool: Claude (Claude Code)
+Related Requirement: GEN-17; Project PDF Section 10 (Git workflow)
+
+Prompt:
+Others can create shared components too, not only the team leader. Fix
+CLAUDE.md and AGENTS.md in a follow-up docs PR.
+
+How the output was used:
+Claude reworded CLAUDE.md section 6 and AGENTS.md: shared components are
+built in their own FND/PAYC Jira tasks by whoever is assigned; changing
+someone else's shared component needs the author's or team leader's
+agreement; page-specific copies stay forbidden. The change missed the PR #168
+merge, so it goes into develop through this follow-up PR. I reviewed the
+wording before merging.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
 Related Requirement: FND-1 (TASK-133): GEN-17, ACC-19, ACC-06, GEN-13, GEN-16, GEN-02, GEN-05, GEN-06, GEN-08, PAY-04
 
 Prompt:
