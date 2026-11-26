@@ -1,0 +1,145 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * GEN-17 design system: Neobrutalism Components (shadcn/ui + Tailwind CSS)
+ * with the team's agreed palette and fonts.
+ *
+ * Use the theme tokens (bg-main, bg-background, bg-secondary-background,
+ * text-foreground, border-border, bg-olive, bg-mustard, font-display ...).
+ * Never hardcode other hex values in pages or components.
+ * Preview everything at /design-system.
+ */
+
+@theme inline {
+  /* Neobrutalism tokens (used by the components in src/components/ui) */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-main: var(--main);
+  --color-secondary-background: var(--secondary-background);
+  --color-main-foreground: var(--main-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-active-dot: var(--chart-active-dot);
+
+  /* Palette by name, for accents and highlights */
+  --color-cream: var(--cream);
+  --color-burgundy: var(--burgundy);
+  --color-sage: var(--sage);
+  --color-olive: var(--olive);
+  --color-terracotta: var(--terracotta);
+  --color-mustard: var(--mustard);
+  --color-brown: var(--brown);
+
+  /*
+   * Fonts, loaded with next/font in src/app/layout.tsx.
+   * font-sans = DM Sans (body, buttons, forms, tables, navigation)
+   * font-display = Fraunces (headings, page titles, branding)
+   * Note: "font-heading" / "font-base" are font WEIGHTS in Neobrutalism.
+   */
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+
+  --spacing-boxShadowX: 4px;
+  --spacing-boxShadowY: 4px;
+  --spacing-reverseBoxShadowX: -4px;
+  --spacing-reverseBoxShadowY: -4px;
+  --radius-base: 10px; /* "rounded components" (GEN-17 look) */
+  --font-weight-base: 500;
+  --font-weight-heading: 700;
+  --shadow-shadow: var(--shadow);
+  --animate-marquee: marquee 5s linear infinite;
+  --animate-marquee2: marquee2 5s linear infinite;
+
+  @keyframes marquee {
+    0% {
+      transform: translateX(0%);
+    }
+    100% {
+      transform: translateX(-100%);
+    }
+  }
+  @keyframes marquee2 {
+    0% {
+      transform: translateX(100%);
+    }
+    100% {
+      transform: translateX(0%);
+    }
+  }
+}
+
+:root {
+  /* Agreed palette (GEN-17): the only colours used in the app */
+  --cream: #f5efdc; /* main background */
+  --burgundy: #63383c; /* primary buttons and headings */
+  --sage: #a8b79a; /* secondary backgrounds and components */
+  --olive: #697d50; /* secondary buttons and accents */
+  --terracotta: #c48772; /* decorative elements and accents */
+  --mustard: #d9b65d; /* highlights */
+  --brown: #352c28; /* text, borders and shadows */
+
+  /* Neobrutalism roles mapped onto the palette */
+  --background: var(--cream);
+  --secondary-background: var(--sage);
+  --main: var(--burgundy);
+  --main-foreground: var(--cream);
+  --foreground: var(--brown);
+  --border: var(--brown);
+  --ring: var(--brown);
+  --overlay: rgb(53 44 40 / 0.8); /* brown at 80% */
+  --shadow: 4px 4px 0px 0px var(--border);
+
+  --chart-1: var(--burgundy);
+  --chart-2: var(--olive);
+  --chart-3: var(--mustard);
+  --chart-4: var(--terracotta);
+  --chart-5: var(--sage);
+  --chart-active-dot: var(--brown);
+}
+
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-weight: var(--font-weight-base);
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    font-weight: var(--font-weight-heading);
+    color: var(--main);
+  }
+}
+
+body,
+.scrollbar {
+  --sb-track-color: var(--cream);
+  --sb-thumb-color: var(--brown);
+}
+.scrollbar::-webkit-scrollbar {
+  width: 16px;
+}
+.scrollbar::-webkit-scrollbar-track {
+  background: var(--sb-track-color);
+}
+.scrollbar::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb-color);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .scrollbar {
+    scrollbar-color: var(--sb-thumb-color) var(--sb-track-color);
+  }
+}

@@ -64,8 +64,9 @@ jobs:
         if: steps.detect.outputs.exists == 'true'
         run: npm run build
         env:
-          # Placeholder only, so the build does not depend on a real server.
-          NEXT_PUBLIC_API_URL: http://localhost:3000
+          # Server-only backend address read by the /api rewrite in next.config.ts
+          # (FND-1). Placeholder only, so the build does not depend on a real server.
+          BACKEND_URL: http://localhost:3000
           NEXT_TELEMETRY_DISABLED: '1'
 
       - name: Tests
