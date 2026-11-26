@@ -1,0 +1,45 @@
+name: PR checks
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  jira-link:
+    name: Jira task link and PR size
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      # Values are passed through env (never inlined into the script) so a PR
+      # title cannot inject shell commands.
+      - name: Check Jira key and PR size
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          ADDITIONS: ${{ github.event.pull_request.additions }}
+          DELETIONS: ${{ github.event.pull_request.deletions }}
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          # Release PRs (develop -> main) and repo chores/docs do not need a Jira task.
+          if [ "$HEAD_REF" = "develop" ] && [ "$BASE_REF" = "main" ]; then
+            echo "Release PR from develop to main: Jira key not required."
+          elif printf '%s' "$HEAD_REF" | grep -Eq '^(chore|docs)/'; then
+            echo "chore/ or docs/ branch: Jira key not required."
+          elif printf '%s\n%s' "$PR_TITLE" "$HEAD_REF" | grep -Eq 'TASK-[0-9]+'; then
+            echo "Jira key found."
+          else
+            echo "::error::Put the Jira key (for example TASK-160) in the branch name or the PR title, e.g. feature/FLT-1-TASK-160-flight-search or 'TASK-160 [FLT-1] Flight search page'. One Jira task = one branch = one PR."
+            exit 1
+          fi
+
+          CHANGED=$((ADDITIONS + DELETIONS))
+          echo "Changed lines: $CHANGED in $CHANGED_FILES files."
+          if [ "$CHANGED" -gt 800 ]; then
+            echo "::warning::This PR changes $CHANGED lines. Consider splitting it: small PRs (one Jira task each) are reviewed much faster."
+          fi

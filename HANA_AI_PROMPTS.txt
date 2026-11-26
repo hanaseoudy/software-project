@@ -482,3 +482,75 @@ shows budget entries without converted totals (ITN-14/ITN-18). The ITN-20
 field-list assertions were updated for the new fields, and unit and E2E
 tests were added. Lint, build, unit and E2E tests were run and reviewed.
 ================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: Project PDF Section 10 (Git workflow); Milestone 2 review process
+
+Prompt:
+Set up the PR review improvements on a chore/pr-review-setup branch with a
+PR into develop: GitHub Actions CI (lint, type-check, frontend and backend
+builds, existing automated tests), a PR template (Jira task and requirement
+IDs, desktop/mobile screenshots, endpoints, testing, GEN-17 design system,
+AI_PROMPTS update), small PRs linked to Jira tasks, Vercel preview
+deployments and AI-assisted review. No CODEOWNERS and no peer reviewers;
+I remain the only person who approves and merges. Explain the GitHub
+settings I must configure manually.
+
+How the output was used:
+Claude ran backend lint, build and unit tests (126 suites, 1636 tests passed)
+locally on a copy of develop before making tests a CI step. It extended
+backend-ci.yml with unit tests and an e2e job on a throwaway CI-only MongoDB,
+and added frontend-ci.yml (skips until FND-1 creates frontend/), pr-checks.yml
+(Jira TASK key required, large-PR warning), the PR template and
+docs/PR-REVIEW-PROCESS.md (Vercel setup, AI review, GitHub rulesets). The e2e
+job and frontend job were not run locally (no local MongoDB); they are
+verified by the CI run on the PR. I review the PR before merging and
+configure the rulesets manually.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: ACC-05
+
+Prompt:
+Is the failing e2e test a problem in the e2e file or in ACC-05? Fix it in
+the same branch (chore/pr-review-setup).
+
+How the output was used:
+Claude showed that the login code (commit 3beead4) matches ACC-05: the 5th
+consecutive failure locks the account and returns 423 with the lockout
+message. The e2e test in backend/test/app.e2e-spec.ts still expected 401 on
+the 5th failure. I approved updating only that test: attempts 1-4 expect
+401, the 5th expects 423; the remaining lock, reset and unlock assertions
+are unchanged. No backend code was changed. Verified by the CI e2e run on
+PR #168.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: GEN-02 to GEN-06, GEN-11, GEN-13 to GEN-17, ACC-05; Project PDF Sections 10 and 11
+
+Prompt:
+Update CLAUDE.md and AGENTS.md so that anyone working with AI going forward
+does not repeat the e2e test mistake, uses the correct design system, and
+follows anything else necessary.
+
+How the output was used:
+Claude added to CLAUDE.md a Milestone 2 frontend section (GEN-17 design
+system with the agreed palette and fonts, reuse of the shared foundation,
+cookie auth, env-based backend URL, Swagger as the API contract, GEN rules),
+the rule to update unit and e2e tests together when approved behaviour
+changes (ACC-05 example), how to write and run e2e tests on a disposable
+local replica set, the PR/CI rules (Jira key, PR template, required checks,
+team-leader-only merges) and the personal prompt-log rule. It replaced the
+outdated Jest ES-module limitation with the verified current test status.
+AGENTS.md got the short version of the same rules, and the README CI line was
+corrected. I review these documents in PR #168.
+================================================

@@ -1,0 +1,73 @@
+name: Frontend CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-checks:
+    name: Frontend lint, type-check and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      # The frontend/ folder is created by FND-1. Until it exists this job
+      # passes without doing anything, so it can already be a required check.
+      - name: Detect frontend project
+        id: detect
+        working-directory: .
+        run: |
+          if [ -f frontend/package.json ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No frontend/package.json yet; skipping frontend checks."
+          fi
+
+      - name: Set up Node.js
+        if: steps.detect.outputs.exists == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        if: steps.detect.outputs.exists == 'true'
+        run: npm ci
+
+      - name: Lint
+        if: steps.detect.outputs.exists == 'true'
+        run: npm run lint --if-present
+
+      - name: Type-check
+        if: steps.detect.outputs.exists == 'true'
+        run: npx --no-install tsc --noEmit
+
+      - name: Build
+        if: steps.detect.outputs.exists == 'true'
+        run: npm run build
+        env:
+          # Placeholder only, so the build does not depend on a real server.
+          NEXT_PUBLIC_API_URL: http://localhost:3000
+          NEXT_TELEMETRY_DISABLED: '1'
+
+      - name: Tests
+        if: steps.detect.outputs.exists == 'true'
+        run: npm test --if-present

@@ -169,7 +169,9 @@ npm test            # unit tests (the script already sets the ES-module flag Jes
 TEST_MONGODB_URI=mongodb://127.0.0.1:27017 npm run test:e2e
 ```
 
-CI (`.github/workflows/backend-ci.yml`) runs install, lint and build on every pull request.
+The e2e tests use transactions, so the local MongoDB must be a single-node replica set (see `CLAUDE.md` section 7 for the Docker commands). Never point them at the shared Atlas database.
+
+CI runs on every pull request into `develop` and `main`: backend lint, build, unit tests and e2e tests (on a throwaway MongoDB), frontend lint, type-check and build, and a Jira-key check. See `docs/PR-REVIEW-PROCESS.md`.
 
 ## Troubleshooting
 
