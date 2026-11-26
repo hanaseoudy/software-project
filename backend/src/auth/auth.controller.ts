@@ -150,7 +150,11 @@ export class AuthController {
     summary: 'Log in with email and password (ACC-04)',
     description: 'Starts a session and sets the access_token and refresh_token as httpOnly, Secure, SameSite=Strict cookies (ACC-19).',
   })
-  @ApiOkResponse({ description: 'Logged in; role and providerType tell the frontend which home page to open', type: LoginResponseDto })
+  @ApiOkResponse({
+    description:
+      'Logged in; role and providerType tell the frontend which home page to open, providerId which airline or hotel to load (BE-2)',
+    type: LoginResponseDto,
+  })
   @ApiBadRequestResponse({
     description: 'Validation failed; errors are grouped by field',
     type: ValidationErrorResponseDto,
@@ -219,7 +223,11 @@ export class AuthController {
   @AllowPendingPasswordChange()
   @ApiCookieAuth(ACCESS_COOKIE)
   @ApiOperation({ summary: 'Get the currently logged-in user from the access_token cookie (ACC-19)' })
-  @ApiOkResponse({ description: 'The current user', type: LoginResponseDto })
+  @ApiOkResponse({
+    description:
+      'The current user; for moderators providerType and providerId tell which airline or hotel to load (BE-2), null for users and admins',
+    type: LoginResponseDto,
+  })
   @ApiUnauthorizedResponse({
     description: 'Missing, invalid or expired cookie, revoked or idle session, or the account is no longer active',
     example: { message: 'Not authenticated', error: 'Unauthorized', statusCode: 401 },
