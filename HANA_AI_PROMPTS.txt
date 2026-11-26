@@ -554,3 +554,106 @@ outdated Jest ES-module limitation with the verified current test status.
 AGENTS.md got the short version of the same rules, and the README CI line was
 corrected. I review these documents in PR #168.
 ================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: FND-1 (TASK-133): GEN-17, ACC-19, ACC-06, GEN-13, GEN-16, GEN-02, GEN-05, GEN-06, GEN-08, PAY-04
+
+Prompt:
+Set up the frontend for FND-1: Next.js App Router + TypeScript in frontend/,
+Neobrutalism Components with our palette and fonts, the API client, the
+local-time and money formatters. Before building, I asked Claude to check our
+existing CORS and cookie configuration and to compare a Next.js proxy with
+direct requests (credentials: 'include' + CORS) for SSR, authentication,
+session refresh and cloud deployment, and to use Jest instead of Vitest.
+Decisions I made: next.config rewrite with a server-only BACKEND_URL, dev port
+3001, Jest with next/jest + jsdom + React Testing Library, apiFetch with a
+single shared refresh plus a read-only serverFetch, keep the /design-system
+page, no backend changes, document the session recovery component for FND-2,
+test uploads locally and verify the Vercel upload limit on the first preview.
+
+How the output was used:
+Claude confirmed that Milestone 1 has no CORS configuration (FRONTEND_URL is
+only used for email links) and that the auth cookies are httpOnly, Secure,
+SameSite=Strict, with the refresh cookie on path /api/auth. It corrected its
+own earlier claim that middleware could refresh the session during SSR (the
+refresh cookie is not sent with page requests). It scaffolded the app,
+mapped the GEN-17 palette and fonts onto the Neobrutalism theme, wrote
+apiFetch/serverFetch/ApiError and the formatters with 57 Jest tests, and ran
+lint, type-check and build. It tested the proxy locally against a copy of the
+backend and a throwaway local MongoDB (not Atlas): login cookies, expiry,
+refresh rotation and a 5 x 5 MB hotel upload. This found that Next.js cuts
+proxied bodies at 10 MB, so proxyClientMaxBodySize was set to 30 MB and the
+upload was re-tested successfully. The Vercel upload limit is still to be
+verified on the first preview. I review all files before committing.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: FND-1 (TASK-133): GEN-17
+
+Prompt:
+Adjust the button colors to achieve at least a 4.5:1 contrast ratio for
+normal-sized text.
+
+How the output was used:
+Claude measured every palette pair with the WCAG formula. Only the secondary
+button failed (Cream on Olive Green, 3.93:1), and no palette text colour
+reaches 4.5:1 on Olive. To keep the agreed palette, the secondary button now
+has Dark Brown text on Cream (11.84:1) with an Olive Green border and offset
+shadow (3.93:1, above the 3:1 needed for borders). Claude added a Jest test
+that reads the real button/badge classes and globals.css colours and fails
+below 4.5:1, and confirmed it fails on the old olive button. Lint,
+type-check, build and 65 tests pass. I check the look on /design-system.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: FND-1 (TASK-133): route structure for all Milestone 2 pages
+
+Prompt:
+Add the shell: the folders/routes of the app, only the names and folders,
+without implementing them.
+
+How the output was used:
+Claude took the 68 page routes from our Milestone 2 page inventories (ACC,
+BLG, FLT, GEN, HTL, ITN) and created 66 folders under frontend/src/app, each
+with only an empty .gitkeep ("/" already existed; /403 and /404 are Next.js
+special files, documented instead of created). No pages, layouts or guards
+were written. It added a route map and the folder rules to
+frontend/README.md. Build, lint, type-check and 65 tests still pass; the
+build still lists only /, /_not-found and /design-system.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: FND-1 (TASK-133): route groups for ACC-10, ACC-11 (access areas); frontend CI
+
+Prompt:
+Establish route groups before the team implements pages: classify the routes
+from the official page inventories into public, auth and protected groups,
+with a nested (user) group inside (protected), keeping the admin, airline and
+hotel prefixes and all planned URLs. No guards, layouts or page functionality.
+Update the route map with exact folders, apply the approved CI rename of
+NEXT_PUBLIC_API_URL to BACKEND_URL, run all checks and show the folder tree
+before committing.
+
+How the output was used:
+Claude moved the empty route folders into (public), (auth), (protected) and
+(protected)/(user). /verify-email and /reset-password went to (public) because
+they are opened from email links, possibly while logged in. It checked that
+the set of 66 URLs is identical before and after, and that every folder in
+the new README route map exists. In frontend-ci.yml only the build
+environment variable changed (BACKEND_URL); no step was removed. Lint,
+type-check (also from a clean checkout), build and 65 tests pass; the build
+still lists only /, /_not-found and /design-system. I reviewed the folder
+tree before committing.
+================================================
