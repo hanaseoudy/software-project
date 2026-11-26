@@ -189,10 +189,11 @@ describe('Backend regressions against disposable MongoDB', () => {
     const winner = responses.find(res => res.status === 200)!;
     await request(app.getHttpServer()).get('/api/auth/me').set('Cookie', cookies(winner)).expect(401);
   });
-  it('characterizes unchanged ACC-05: fifth failure is 401; following attempt is locked for 15 minutes', async () => {
+  it('ACC-05: fifth consecutive failure locks the account and returns 423 with the lockout message; following attempt stays locked for 15 minutes', async () => {
     const user = await register();
     const started = Date.now();
-    for (let i = 0; i < 5; i++) await login(user.email, 'WrongPassword123').expect(401);
+    for (let i = 0; i < 4; i++) await login(user.email, 'WrongPassword123').expect(401);
+    await login(user.email, 'WrongPassword123').expect(423);
     const stored = await db.model('User').findOne({ email: user.email }).select('+lockedUntil +failedLoginAttempts');
     expect(stored!.lockedUntil.getTime()).toBeGreaterThanOrEqual(started + 15 * 60_000);
     expect(stored!.lockedUntil.getTime()).toBeLessThanOrEqual(Date.now() + 15 * 60_000);

@@ -510,3 +510,23 @@ job and frontend job were not run locally (no local MongoDB); they are
 verified by the CI run on the PR. I review the PR before merging and
 configure the rulesets manually.
 ================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: ACC-05
+
+Prompt:
+Is the failing e2e test a problem in the e2e file or in ACC-05? Fix it in
+the same branch (chore/pr-review-setup).
+
+How the output was used:
+Claude showed that the login code (commit 3beead4) matches ACC-05: the 5th
+consecutive failure locks the account and returns 423 with the lockout
+message. The e2e test in backend/test/app.e2e-spec.ts still expected 401 on
+the 5th failure. I approved updating only that test: attempts 1-4 expect
+401, the 5th expects 423; the remaining lock, reset and unlock assertions
+are unchanged. No backend code was changed. Verified by the CI e2e run on
+PR #168.
+================================================
