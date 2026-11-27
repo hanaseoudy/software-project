@@ -6,7 +6,7 @@ import { ReferenceDataService } from './reference-data.service';
 import { City, CitySchema } from './schemas/city.schema';
 import { Country, CountrySchema } from './schemas/country.schema';
 
-// BE-1: read-only access to the GEN-12 countries and cities
+// Read-only access to the seeded reference countries and cities (GEN-12, HTL-01, HTL-11, ITN-01, ITN-05, ITN-16, ITN-21)
 @Module({
   imports: [
     MongooseModule.forFeature([

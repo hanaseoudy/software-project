@@ -1701,10 +1701,10 @@ creates the booking for the logged-in user. Whole flight-bookings test folder pa
 Date: 2026-11-26
 Student: Kenzy Ellkany
 Tool: Claude Code (Claude Opus 5.5)
-Related Requirement: BE-1 (GEN-12, HTL-01, HTL-11, ITN-01, ITN-05, ITN-16, ITN-21)
+Related Requirement: GEN-12, HTL-01, HTL-11, ITN-01, ITN-05, ITN-16, ITN-21
 
 Prompt (summary of the conversation):
-Sent the project description and the BE-1 task: add GET /api/countries and
+Sent the project description and the Jira task TASK-125: add GET /api/countries and
 GET /api/cities (filter by country) so the frontend can get the ids for pickers and
 filters, with Swagger docs and the shared page format (page size 10). Asked the AI
 to build it exactly as required.

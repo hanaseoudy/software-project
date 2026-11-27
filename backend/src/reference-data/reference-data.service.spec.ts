@@ -25,7 +25,7 @@ function makeModel(records: any[], total = records.length) {
 const egypt = { _id: new Types.ObjectId(), code: 'EG', name: 'Egypt', currency: 'EGP' };
 const cairo = { _id: new Types.ObjectId(), cityId: 'cairo', name: 'Cairo', countryCode: 'EG' };
 
-describe('ReferenceDataService (BE-1)', () => {
+describe('ReferenceDataService (GEN-12, HTL-01, HTL-11, ITN-01, ITN-05, ITN-16, ITN-21)', () => {
   it('lists countries with id, code, name, currency in the GEN-05 page shape', async () => {
     const countryModel = makeModel([egypt], 8);
     const service = new ReferenceDataService(countryModel as any, makeModel([]) as any);
@@ -95,7 +95,7 @@ describe('ReferenceDataService (BE-1)', () => {
   });
 });
 
-describe('ListCitiesQueryDto (BE-1)', () => {
+describe('ListCitiesQueryDto (GEN-12, HTL-01, HTL-11, ITN-01, ITN-05, ITN-16, ITN-21)', () => {
   const errorsFor = async (query: Record<string, unknown>) =>
     (await validate(plainToInstance(ListCitiesQueryDto, query))).map((e) => e.property);
 

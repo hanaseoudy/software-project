@@ -14,7 +14,7 @@ export class CitiesController {
 
   @Get()
   @ApiOperation({
-    summary: 'List cities, optionally filtered by country (BE-1, GEN-12)',
+    summary: 'List cities, optionally filtered by country (GEN-12, HTL-01, HTL-11, ITN-01, ITN-05, ITN-16, ITN-21)',
     description:
       'Public. The cities seeded by GEN-12, sorted by name, 10 per page. Filter with country = a country code (EG) or a country id from GET /api/countries; an unknown country returns an empty page. Each item gives both the database id (hotels: HTL-01, HTL-11) and the city id (itineraries: ITN-05, ITN-16, ITN-21).',
   })

@@ -8,7 +8,7 @@ import { cities, countries } from './reference-data.data';
 import { City } from './schemas/city.schema';
 import { Country } from './schemas/country.schema';
 
-// BE-1: only the official GEN-12 reference records are listed (same rule as GET /api/airports),
+// GEN-12: only the official reference records are listed (same rule as GET /api/airports),
 // so test records in the shared database never show up in pickers and filters.
 const countryCodes = countries.map(({ code }) => code);
 const cityIds = cities.map(({ city_id }) => city_id);

@@ -13,7 +13,7 @@ export class CountriesController {
 
   @Get()
   @ApiOperation({
-    summary: 'List countries (BE-1, GEN-12)',
+    summary: 'List countries (GEN-12, HTL-01, HTL-11, ITN-01, ITN-05, ITN-16, ITN-21)',
     description:
       'Public. The countries seeded by GEN-12, sorted by name, 10 per page. Each item gives both the database id (hotels: HTL-01, HTL-11) and the country code (itineraries: ITN-01, ITN-21).',
   })
