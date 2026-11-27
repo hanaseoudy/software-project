@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatAirportDateTime, formatAirportTime, formatMoney } from "@/lib/format";
 
+import { FeedbackDemo } from "./feedback-demo";
 import { ReferenceDataDemo } from "./reference-data-demo";
 
 export const metadata: Metadata = {
@@ -145,6 +146,10 @@ export default function DesignSystemPage() {
             </tbody>
           </table>
         </div>
+      </Section>
+
+      <Section title="Loading, success and error feedback (GEN-16)">
+        <FeedbackDemo />
       </Section>
 
       <Section title="Reference-data pickers (GEN-12)">

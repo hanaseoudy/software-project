@@ -42,4 +42,12 @@ describe("/design-system (GEN-17)", () => {
     expect(screen.getByText("Country")).toBeInTheDocument();
     expect(screen.getByText("Currency")).toBeInTheDocument();
   });
+
+  it("previews the loading, success and error feedback (GEN-16)", () => {
+    render(<DesignSystemPage />);
+
+    expect(screen.getByRole("heading", { name: "Loading, success and error feedback (GEN-16)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show success toast" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Hotel not found" })).toBeInTheDocument();
+  });
 });

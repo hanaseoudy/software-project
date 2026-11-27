@@ -1917,6 +1917,55 @@ Backend build, lint and tests pass; frontend checks pass after the merge.
 Date: 2026-11-27
 Student: Mariam Mashoud
 Tool: Claude
+Related Requirement: GEN-16 (FND-7 / TASK-139: shared loading, success and error feedback)
+
+Prompt (summary of the conversation):
+Jira task FND-7 (frontend only, depends on FND-1): loading states (skeletons or
+spinners), success toasts ("Saved") and error messages with a recovery option (retry,
+go back), as shared components that the feature pages reuse.
+
+How the output was used:
+Added frontend/src/components/feedback/ with Spinner, LoadingState (spinner, skeleton
+rows or card), ErrorState (title and message from the ApiError, Try again that shows a
+spinner while it runs, Go back link or browser back) and a ToastProvider with
+useToast() (success, error, info, optional action such as Retry, auto close after 4 s
+or 8 s for errors). Added the shadcn-style Skeleton to components/ui. No new library:
+the toast is written with React context and the existing Neobrutalism theme tokens.
+Mounted the ToastProvider in the root layout and added app/error.tsx and app/loading.tsx
+as the default error and loading pages. Added a GEN-16 section to /design-system.
+ErrorState shows only an ApiError's message; any other error gets a generic text, so
+raw technical errors are not shown to users.
+
+Verification:
+18 new tests (components/feedback/feedback.test.tsx plus one design-system test); the
+whole frontend suite passes (144 tests), tsc and eslint are clean. npm run build could
+not be run in my environment because it cannot reach Google Fonts, so it is left to CI.
+Related Requirement: FLT-27 (optional) (BE-8: rename the change route)
+
+Prompt (summary of the conversation):
+Task BE-8 from Jira (approved by the team leader on 2026-11-25): the flight change
+endpoint must be PATCH /api/flight-bookings/:id/change-flight instead of
+POST /api/flight-bookings/:id/change, because the path and method in the project PDF
+differ from the code. Update the controller, Swagger, tests and docs together.
+
+How the output was used:
+Changed the one handler decorator from @Post(':id/change') to @Patch(':id/change-flight')
+(same body, guards, role check, response codes and service call). Updated the Swagger
+text that mentioned the old route (the changeId parameter) and the two places in the
+README that listed it. GET :id/change-quote and GET :id/changes/:changeId are not
+changed. There is no docs/postman folder in develop yet, so there was no Postman
+collection to update.
+
+Verification:
+3 new controller spec tests: the route is PATCH :id/change-flight, nothing answers on
+POST :id/change any more, and the handler passes the user, booking id and body to the
+change service. Whole flight-bookings test folder passes (125 tests), oxlint clean.
+================================================
+ 
+================================================
+Date: 2026-11-27
+Student: Mariam Mashoud
+Tool: Claude
 Related Requirement: GEN-12 (FND-10 / TASK-142: shared reference-data pickers)
 
 Prompt (summary of the conversation):
