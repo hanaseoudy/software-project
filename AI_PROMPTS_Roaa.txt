@@ -179,3 +179,23 @@ tests. I will review the changes before the pull request is merged.
 Verification performed:
 Unit tests, lint and build passed under Node 24.
 ================================================
+
+Date: 2026-11-27
+Student: Roaa Mahmoud
+Tool: Claude (Claude Code on claude.ai)
+Related Requirement: BE-4 (Jira TASK-128): HTL-03, HTL-05, HTL-06, GEN-05
+Prompt:
+Milestone 2 is released. Check my part in Jira, read the description, make a new
+branch, perform my task and open a PR.
+How the output was used:
+Claude added GET /api/hotels/:id/rooms for the assigned hotel moderator. It lists
+every room of the hotel (active and deactivated), sorted by room number, 10 per
+page, and gives each room its bookable ranges and blocks with their ids, so the
+edit room page (HTL-13) can load a room and use the existing availability routes.
+It added the response DTO, the service method, the controller route with Swagger
+docs, and unit tests (404, 403, empty page, pagination, ranges split). I will
+review the changes before the pull request is merged.
+Verification performed:
+Lint and build passed locally. Unit tests could not run locally (Node 22; the
+project needs Node 24) and are checked by CI.
+================================================
