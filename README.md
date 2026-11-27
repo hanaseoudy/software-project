@@ -139,7 +139,7 @@ All routes are under `/api`. Each one is documented in Swagger with its requirem
 | Auth and users | `/auth/register`, `/auth/login`, `/auth/logout`, `/auth/change-password`, `/auth/me`, `/users/me` | ACC-01, ACC-04 to ACC-12, ACC-19 |
 | Administration | `/admin/moderators`, `/admin/accounts`, `/admin/providers/:type/:id/...`, `/admin/bookings`, `/admin/reports`, `/admin/content`, `/admin/audit-logs` | ACC-07a, ACC-13 to ACC-18, GEN-07, GEN-10 |
 | Airlines, airports and flights | `/airlines`, `/airports`, `/flights`, `/flights/search`, `/flights/:id` (edit), `/flights/:id/cabins`, `/flights/:id/cancel`, `/flights/:id/bookings`, `/flights/:id/passengers/export` (CSV) | FLT-01 to FLT-09, FLT-11 to FLT-17, FLT-29 |
-| Flight bookings | `POST /flight-bookings` (also `/hold`), `GET /flight-bookings`, `/flight-bookings/:id`, `/summary`, `/confirmation`, `/e-ticket`, `/cancellation-quote`, `/cancel`, `/change-quote`, `/change`, `/seat` | FLT-19 to FLT-28 |
+| Flight bookings | `POST /flight-bookings` (also `/hold`), `GET /flight-bookings`, `/flight-bookings/:id`, `/summary`, `/confirmation`, `/e-ticket`, `/cancellation-quote`, `/cancel`, `/change-quote`, `PATCH /change-flight`, `/seat` | FLT-19 to FLT-28 |
 | Hotels and rooms | `/hotels`, `/hotels/search`, `/hotels/:id/rooms`, `/availability`, `/policies`, `/reservations` | HTL-01 to HTL-15, HTL-22 |
 | Hotel bookings and reviews | `/hotel-bookings`, `/hotel-bookings/:id/cancel`, `/review`, `/reviews/:id` | HTL-16 to HTL-24 |
 | Payments and refunds | `/bookings/:type/:id/policies`, `/accept-policies`, `/payments`, `/payments/webhook`, `/refunds/:id` | PAY-01 to PAY-04 |
@@ -153,7 +153,7 @@ Main behaviour:
 - **Validation:** errors are returned per field.
 - **Pagination:** lists use 10 items per page.
 - **Refunds:** user cancellations, hotel cancellations and airline flight cancellations all refund through the Stripe Refunds API (PAY-03). The refund status is shown on the booking details.
-- **Endpoint names:** two endpoints use a slightly different path from the project description, which it allows. Day reordering (ITN-08) is `PATCH /itineraries/:id/days/:dayId/reorder`, and flight changes (FLT-27, optional) are `GET /flight-bookings/:id/change-quote` + `POST /flight-bookings/:id/change`.
+- **Endpoint names:** two endpoints use a slightly different path from the project description, which it allows. Day reordering (ITN-08) is `PATCH /itineraries/:id/days/:dayId/reorder`, and flight changes (FLT-27, optional) are `GET /flight-bookings/:id/change-quote` + `PATCH /flight-bookings/:id/change-flight`.
 
 ## Tests
 
