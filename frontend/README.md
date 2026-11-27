@@ -27,9 +27,10 @@ Run the backend on port 3000 at the same time (`cd backend; npm run start:dev`).
 | Variable | Where it is read | Example |
 | --- | --- | --- |
 | `BACKEND_URL` | Server only: the `/api` proxy in `next.config.ts` and `serverFetch` | `http://localhost:3000` |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Browser: Stripe Elements in `<StripeCardForm />` (PAYC-1) | `pk_test_...` (test mode only) |
 
 - `BACKEND_URL` is **required for every build** (CI, Vercel). Next.js evaluates the rewrites at build time, so a missing value fails the build instead of silently proxying to localhost. In `npm run dev` it falls back to `http://localhost:3000`.
-- Never put secrets in `NEXT_PUBLIC_*` variables: they are sent to the browser. The frontend currently needs no `NEXT_PUBLIC_*` variable at all.
+- Never put secrets in `NEXT_PUBLIC_*` variables: they are sent to the browser. The only one is `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, a Stripe *publishable* key, which is public by design (the secret `sk_...` key stays in the backend).
 
 ## Folder structure
 
@@ -43,6 +44,7 @@ src/
       (user)/             pages for registered users only
     design-system/        GEN-17 preview page: palette, fonts, components, formatters
   components/ui/          Neobrutalism / shadcn components (button, card, input, label, badge)
+  components/payments/    <StripeCardForm /> (PAYC-1): shared Stripe card payment form
   lib/
     api/
       client.ts           apiFetch: browser calls (client components)
