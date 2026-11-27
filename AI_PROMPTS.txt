@@ -1757,3 +1757,34 @@ timer ticks, the expired state appears on time, the link opens /flights, no hori
 scroll at 375 px. The browser check caught a rounding issue (10:01 shown for a fresh
 10:00 hold), which was fixed.
 ================================================
+Date: 2026-11-26
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAYC-3 / TASK-145 (PAY-02)
+
+Prompt (summary of the conversation):
+Sent the PAYC-3 Jira task: a shared <PolicyAcceptance /> client component that shows the
+policies from GET /api/bookings/:type/:id/policies with a required checkbox, calls
+POST /api/bookings/:type/:id/accept-policies, and blocks "Continue to payment" until the
+box is ticked. Used on both summary pages. Depends on FND-1 (already merged). Asked the
+AI to check the dependencies and the description first.
+
+How the output was used:
+Added frontend/src/components/payments/policy-acceptance.tsx and policies-api.ts. Airline:
+cancellation tiers and baggage policy (free bags, max weight, extra bag price and limit)
+per flight; hotel: check-in/check-out times and cancellation tiers (PAY-02). Tiers are
+worded with the FLT-09 / HTL-10 rule (highest threshold not exceeding the days left;
+otherwise no refund). Prices use formatMoney (PAY-04). The button stays disabled until
+the required checkbox is ticked; then it posts the acceptance and opens
+/checkout/<type>/<id>/pay (or continueHref). An already accepted booking shows ticked with
+the stored time. Loading, error (with Try again) and backend error messages are shown.
+Reviewed the code before committing.
+
+Verification:
+11 tests (component + wording). Frontend lint, type-check, build and all 76 tests pass.
+Real browser test (Playwright) against the backend on a local test database, desktop and
+375 px: flight and hotel policies shown, button blocked until ticked, acceptance stored
+with a timestamp in the backend, pay page opened, reopened booking shows "accepted",
+missing booking shows the error, no horizontal scroll. The test page was temporary and is
+not committed.
+================================================
