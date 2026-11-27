@@ -1912,3 +1912,34 @@ back) with this task's entry appended. Checked that no existing line was removed
 Verification:
 Backend build, lint and tests pass; frontend checks pass after the merge.
 ================================================
+ 
+================================================
+Date: 2026-11-27
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: GEN-12 (FND-10 / TASK-142: shared reference-data pickers)
+
+Prompt (summary of the conversation):
+Jira task FND-10 (frontend only, depends on FND-1 and BE-1): airport, country, city
+and currency pickers from the seeded data. Airports from GET /api/airports, countries
+and cities from the new endpoints, currencies from a frontend copy of the backend's
+fixed SupportedCurrency list (agreed decision, no new endpoint).
+
+How the output was used:
+Added frontend/src/components/reference-data/: AirportPicker, CountryPicker, CityPicker
+(optionally only the cities of one country) and CurrencyPicker, built on one accessible
+labelled select with loading, "Try again" and backend field-error states. The countries
+and cities endpoints are paginated with page size 10, so the loaders read every page and
+cache the result for the session; a failed request is not cached. Because the backend
+uses both ids and codes, each picker has a valueKey prop (airports iataCode or id,
+countries code or id, cities cityId or id) and onChange also returns the whole record.
+The currency list is in currencies.ts and a test compares it with the backend enum, so
+the two cannot drift apart. The components do not depend on the FND-7 feedback
+components, which are in a separate PR.
+
+Verification:
+24 new tests (API loaders and cache, the four pickers, the currency list against the
+backend enum); the whole frontend suite passes (149 tests), tsc and eslint are clean.
+Not checked against the running backend or in a browser, and npm run build cannot run
+in my environment (no access to Google Fonts), so it is left to CI.
+================================================
