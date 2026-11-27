@@ -210,3 +210,17 @@ What AI helped with:
 - Added the missing @ApiOperation descriptions for PATCH /api/admin/accounts/:id/reactivate and GET /api/users/me (documentation only, no behaviour change)
 What I did:
 - Pasted the changes, ran the build, and checked both endpoints on /api/docs
+
+==================================================
+TASK-129 (BE-5: ACC-13, ACC-15) - Admin lists of airlines and hotels
+==================================================
+Tool: Claude
+Prompt: Help me build GET /api/airlines and GET /api/hotels (admin only) so the admin can pick the provider a new moderator is linked to and list providers to deactivate or reactivate, with Swagger docs and GEN-05 pagination.
+What AI helped with:
+- New AdminProviderListsService and two admin-only controllers in the admin module (AdminAirlinesListController, AdminHotelsListController), so no other module's files were changed
+- Lists include active and deactivated providers, sorted by name, 10 per page; airlines return id, name, code, isActive and hotels return id, name, isActive
+- Checked that the new routes have no path parameter, so they do not clash with /api/hotels/search, /api/hotels/:id or /api/airlines/:id
+- Response DTOs for Swagger and unit tests (admin-provider-lists.service.spec.ts)
+What I did:
+- Pasted and reviewed the code, ran the admin tests (11 suites, 93 tests passed) and npm run build
+- Tested in Postman: 401 not logged in, 200 hotels and airlines lists, 400 invalid page, empty page past the end, /api/hotels/:id still works, 403 for a normal user; checked both endpoints in Swagger
