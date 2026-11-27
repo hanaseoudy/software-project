@@ -676,3 +676,30 @@ type-check (also from a clean checkout), build and 65 tests pass; the build
 still lists only /, /_not-found and /design-system. I reviewed the folder
 tree before committing.
 ================================================
+
+================================================
+Date: 2026-11-27
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: FND-1 (TASK-133) follow-up: ACC-19, ACC-06 (session handling), GEN-17 (contrast)
+
+Prompt:
+Make the FND-1 follow-up PR. While reviewing PR #174 (PAYC-4), we found that
+<RefundStatus /> re-throws a 401 from serverFetch, which Next.js strips in
+production, and that its test copies the contrast helpers. Both trace back to
+FND-1: the serverFetch docs never said "don't re-throw" or separated pages
+from components inside a page, and the contrast helpers were inside a test
+file, so nobody could import them.
+
+How the output was used:
+Claude documented the rule in frontend/src/lib/api/server.ts and
+frontend/README.md (new "Errors in Server Components" section, clarified FND-2
+step 1, new step 7): catch ApiError where serverFetch is called, never
+re-throw it; pages render FND-2's session recovery on 401, components inside
+a page show their own fallback. It moved the contrast helpers to
+frontend/src/test-utils/contrast.ts (contrastRatio, resolveColour,
+hasColourToken) with 5 tests of their own, and changed
+components/ui/contrast.test.ts to import them. No app behaviour changed.
+Lint, type-check, build and 111 tests pass. Kenzy's #174 fix (handle the 401
+locally, import contrastRatio) follows separately in her PR.
+================================================
