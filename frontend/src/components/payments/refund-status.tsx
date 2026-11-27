@@ -4,12 +4,12 @@
 //   <RefundStatus refundId={refundId} />
 //
 // - 404 (no such refund for this user): renders nothing.
-// - 401 (session expired): rethrown, so the page shows FND-2's session recovery
-//   (see frontend/README.md, "Session refresh on server-rendered pages").
-// - Any other problem: a short "unavailable" note instead of breaking the page.
+// - Any other error, 401 included: a short "unavailable" note instead of breaking the page.
+//   Never re-thrown (frontend/README.md, "Errors in Server Components"): the page has
+//   already loaded the booking with serverFetch, so it handles an expired session itself.
 // If the page already has the refund (e.g. `payment.refund`), use <RefundStatusBadge /> directly.
 
-import { isApiError, isUnauthorized } from "@/lib/api";
+import { isApiError } from "@/lib/api";
 import { serverFetch } from "@/lib/api/server";
 
 import { RefundStatusBadge, type Refund } from "./refund-status-badge";
@@ -23,7 +23,6 @@ export async function RefundStatus({ refundId, className }: { refundId: string; 
   try {
     refund = await getRefund(refundId);
   } catch (error) {
-    if (isUnauthorized(error)) throw error;
     if (isApiError(error) && error.status === 404) return null;
     return <span className="text-sm">Refund status is unavailable right now.</span>;
   }

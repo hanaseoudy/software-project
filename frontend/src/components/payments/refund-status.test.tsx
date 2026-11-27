@@ -53,10 +53,12 @@ describe("<RefundStatus /> (PAYC-4, PAY-03)", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("rethrows 401 so the page can recover the session (FND-2)", async () => {
+  it("shows the unavailable note on 401 instead of re-throwing (the page handles the session)", async () => {
     serverFetch.mockRejectedValue(new ApiError(401, "Not authenticated"));
 
-    await expect(RefundStatus({ refundId: "r1" })).rejects.toMatchObject({ status: 401 });
+    await renderServer({ refundId: "r1" });
+
+    expect(screen.getByText("Refund status is unavailable right now.")).toBeInTheDocument();
   });
 
   it("shows a short note instead of breaking the page on other errors", async () => {
