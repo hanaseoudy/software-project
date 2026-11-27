@@ -1700,31 +1700,6 @@ creates the booking for the logged-in user. Whole flight-bookings test folder pa
 Date: 2026-11-26
 Student: Kenzy Ellkany
 Tool: Claude Code (Claude Opus 5.5)
-Related Requirement: GEN-12, HTL-01, HTL-11, ITN-01, ITN-05, ITN-16, ITN-21
-
-Prompt (summary of the conversation):
-Sent the project description and the Jira task TASK-125: add GET /api/countries and
-GET /api/cities (filter by country) so the frontend can get the ids for pickers and
-filters, with Swagger docs and the shared page format (page size 10). Asked the AI
-to build it exactly as required.
-
-How the output was used:
-Added a read-only ReferenceDataModule (countries + cities controllers, service, DTOs).
-Only the official GEN-12 records are listed (same rule as GET /api/airports), sorted by
-name, 10 per page in { items, total, page, pageSize, totalPages }. Each item has the
-database id (used by hotels) and the code / cityId (used by itineraries). Cities can be
-filtered by a country code (EG) or a country id. Reviewed the code before committing.
-
-Verification:
-8 new unit tests; full backend suite passes (1644 tests), build and lint pass. Called
-both endpoints on a local server connected to the shared database (page, filter by
-code and by id, unknown country, invalid page/country -> 400) and checked Swagger.
-================================================
- 
-================================================
-Date: 2026-11-26
-Student: Kenzy Ellkany
-Tool: Claude Code (Claude Opus 5.5)
 Related Requirement: PAYC-1 / TASK-143 (PAY-01)
 
 Prompt (summary of the conversation):

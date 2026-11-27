@@ -6,13 +6,36 @@
 // - it never refreshes the session and never sets cookies. Next.js does not
 //   allow setting cookies while a Server Component renders, and the
 //   refresh_token cookie (path /api/auth) is not sent with page requests anyway.
-// - on an expired or missing session it throws ApiError 401. The page should
-//   then render FND-2's session recovery component, which refreshes in the
-//   browser and re-renders (see frontend/README.md, "Session refresh").
+// - on an expired or missing session it throws ApiError 401.
 //
-// Usage (Server Component):
-//   const page = await serverFetch<Paginated<Hotel>>("/hotels?page=1");
-//   try { await serverFetch("/auth/me") } catch (e) { if (isUnauthorized(e)) ... }
+// Handling errors (see frontend/README.md, "Errors in Server Components"):
+// - Catch ApiError where you call serverFetch. NEVER re-throw it from a Server
+//   Component: in production Next.js replaces errors thrown during rendering
+//   with a generic error (only a `digest`), so the status is lost, and the
+//   nearest error boundary replaces the whole page.
+// - A page (page.tsx) owns the session: on 401 it renders FND-2's session
+//   recovery component, which refreshes in the browser and re-renders.
+// - A component inside a page handles every error itself, 401 included, with
+//   its own fallback ("unavailable" note, or nothing). The page has already
+//   loaded its main data with serverFetch, so an expired session is handled there.
+//
+// Usage:
+//   // page.tsx
+//   let booking: Booking;
+//   try {
+//     booking = await serverFetch<Booking>(`/flight-bookings/${id}`);
+//   } catch (error) {
+//     if (isUnauthorized(error)) return <SessionRecovery />; // FND-2
+//     if (isApiError(error) && error.status === 404) notFound();
+//     return <p>We couldn't load this booking.</p>;
+//   }
+//
+//   // a component inside the page
+//   try {
+//     refund = await serverFetch<Refund>(`/refunds/${refundId}`);
+//   } catch {
+//     return <span>Refund status is unavailable right now.</span>; // 401 too: no re-throw
+//   }
 
 import { cookies } from "next/headers";
 
