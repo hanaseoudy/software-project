@@ -13,6 +13,7 @@ import { UsersModule } from './users/users.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AuthModule } from './auth/auth.module';
 import { AirportsModule } from './airports/airports.module';
+import { ReferenceDataModule } from './reference-data/reference-data.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ItinerariesModule } from './itineraries/itineraries.module';
 import { warnIfDatabaseMissing } from './common/config/mongodb.config';
@@ -53,6 +54,7 @@ import { FavouritesModule } from './favourites/favourites.module';
     }),
     PoliciesModule,
     AirportsModule,
+    ReferenceDataModule,
     PaymentsModule,
     BlogModule,
     HotelBookingsModule,
