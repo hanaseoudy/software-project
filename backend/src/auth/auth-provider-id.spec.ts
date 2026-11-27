@@ -6,8 +6,8 @@ import { SessionDocument } from './schemas/session.schema';
 import { AccountStatus, UserDocument, UserRole } from '../users/schemas/user.schema';
 import { ModeratorAssignmentDocument, ProviderType } from '../users/schemas/moderatorassignment.schema';
 
-// BE-2: GET /api/auth/me and POST /api/auth/login also return providerId (null for users and admins).
-describe('AuthService providerId (BE-2)', () => {
+// ACC-04, ACC-19, FLT-01, HTL-01: GET /api/auth/me and POST /api/auth/login also return providerId (null for users and admins).
+describe('AuthService providerId (ACC-04, ACC-19, FLT-01, HTL-01)', () => {
   const users = { findById: jest.fn() };
   const assignments = { findOne: jest.fn() };
   const service = new AuthService(

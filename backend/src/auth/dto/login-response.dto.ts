@@ -29,7 +29,7 @@ export class LoginResponseDto {
     example: null,
     nullable: true,
     description:
-      'BE-2: id of the airline or hotel the moderator manages (matches providerType); null for users and admins',
+      'ACC-04, ACC-19, FLT-01, HTL-01: id of the airline or hotel the moderator manages (matches providerType); null for users and admins',
   })
   providerId!: string | null;
 

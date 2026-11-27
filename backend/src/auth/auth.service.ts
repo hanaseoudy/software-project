@@ -284,7 +284,7 @@ async refresh(refreshToken: string | undefined) {
 
   private async toAuthUser(user: UserDocument) {
     let providerType: string | null = null;
-    // BE-2: which airline or hotel a moderator manages, so moderator pages know what to load.
+    // ACC-04, ACC-19, FLT-01, HTL-01: which airline or hotel a moderator manages, so moderator pages know what to load.
     let providerId: string | null = null;
     if (user.role === UserRole.MODERATOR) {
       const assignment = await this.assignmentModel.findOne({ moderatorId: user._id });

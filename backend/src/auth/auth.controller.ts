@@ -152,7 +152,7 @@ export class AuthController {
   })
   @ApiOkResponse({
     description:
-      'Logged in; role and providerType tell the frontend which home page to open, providerId which airline or hotel to load (BE-2)',
+      'Logged in; role and providerType tell the frontend which home page to open, providerId which airline or hotel to load (ACC-04, ACC-19, FLT-01, HTL-01)',
     type: LoginResponseDto,
   })
   @ApiBadRequestResponse({
@@ -225,7 +225,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Get the currently logged-in user from the access_token cookie (ACC-19)' })
   @ApiOkResponse({
     description:
-      'The current user; for moderators providerType and providerId tell which airline or hotel to load (BE-2), null for users and admins',
+      'The current user; for moderators providerType and providerId tell which airline or hotel to load (ACC-04, ACC-19, FLT-01, HTL-01), null for users and admins',
     type: LoginResponseDto,
   })
   @ApiUnauthorizedResponse({
