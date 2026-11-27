@@ -28,6 +28,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -51,6 +52,8 @@ import { RoomAvailabilityResponseDto } from './dto/room-availability-response.dt
 import { RoomResponseDto } from './dto/room-response.dto';
 import { RoomStatusQueryDto } from './dto/room-status-query.dto';
 import { RoomStatusPageDto } from './dto/room-status.dto';
+import { HotelRoomListPageDto } from './dto/hotel-room-list.dto';
+import { PaginationQueryDto } from '../common/pagination/pagination';
 import {
   CancellationTiersResponseDto,
   UpdateCancellationTiersDto,
@@ -229,6 +232,41 @@ export class HotelsController {
   ): Promise<CancellationTiersResponseDto> {
     // RolesGuard guarantees req.user is set on this route.
     return this.hotelsService.setCancellationTiers(id, dto, req.user!);
+  }
+
+  // ---------- BE-4 (HTL-03, HTL-05, HTL-06) ----------
+
+  @Get(':id/rooms')
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: "List the hotel's rooms for the moderator (BE-4: HTL-03, HTL-05, HTL-06)",
+    description:
+      'Hotel moderator only, and only for the hotel they are assigned to. Lists every room of the hotel, active and deactivated, sorted by room number, so a room can be loaded for editing. Each room includes its bookable date ranges (availabilityRanges) and blocked date ranges (blocks) with their ids, used by the availability PATCH / DELETE routes. Paginated, 10 rooms per page (GEN-05).',
+  })
+  @ApiParam({ name: 'id', description: 'Hotel id' })
+  @ApiOkResponse({
+    description: 'One page of rooms',
+    type: HotelRoomListPageDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed; errors are grouped by field',
+    example: {
+      message: 'Validation failed',
+      errors: { page: ['Page must be at least 1'] },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Not logged in' })
+  @ApiForbiddenResponse({
+    description: 'Not a moderator, or not assigned to this hotel',
+  })
+  @ApiNotFoundResponse({ description: 'Hotel not found' })
+  listRooms(
+    @Param('id') id: string,
+    @Query() query: PaginationQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<HotelRoomListPageDto> {
+    // RolesGuard guarantees req.user is set on this route.
+    return this.hotelsService.listRooms(id, query.page ?? 1, req.user!);
   }
 
   @Post(':id/rooms')

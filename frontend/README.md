@@ -27,9 +27,10 @@ Run the backend on port 3000 at the same time (`cd backend; npm run start:dev`).
 | Variable | Where it is read | Example |
 | --- | --- | --- |
 | `BACKEND_URL` | Server only: the `/api` proxy in `next.config.ts` and `serverFetch` | `http://localhost:3000` |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Browser: Stripe Elements in `<StripeCardForm />` (PAYC-1) | `pk_test_...` (test mode only) |
 
 - `BACKEND_URL` is **required for every build** (CI, Vercel). Next.js evaluates the rewrites at build time, so a missing value fails the build instead of silently proxying to localhost. In `npm run dev` it falls back to `http://localhost:3000`.
-- Never put secrets in `NEXT_PUBLIC_*` variables: they are sent to the browser. The frontend currently needs no `NEXT_PUBLIC_*` variable at all.
+- Never put secrets in `NEXT_PUBLIC_*` variables: they are sent to the browser. The only one is `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, a Stripe *publishable* key, which is public by design (the secret `sk_...` key stays in the backend).
 
 ## Folder structure
 
@@ -43,6 +44,7 @@ src/
       (user)/             pages for registered users only
     design-system/        GEN-17 preview page: palette, fonts, components, formatters
   components/ui/          Neobrutalism / shadcn components (button, card, input, label, badge)
+  components/payments/    <StripeCardForm /> (PAYC-1): shared Stripe card payment form
   lib/
     api/
       client.ts           apiFetch: browser calls (client components)
@@ -54,6 +56,7 @@ src/
       money.ts            formatMoney (PAY-04)
       airport-time.ts     formatAirportDateTime / Time / Date (GEN-06)
     utils.ts              cn() for class names
+  test-utils/             helpers for tests only (contrast.ts: contrastRatio for GEN-17 colour checks)
 ```
 
 Tests live next to the code as `*.test.ts(x)`.
@@ -205,7 +208,7 @@ Theme tokens are defined in `src/app/globals.css`; open **`/design-system`** to 
 - Fonts: `font-display` = Fraunces (headings, titles, branding; `h1`–`h6` use it automatically), `font-sans` = DM Sans (everything else, the default).
 - In Neobrutalism, `font-base` and `font-heading` are font **weights**, not families.
 - Buttons: `default` (Burgundy, primary), `secondary` (Olive Green border and shadow, Dark Brown text on Cream), `neutral` (Sage Green), `reverse`, `noShadow`.
-- Contrast: text must be at least 4.5:1 against its background (`src/components/ui/contrast.test.ts` checks every button and badge variant). No palette text colour passes on Olive Green (best: Cream 3.93), so use Olive for borders, shadows and decoration, not behind text. On Terracotta only Dark Brown passes (4.57); on Mustard use Dark Brown (7.00) or Burgundy (5.00).
+- Contrast: text must be at least 4.5:1 against its background (`src/components/ui/contrast.test.ts` checks every button and badge variant). To test your own colours, use the shared helper instead of writing your own: `import { contrastRatio } from "@/test-utils/contrast"` then `expect(contrastRatio("foreground", "mustard")).toBeGreaterThanOrEqual(4.5)` (token names without `--`). No palette text colour passes on Olive Green (best: Cream 3.93), so use Olive for borders, shadows and decoration, not behind text. On Terracotta only Dark Brown passes (4.57); on Mustard use Dark Brown (7.00) or Burgundy (5.00).
 - Add more Neobrutalism components with `npx shadcn@latest add https://neobrutalism.dev/r/<name>.json`, then replace any hardcoded `black`/`white` classes with theme tokens.
 
 ## Calling the backend
@@ -250,6 +253,39 @@ const page = await serverFetch<Paginated<Hotel>>("/hotels?page=1");
 
 `serverFetch` calls `BACKEND_URL` directly and forwards the incoming `access_token` cookie. It is **read-only** for the session: it never refreshes and never sets cookies, and it throws `ApiError` 401 when the session is missing or expired. Responses are not cached (`cache: "no-store"`) unless you pass a `cache` option.
 
+### Errors in Server Components
+
+**Catch `ApiError` where you call `serverFetch`, and never re-throw it from a Server Component.** In production, Next.js replaces any error thrown while a Server Component renders with a generic error that only has a `digest`. The `status` (401, 404…) is lost, so no error boundary can react to it, and the nearest error boundary replaces the whole page. (`next dev` shows the full error, so this only shows up in a production build.)
+
+Who handles what:
+
+| Where | On 401 (session expired) | On other errors |
+| --- | --- | --- |
+| **A page** (`page.tsx`), which loads the main data | Render FND-2's session recovery component | `notFound()` for 404, otherwise an error message |
+| **A component inside a page** (e.g. a status badge) | Its own fallback, like any other error: "unavailable" note, or nothing | The same fallback |
+
+A component inside a page never needs to handle the session: the page has already loaded its main data with `serverFetch`, so an expired session is caught there first. A 401 inside the component only happens if the session expires between the two calls, and a fallback is enough.
+
+```tsx
+// page.tsx
+let booking: Booking;
+try {
+  booking = await serverFetch<Booking>(`/flight-bookings/${id}`);
+} catch (error) {
+  if (isUnauthorized(error)) return <SessionRecovery />;          // FND-2
+  if (isApiError(error) && error.status === 404) notFound();
+  return <p>We couldn't load this booking.</p>;
+}
+
+// a component inside the page
+let refund: Refund;
+try {
+  refund = await serverFetch<Refund>(`/refunds/${refundId}`);
+} catch {
+  return <span>Refund status is unavailable right now.</span>;      // 401 included: no re-throw
+}
+```
+
 ## Session refresh on server-rendered pages (requirement for FND-2)
 
 **Why the server cannot refresh:**
@@ -260,12 +296,13 @@ const page = await serverFetch<Paginated<Hotel>>("/hotels?page=1");
 So after 15 minutes a server-rendered page may see no session even though the user's refresh cookie is still valid.
 
 **FND-2 (TASK-134) must therefore include a session recovery component:**
-1. When a Server Component gets `ApiError` 401 from `serverFetch` (or finds no `access_token`) on a page that needs a logged-in user, it renders the recovery component instead of the content.
+1. When a **page** (`page.tsx`) that needs a logged-in user gets `ApiError` 401 from its own `serverFetch` call (or finds no `access_token`), it renders the recovery component instead of the content. Components inside the page don't do this; they show their own fallback (see "Errors in Server Components").
 2. The component (client) calls `refreshSession()` from `@/lib/api/client`. Because this is a browser request to `/api/auth/refresh`, the refresh cookie is sent.
 3. On success it calls `router.refresh()`, so the page renders again with the new `access_token`.
 4. On failure it sends the user to `/login?reason=session-expired&returnTo=<page>`.
 5. Route guards must **not** redirect to `/login` just because `access_token` is missing: the refresh cookie may still be valid, and the server cannot see it.
 6. Use the shared single refresh (`refreshSession`), never a separate `fetch`, so a page with several components doesn't refresh twice.
+7. The recovery is rendered by the page, never triggered by re-throwing a 401: Next.js strips the status from errors thrown in Server Components in production.
 
 ## Upload size limits
 
