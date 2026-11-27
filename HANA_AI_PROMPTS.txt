@@ -482,3 +482,224 @@ shows budget entries without converted totals (ITN-14/ITN-18). The ITN-20
 field-list assertions were updated for the new fields, and unit and E2E
 tests were added. Lint, build, unit and E2E tests were run and reviewed.
 ================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: Project PDF Section 10 (Git workflow); Milestone 2 review process
+
+Prompt:
+Set up the PR review improvements on a chore/pr-review-setup branch with a
+PR into develop: GitHub Actions CI (lint, type-check, frontend and backend
+builds, existing automated tests), a PR template (Jira task and requirement
+IDs, desktop/mobile screenshots, endpoints, testing, GEN-17 design system,
+AI_PROMPTS update), small PRs linked to Jira tasks, Vercel preview
+deployments and AI-assisted review. No CODEOWNERS and no peer reviewers;
+I remain the only person who approves and merges. Explain the GitHub
+settings I must configure manually.
+
+How the output was used:
+Claude ran backend lint, build and unit tests (126 suites, 1636 tests passed)
+locally on a copy of develop before making tests a CI step. It extended
+backend-ci.yml with unit tests and an e2e job on a throwaway CI-only MongoDB,
+and added frontend-ci.yml (skips until FND-1 creates frontend/), pr-checks.yml
+(Jira TASK key required, large-PR warning), the PR template and
+docs/PR-REVIEW-PROCESS.md (Vercel setup, AI review, GitHub rulesets). The e2e
+job and frontend job were not run locally (no local MongoDB); they are
+verified by the CI run on the PR. I review the PR before merging and
+configure the rulesets manually.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: ACC-05
+
+Prompt:
+Is the failing e2e test a problem in the e2e file or in ACC-05? Fix it in
+the same branch (chore/pr-review-setup).
+
+How the output was used:
+Claude showed that the login code (commit 3beead4) matches ACC-05: the 5th
+consecutive failure locks the account and returns 423 with the lockout
+message. The e2e test in backend/test/app.e2e-spec.ts still expected 401 on
+the 5th failure. I approved updating only that test: attempts 1-4 expect
+401, the 5th expects 423; the remaining lock, reset and unlock assertions
+are unchanged. No backend code was changed. Verified by the CI e2e run on
+PR #168.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: GEN-02 to GEN-06, GEN-11, GEN-13 to GEN-17, ACC-05; Project PDF Sections 10 and 11
+
+Prompt:
+Update CLAUDE.md and AGENTS.md so that anyone working with AI going forward
+does not repeat the e2e test mistake, uses the correct design system, and
+follows anything else necessary.
+
+How the output was used:
+Claude added to CLAUDE.md a Milestone 2 frontend section (GEN-17 design
+system with the agreed palette and fonts, reuse of the shared foundation,
+cookie auth, env-based backend URL, Swagger as the API contract, GEN rules),
+the rule to update unit and e2e tests together when approved behaviour
+changes (ACC-05 example), how to write and run e2e tests on a disposable
+local replica set, the PR/CI rules (Jira key, PR template, required checks,
+team-leader-only merges) and the personal prompt-log rule. It replaced the
+outdated Jest ES-module limitation with the verified current test status.
+AGENTS.md got the short version of the same rules, and the README CI line was
+corrected. I review these documents in PR #168.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: GEN-17; Project PDF Section 10 (Git workflow)
+
+Prompt:
+Others can create shared components too, not only the team leader. Fix
+CLAUDE.md and AGENTS.md in a follow-up docs PR.
+
+How the output was used:
+Claude reworded CLAUDE.md section 6 and AGENTS.md: shared components are
+built in their own FND/PAYC Jira tasks by whoever is assigned; changing
+someone else's shared component needs the author's or team leader's
+agreement; page-specific copies stay forbidden. The change missed the PR #168
+merge, so it goes into develop through this follow-up PR. I reviewed the
+wording before merging.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: FND-1 (TASK-133): GEN-17, ACC-19, ACC-06, GEN-13, GEN-16, GEN-02, GEN-05, GEN-06, GEN-08, PAY-04
+
+Prompt:
+Set up the frontend for FND-1: Next.js App Router + TypeScript in frontend/,
+Neobrutalism Components with our palette and fonts, the API client, the
+local-time and money formatters. Before building, I asked Claude to check our
+existing CORS and cookie configuration and to compare a Next.js proxy with
+direct requests (credentials: 'include' + CORS) for SSR, authentication,
+session refresh and cloud deployment, and to use Jest instead of Vitest.
+Decisions I made: next.config rewrite with a server-only BACKEND_URL, dev port
+3001, Jest with next/jest + jsdom + React Testing Library, apiFetch with a
+single shared refresh plus a read-only serverFetch, keep the /design-system
+page, no backend changes, document the session recovery component for FND-2,
+test uploads locally and verify the Vercel upload limit on the first preview.
+
+How the output was used:
+Claude confirmed that Milestone 1 has no CORS configuration (FRONTEND_URL is
+only used for email links) and that the auth cookies are httpOnly, Secure,
+SameSite=Strict, with the refresh cookie on path /api/auth. It corrected its
+own earlier claim that middleware could refresh the session during SSR (the
+refresh cookie is not sent with page requests). It scaffolded the app,
+mapped the GEN-17 palette and fonts onto the Neobrutalism theme, wrote
+apiFetch/serverFetch/ApiError and the formatters with 57 Jest tests, and ran
+lint, type-check and build. It tested the proxy locally against a copy of the
+backend and a throwaway local MongoDB (not Atlas): login cookies, expiry,
+refresh rotation and a 5 x 5 MB hotel upload. This found that Next.js cuts
+proxied bodies at 10 MB, so proxyClientMaxBodySize was set to 30 MB and the
+upload was re-tested successfully. The Vercel upload limit is still to be
+verified on the first preview. I review all files before committing.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: FND-1 (TASK-133): GEN-17
+
+Prompt:
+Adjust the button colors to achieve at least a 4.5:1 contrast ratio for
+normal-sized text.
+
+How the output was used:
+Claude measured every palette pair with the WCAG formula. Only the secondary
+button failed (Cream on Olive Green, 3.93:1), and no palette text colour
+reaches 4.5:1 on Olive. To keep the agreed palette, the secondary button now
+has Dark Brown text on Cream (11.84:1) with an Olive Green border and offset
+shadow (3.93:1, above the 3:1 needed for borders). Claude added a Jest test
+that reads the real button/badge classes and globals.css colours and fails
+below 4.5:1, and confirmed it fails on the old olive button. Lint,
+type-check, build and 65 tests pass. I check the look on /design-system.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: FND-1 (TASK-133): route structure for all Milestone 2 pages
+
+Prompt:
+Add the shell: the folders/routes of the app, only the names and folders,
+without implementing them.
+
+How the output was used:
+Claude took the 68 page routes from our Milestone 2 page inventories (ACC,
+BLG, FLT, GEN, HTL, ITN) and created 66 folders under frontend/src/app, each
+with only an empty .gitkeep ("/" already existed; /403 and /404 are Next.js
+special files, documented instead of created). No pages, layouts or guards
+were written. It added a route map and the folder rules to
+frontend/README.md. Build, lint, type-check and 65 tests still pass; the
+build still lists only /, /_not-found and /design-system.
+================================================
+
+================================================
+Date: 2026-11-26
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: FND-1 (TASK-133): route groups for ACC-10, ACC-11 (access areas); frontend CI
+
+Prompt:
+Establish route groups before the team implements pages: classify the routes
+from the official page inventories into public, auth and protected groups,
+with a nested (user) group inside (protected), keeping the admin, airline and
+hotel prefixes and all planned URLs. No guards, layouts or page functionality.
+Update the route map with exact folders, apply the approved CI rename of
+NEXT_PUBLIC_API_URL to BACKEND_URL, run all checks and show the folder tree
+before committing.
+
+How the output was used:
+Claude moved the empty route folders into (public), (auth), (protected) and
+(protected)/(user). /verify-email and /reset-password went to (public) because
+they are opened from email links, possibly while logged in. It checked that
+the set of 66 URLs is identical before and after, and that every folder in
+the new README route map exists. In frontend-ci.yml only the build
+environment variable changed (BACKEND_URL); no step was removed. Lint,
+type-check (also from a clean checkout), build and 65 tests pass; the build
+still lists only /, /_not-found and /design-system. I reviewed the folder
+tree before committing.
+================================================
+
+================================================
+Date: 2026-11-27
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: FND-1 (TASK-133) follow-up: ACC-19, ACC-06 (session handling), GEN-17 (contrast)
+
+Prompt:
+Make the FND-1 follow-up PR. While reviewing PR #174 (PAYC-4), we found that
+<RefundStatus /> re-throws a 401 from serverFetch, which Next.js strips in
+production, and that its test copies the contrast helpers. Both trace back to
+FND-1: the serverFetch docs never said "don't re-throw" or separated pages
+from components inside a page, and the contrast helpers were inside a test
+file, so nobody could import them.
+
+How the output was used:
+Claude documented the rule in frontend/src/lib/api/server.ts and
+frontend/README.md (new "Errors in Server Components" section, clarified FND-2
+step 1, new step 7): catch ApiError where serverFetch is called, never
+re-throw it; pages render FND-2's session recovery on 401, components inside
+a page show their own fallback. It moved the contrast helpers to
+frontend/src/test-utils/contrast.ts (contrastRatio, resolveColour,
+hasColourToken) with 5 tests of their own, and changed
+components/ui/contrast.test.ts to import them. No app behaviour changed.
+Lint, type-check, build and 111 tests pass. Kenzy's #174 fix (handle the 401
+locally, import contrastRatio) follows separately in her PR.
+================================================
