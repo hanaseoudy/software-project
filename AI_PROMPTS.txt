@@ -1,4 +1,3 @@
-
 ================================================
 Date: 2026-11-02
 Student: Nour Hossam
@@ -1697,6 +1696,66 @@ creates the booking for the logged-in user. Whole flight-bookings test folder pa
 (118 tests). Tested in Postman (see the PR).
 ================================================
  
+================================================
+Date: 2026-11-26
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAYC-1 / TASK-143 (PAY-01)
+
+Prompt (summary of the conversation):
+Sent the PAYC-1 Jira task: a shared <StripeCardForm /> client component that loads
+Stripe Elements with NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, calls POST /api/payments for
+the clientSecret, confirms the card with Stripe, shows card errors, offers retry
+(POST /api/payments/:id/retry) and waits until GET /api/payments/:id reports success
+before opening the confirmation page. Depends on FND-1 (already merged).
+
+How the output was used:
+Added frontend/src/components/payments/ (stripe-card-form.tsx, payment-api.ts, stripe.ts)
+using the FND-1 API client, formatMoney and the GEN-17 Button/Card/Label components.
+Added @stripe/stripe-js and @stripe/react-stripe-js, a placeholder key in
+frontend/.env.example and a README row. The form only accepts a pk_test_ key, handles
+already-paid, last-payment-failed, refunded, expired and slow-confirmation cases, and
+shares one start request when React starts it twice in development (the browser test
+found that a second simultaneous start got a 409). The card field (a Stripe iframe) loads
+DM Sans and the theme colours (GEN-17); Stripe's Link button is turned off. Reviewed the
+code before committing.
+
+Verification:
+16 component tests (Stripe and the API mocked); frontend lint, type-check, build and all
+81 tests pass. Real browser test (Playwright) on a local test database with Stripe test
+mode and the Stripe CLI webhook: declined card -> error shown -> Try again -> retry ->
+4242 card -> backend payment "succeeded", booking CONFIRMED -> confirmation page opened;
+revisiting a paid booking goes straight to confirmation; mobile 375 px has no horizontal
+scroll. The test page used for this was temporary and is not committed.
+================================================
+Date: 2026-11-26
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAYC-2 / TASK-144 (FLT-22, HTL-18, PAY-01)
+
+Prompt (summary of the conversation):
+Sent the PAYC-2 Jira task: a shared <HoldCountdown /> client component that shows the
+time left from holdExpiresAt and, on expiry, explains that the booking expired and offers
+a way back to search. Used on the flight and hotel summary and pay pages. Depends on
+FND-1 (already merged). Asked the AI to check the dependencies and requirements first.
+
+How the output was used:
+Added frontend/src/components/payments/hold-countdown.tsx: a live mm:ss timer from the
+backend's holdExpiresAt (10-minute hold, FLT-22 / HTL-18), highlighted in Mustard for the
+last 2 minutes; on expiry an alert explains that the seats or rooms were released and
+links back to /flights or /hotels (or a custom searchHref); optional onExpire callback so
+a page can hide its Pay/Continue button. One shared clock for all timers; nothing
+time-based is rendered on the server (no hydration mismatch). GEN-17 tokens and fonts,
+the shared buttonVariants for the link. Reviewed the code before committing.
+
+Verification:
+13 component tests (fake timers): counting down, flight/hotel wording, warning state,
+expiry message, links, onExpire called once (and again for a new hold), invalid date, server render, and that it
+never shows more time than is left. Frontend lint, type-check, build and all 79 tests
+pass. Checked in a real browser (Playwright) on a temporary page, not committed: the
+timer ticks, the expired state appears on time, the link opens /flights, no horizontal
+scroll at 375 px. The browser check caught a rounding issue (10:01 shown for a fresh
+10:00 hold), which was fixed.
 ================================================
 Date: 2026-11-26
 Student: Kenzy Ellkany
