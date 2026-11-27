@@ -45,6 +45,7 @@ src/
     design-system/        GEN-17 preview page: palette, fonts, components, formatters
   components/ui/          Neobrutalism / shadcn components (button, card, input, label, badge, skeleton)
   components/feedback/    GEN-16 (FND-7): Spinner, LoadingState, ErrorState, useToast / ToastProvider
+  components/reference-data/  GEN-12 (FND-10): AirportPicker, CountryPicker, CityPicker, CurrencyPicker
   components/payments/    <StripeCardForm /> (PAYC-1): shared Stripe card payment form
   lib/
     api/
