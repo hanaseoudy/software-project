@@ -53,6 +53,10 @@ import { paginate, PAGE_SIZE, skipFor } from '../common/pagination/pagination';
 import { RoomStatusQueryDto } from './dto/room-status-query.dto';
 import { RoomStatusDto, RoomStatusPageDto } from './dto/room-status.dto';
 import {
+  HotelRoomListItemDto,
+  HotelRoomListPageDto,
+} from './dto/hotel-room-list.dto';
+import {
   buildRoomStatusPeriods,
   RoomDayStatus,
   StatusInterval,
@@ -73,6 +77,9 @@ const ACTIVE_RESERVATION_STATUSES = [
   HotelBookingStatus.CONFIRMED,
   HotelBookingStatus.PENDING_PAYMENT,
 ];
+
+/** BE-4: sort room numbers by their numeric parts, so A2 comes before A10. */
+const ROOM_NUMBER_COLLATION = { locale: 'en', numericOrdering: true };
 
 @Injectable()
 export class HotelsService {
@@ -1062,6 +1069,53 @@ export class HotelsService {
 
     await this.availabilityModel.deleteMany({ room: room._id }).exec();
     await this.roomModel.deleteOne({ _id: room._id }).exec();
+  }
+
+  /**
+   * BE-4 (HTL-03, HTL-05, HTL-06): the assigned moderator lists every room of their hotel
+   * (active and deactivated), sorted by room number, 10 per page (GEN-05). Each room comes
+   * with its bookable ranges and blocks, so the edit page has the range ids it needs.
+   */
+  async listRooms(
+    hotelId: string,
+    page: number,
+    user: AuthPayload,
+  ): Promise<HotelRoomListPageDto> {
+    const hotel = await this.findHotelOrFail(hotelId);
+    await this.assertModeratorOwnsHotel(user, hotel);
+
+    const filter = { hotel: hotel._id };
+    const total = await this.roomModel.countDocuments(filter).exec();
+    // roomNumber is a string: numeric collation sorts 1, 2, 10, 11 (not 1, 10, 11, 2).
+    const rooms = await this.roomModel
+      .find(filter)
+      .collation(ROOM_NUMBER_COLLATION)
+      .sort({ roomNumber: 1, _id: 1 })
+      .skip(skipFor(page))
+      .limit(PAGE_SIZE)
+      .exec();
+    if (rooms.length === 0) {
+      return paginate([], total, page);
+    }
+
+    const ranges = await this.availabilityModel
+      .find({ room: { $in: rooms.map((room) => room._id) } })
+      .sort({ startDate: 1, _id: 1 })
+      .exec();
+
+    const items: HotelRoomListItemDto[] = rooms.map((room) => {
+      const own = ranges.filter((range) => range.room.equals(room._id));
+      return {
+        ...this.toRoomResponse(room),
+        availabilityRanges: own
+          .filter((range) => range.type === AvailabilityType.AVAILABLE)
+          .map((range) => this.toAvailabilityResponse(range)),
+        blocks: own
+          .filter((range) => range.type === AvailabilityType.BLOCKED)
+          .map((range) => this.toAvailabilityResponse(range)),
+      };
+    });
+    return paginate(items, total, page);
   }
 
   private async findRoomOrFail(

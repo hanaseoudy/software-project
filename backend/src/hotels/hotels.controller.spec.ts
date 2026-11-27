@@ -22,6 +22,7 @@ describe('HotelsController', () => {
     deactivateRoom: jest.fn(),
     deleteRoom: jest.fn(),
     getRoomStatuses: jest.fn(),
+    listRooms: jest.fn(),
     addImages: jest.fn(),
   };
 
@@ -216,6 +217,25 @@ describe('HotelsController', () => {
       controller.getRoomStatuses('h1', query, { user } as never),
     ).resolves.toEqual(page);
     expect(service.getRoomStatuses).toHaveBeenCalledWith('h1', query, user);
+  });
+
+  it('BE-4: listRooms passes the hotel id, the page and the authenticated user', async () => {
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
+    const page = { items: [], total: 0, page: 2, pageSize: 10, totalPages: 0 };
+    service.listRooms.mockResolvedValue(page);
+
+    await expect(
+      controller.listRooms('h1', { page: 2 }, { user } as never),
+    ).resolves.toEqual(page);
+    expect(service.listRooms).toHaveBeenCalledWith('h1', 2, user);
+  });
+
+  it('BE-4: listRooms defaults to page 1', async () => {
+    const user = { sub: 'u1', role: UserRole.MODERATOR };
+    service.listRooms.mockResolvedValue({});
+
+    await controller.listRooms('h1', {}, { user } as never);
+    expect(service.listRooms).toHaveBeenCalledWith('h1', 1, user);
   });
 
   it('uploadImages passes the hotel id, the files and the authenticated user', async () => {
