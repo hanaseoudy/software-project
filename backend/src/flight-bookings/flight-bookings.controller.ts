@@ -400,7 +400,7 @@ export class FlightBookingsController {
     return this.flightChangeService.getQuote(req.user!.sub, id, query);
   }
 
-  @Post(':id/change')
+  @Patch(':id/change-flight')
   @HttpCode(200)
   @UseGuards(RolesGuard)
   @Roles(UserRole.USER)
@@ -431,7 +431,7 @@ export class FlightBookingsController {
   @Roles(UserRole.USER)
   @ApiOperation({ summary: 'FLT-27: status of a change request (e.g. after paying the fare difference)' })
   @ApiParam({ name: 'id', description: 'Flight booking id' })
-  @ApiParam({ name: 'changeId', description: 'Change id returned by POST :id/change' })
+  @ApiParam({ name: 'changeId', description: 'Change id returned by PATCH :id/change-flight' })
   @ApiOkResponse({ description: 'PENDING_PAYMENT, COMPLETED, EXPIRED or FAILED' })
   @ApiBadRequestResponse({ description: 'Invalid ID' })
   @ApiUnauthorizedResponse({ description: 'Not authenticated' })

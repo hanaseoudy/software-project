@@ -1912,3 +1912,29 @@ back) with this task's entry appended. Checked that no existing line was removed
 Verification:
 Backend build, lint and tests pass; frontend checks pass after the merge.
 ================================================
+ 
+================================================
+Date: 2026-11-27
+Student: Mariam Mashoud
+Tool: Claude
+Related Requirement: FLT-27 (optional) (BE-8: rename the change route)
+
+Prompt (summary of the conversation):
+Task BE-8 from Jira (approved by the team leader on 2026-11-25): the flight change
+endpoint must be PATCH /api/flight-bookings/:id/change-flight instead of
+POST /api/flight-bookings/:id/change, because the path and method in the project PDF
+differ from the code. Update the controller, Swagger, tests and docs together.
+
+How the output was used:
+Changed the one handler decorator from @Post(':id/change') to @Patch(':id/change-flight')
+(same body, guards, role check, response codes and service call). Updated the Swagger
+text that mentioned the old route (the changeId parameter) and the two places in the
+README that listed it. GET :id/change-quote and GET :id/changes/:changeId are not
+changed. There is no docs/postman folder in develop yet, so there was no Postman
+collection to update.
+
+Verification:
+3 new controller spec tests: the route is PATCH :id/change-flight, nothing answers on
+POST :id/change any more, and the handler passes the user, booking id and body to the
+change service. Whole flight-bookings test folder passes (125 tests), oxlint clean.
+================================================
