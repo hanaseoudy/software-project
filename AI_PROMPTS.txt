@@ -1700,6 +1700,33 @@ creates the booking for the logged-in user. Whole flight-bookings test folder pa
 Date: 2026-11-26
 Student: Kenzy Ellkany
 Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: ACC-04, ACC-19, FLT-01, HTL-01
+
+Prompt (summary of the conversation):
+Sent the Jira task TASK-126: GET /api/auth/me and POST /api/auth/login must also return
+providerId (null for users and admins) so moderator pages know which airline or hotel
+to load, keeping every existing field unchanged. Asked the AI to build it exactly as
+required.
+
+How the output was used:
+Added providerId next to providerType in the shared auth user response (login, /auth/me
+and refresh all use it). It comes from the moderator's assignment; users, admins and a
+moderator without an assignment get null. Documented the new field in Swagger
+(LoginResponseDto) and the 200 responses of login and /auth/me. No other field changed.
+Reviewed the code before committing.
+
+Verification:
+New spec (6 tests): airline and hotel moderators get their provider id, users and admins
+get null, a moderator with no assignment gets null, and the full response is unchanged
+apart from providerId. Full backend suite passes (1642 tests), build and lint pass.
+Logged in as a user, an admin, an airline moderator and a hotel moderator on a local
+test database and checked both login and /auth/me.
+================================================
+ 
+================================================
+Date: 2026-11-26
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
 Related Requirement: PAYC-1 / TASK-143 (PAY-01)
 
 Prompt (summary of the conversation):
@@ -1787,4 +1814,101 @@ Real browser test (Playwright) against the backend on a local test database, des
 with a timestamp in the backend, pay page opened, reopened booking shows "accepted",
 missing booking shows the error, no horizontal scroll. The test page was temporary and is
 not committed.
+================================================
+ 
+================================================
+Date: 2026-11-26
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAYC-4 / TASK-146 (PAY-03)
+
+Prompt (summary of the conversation):
+Sent the PAYC-4 Jira task: a shared <RefundStatus /> badge (Pending / Refunded / Failed
+with the amount) that uses GET /api/refunds/:id, server-rendered with the booking details
+pages (no interactivity). Depends on FND-1 (already merged). Asked the AI to check the
+dependencies and the description first.
+
+How the output was used:
+Added frontend/src/components/payments/refund-status-badge.tsx (<RefundStatusBadge />:
+label + formatMoney amount on the shared GEN-17 Badge; Mustard for pending, Sage for
+refunded, Burgundy for failed) and refund-status.tsx (<RefundStatus refundId />: async
+Server Component that calls GET /api/refunds/:id with the FND-1 serverFetch; renders
+nothing on 404, rethrows 401 for FND-2's session recovery, shows a short note on other
+errors). Reviewed the code before committing.
+
+Verification:
+14 tests (badge states and amounts, server component success/404/401/error, colour
+contrast >= 4.5:1). Frontend lint, type-check, build and all 79 tests pass. Real check
+against the backend on a local test database: pending, refunded and failed refunds of the
+logged-in user show the right badge and amount, another user's refund shows nothing, and
+with JavaScript turned off the badges are still there (server-rendered); no horizontal
+scroll at 375 px. The test page was temporary and is not committed.
+================================================ 
+================================================
+Date: 2026-11-27
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: PAY-03 (review fixes for TASK-146 / PR #174)
+
+Prompt (summary of the conversation):
+Sent the team leader's review of PR #174: merge develop (with #176); in <RefundStatus />
+stop re-throwing a 401 from the Server Component and show the "unavailable" fallback
+instead (frontend/README.md, "Errors in Server Components"); use the shared
+contrastRatio helper from @/test-utils/contrast instead of copied functions; keep both
+AI log entries and add one for these fixes.
+
+How the output was used:
+Merged develop. Removed the isUnauthorized re-throw and its import: a 401 now shows
+"Refund status is unavailable right now." like other errors, and a 404 still renders
+nothing. Updated the header comment and the 401 test. The contrast test now uses
+contrastRatio. Reviewed the changes before committing.
+
+Verification:
+Frontend lint, type-check, build and all tests pass after the merge.
+================================================
+ 
+================================================
+Date: 2026-11-26
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: GEN-12, HTL-01, HTL-11, ITN-01, ITN-05, ITN-16, ITN-21
+
+Prompt (summary of the conversation):
+Sent the project description and the Jira task TASK-125: add GET /api/countries and
+GET /api/cities (filter by country) so the frontend can get the ids for pickers and
+filters, with Swagger docs and the shared page format (page size 10). Asked the AI
+to build it exactly as required.
+
+How the output was used:
+Added a read-only ReferenceDataModule (countries + cities controllers, service, DTOs).
+Only the official GEN-12 records are listed (same rule as GET /api/airports), sorted by
+name, 10 per page in { items, total, page, pageSize, totalPages }. Each item has the
+database id (used by hotels) and the code / cityId (used by itineraries). Cities can be
+filtered by a country code (EG) or a country id. Reviewed the code before committing.
+
+Verification:
+8 new unit tests; full backend suite passes (1644 tests), build and lint pass. Called
+both endpoints on a local server connected to the shared database (page, filter by
+code and by id, unknown country, invalid page/country -> 400) and checked Swagger.
+================================================
+ 
+================================================
+Date: 2026-11-27
+Student: Kenzy Ellkany
+Tool: Claude Code (Claude Opus 5.5)
+Related Requirement: GEN-12, HTL-01, HTL-11, ITN-01, ITN-05, ITN-16, ITN-21 (review fixes for TASK-125 / PR #166)
+
+Prompt (summary of the conversation):
+Sent the reviews of PR #166: use the official requirement IDs instead of the internal
+planning ID in the AI log, Swagger summaries and code comments; and restore the TASK-126
+log entry that a merge of develop had dropped, keeping this task's own entry.
+
+How the output was used:
+Replaced the planning ID with GEN-12, HTL-01, HTL-11, ITN-01, ITN-05, ITN-16, ITN-21 in the
+Swagger summaries, code comments, test names and this task's log entry. Merged the latest
+develop and rebuilt AI_PROMPTS.txt as develop's file unchanged (so the TASK-126 entry is
+back) with this task's entry appended. Checked that no existing line was removed.
+
+Verification:
+Backend build, lint and tests pass; frontend checks pass after the merge.
 ================================================
