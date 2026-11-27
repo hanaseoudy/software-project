@@ -24,6 +24,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -36,6 +37,10 @@ import { UpdateFlightDto } from './dto/update-flights.dto';
 import { UpdateCabinDto } from './dto/update-cabin.dto';
 import { SearchFlightsDto } from './dto/search-flights.dto';
 import { CancelFlightDto } from './dto/cancel-flight.dto';
+import {
+  PaginatedResponseDto,
+  PaginationQueryDto,
+} from '../common/pagination/pagination';
 
 @ApiTags('Flights')
 @Controller('flights')
@@ -295,17 +300,38 @@ export class FlightsController {
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR)
-  @ApiOperation({ summary: "List my airline's flights (BE-03)" })
+  @ApiOperation({
+    summary: "List my airline's flights",
+    description:
+      'Returns the flights of the airline assigned to the logged-in moderator, ' +
+      'earliest departure first, 10 per page. The airline comes from the ' +
+      "moderator's assignment, never from the request.",
+  })
   @ApiCookieAuth()
-  @ApiResponse({ status: 200, description: "The moderator's airline flights" })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Page number, starting at 1 (page size is fixed at 10)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of the airline flights',
+    type: PaginatedResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid page value' })
   @ApiResponse({ status: 401, description: 'Not logged in' })
   @ApiResponse({ status: 403, description: 'Not an airline moderator' })
   @ApiResponse({
     status: 404,
     description: 'No airline assigned to this moderator',
   })
-  listMyFlights(@CurrentUser() user: AuthPayload) {
-    return this.flights.listMyFlights(user.sub);
+  listMyFlights(
+    @CurrentUser() user: AuthPayload,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.flights.listMyFlights(user.sub, query.page ?? 1);
   }
 
   @Get(':id')

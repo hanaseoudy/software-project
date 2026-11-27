@@ -47,6 +47,7 @@ import { PassengerType } from '../flight-bookings/schemas/passenger.schema';
 import { BookingType } from '../payments/enums/payment.enums';
 import { NotificationType } from '../notifications/enums/notification.enums';
 import { RefundsService, refundQuote } from '../payments/refunds.service';
+import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
 @Injectable()
 export class FlightsService {
   private readonly logger = new Logger(FlightsService.name);
@@ -822,22 +823,43 @@ export class FlightsService {
       .join('\r\n');
   }
 
-  async listMyFlights(moderatorId: string) {
-    const assignment = await this.assignmentModel
-      .findOne({
-        moderatorId: new Types.ObjectId(moderatorId),
-        providerType: ProviderType.AIRLINE,
-      })
-      .lean();
+  async listMyFlights(moderatorId: string, page: number) {
+    const airlineId = await this.getModeratorAirlineId(moderatorId);
+    const filter = { airline: airlineId };
 
-    if (!assignment) {
-      throw new NotFoundException('No airline assigned to this moderator');
-    }
+    const [flights, total] = await Promise.all([
+      this.flightsModel
+        .find(filter)
+        .sort({ departureTime: 1, _id: 1 })
+        .skip(skipFor(page))
+        .limit(PAGE_SIZE)
+        .populate('airline')
+        .populate('departureAirport')
+        .populate('arrivalAirport')
+        .lean(),
+      this.flightsModel.countDocuments(filter),
+    ]);
 
-    return this.flightsModel
-      .find({ airline: assignment.providerId })
-      .sort({ departureTime: 1 })
-      .lean();
+    const items = flights.map((f) => {
+      const formatted = formatFlightWithLocalTimes(f);
+      return {
+        ...formatted,
+        cabins: (formatted.cabins ?? []).map((c: any) => ({
+          cabinId: c._id,
+          cabinClass: c.cabinClass,
+          totalSeats: c.totalSeats,
+          bookedSeats: c.bookedSeats,
+          heldSeats: c.heldSeats,
+          seatsRemaining: c.totalSeats - c.bookedSeats - c.heldSeats,
+          price: c.price,
+          currency: c.currency,
+          freeBags: c.freeBags,
+          maxBagWeightKg: c.maxBagWeightKg,
+        })),
+      };
+    });
+
+    return paginate(items, total, page);
   }
 
   private async loadModeratorFlight(
