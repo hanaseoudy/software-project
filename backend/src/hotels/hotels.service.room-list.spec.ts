@@ -15,10 +15,10 @@ import { RoomAvailability } from './schemas/room-availability.schema';
 import { Room } from './schemas/room.schema';
 
 const execResult = <T>(value: T) => ({ exec: () => Promise.resolve(value) });
-// find() -> sort()/skip()/limit() -> exec(), all returning the same value
+// find() -> collation()/sort()/skip()/limit() -> exec(), all returning the same value
 const found = (value: unknown) => {
   const chain: Record<string, unknown> = {};
-  for (const name of ['sort', 'skip', 'limit']) {
+  for (const name of ['collation', 'sort', 'skip', 'limit']) {
     chain[name] = jest.fn(() => chain);
   }
   chain.exec = () => Promise.resolve(value);
@@ -143,12 +143,16 @@ describe('HotelsService.listRooms (BE-4: HTL-03, HTL-05, HTL-06)', () => {
     expect(availabilityModel.find).not.toHaveBeenCalled();
   });
 
-  it('lists only rooms of this hotel, sorted by room number, 10 per page', async () => {
+  it('lists only rooms of this hotel, sorted by room number numerically, 10 per page', async () => {
     setup({ rooms: [makeRoom('A101')], total: 11 });
     const result = await service.listRooms(hotelId.toString(), 2, moderator);
 
     expect(roomModel.find).toHaveBeenCalledWith({ hotel: hotelId });
     const chain = roomModel.find.mock.results[0].value as Record<string, jest.Mock>;
+    expect(chain.collation).toHaveBeenCalledWith({
+      locale: 'en',
+      numericOrdering: true,
+    });
     expect(chain.sort).toHaveBeenCalledWith({ roomNumber: 1, _id: 1 });
     expect(chain.skip).toHaveBeenCalledWith(10);
     expect(chain.limit).toHaveBeenCalledWith(10);

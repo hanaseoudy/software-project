@@ -199,3 +199,19 @@ Verification performed:
 Lint and build passed locally. Unit tests could not run locally (Node 22; the
 project needs Node 24) and are checked by CI.
 ================================================
+
+Date: 2026-11-27
+Student: Roaa Mahmoud
+Tool: Claude (Claude Code on claude.ai)
+Related Requirement: BE-4 (Jira TASK-128), review fix on PR #175
+Prompt:
+Team leader review: room numbers are strings, so the list sorts 1, 10, 11, 2.
+Use MongoDB collation with numericOrdering and add a test for the order.
+How the output was used:
+Claude added a collation ({ locale: 'en', numericOrdering: true }) to the room list
+query, updated the unit test to check it, and added an e2e test that creates rooms
+1, 10, 11, 2, A2, A10 in a disposable local database and checks the order
+1, 2, 10, 11, A2, A10. I will review the changes before the pull request is merged.
+Verification performed:
+Lint and build passed locally; unit and e2e tests run in CI (Node 24, local MongoDB).
+================================================

@@ -78,6 +78,9 @@ const ACTIVE_RESERVATION_STATUSES = [
   HotelBookingStatus.PENDING_PAYMENT,
 ];
 
+/** BE-4: sort room numbers by their numeric parts, so A2 comes before A10. */
+const ROOM_NUMBER_COLLATION = { locale: 'en', numericOrdering: true };
+
 @Injectable()
 export class HotelsService {
   constructor(
@@ -1083,8 +1086,10 @@ export class HotelsService {
 
     const filter = { hotel: hotel._id };
     const total = await this.roomModel.countDocuments(filter).exec();
+    // roomNumber is a string: numeric collation sorts 1, 2, 10, 11 (not 1, 10, 11, 2).
     const rooms = await this.roomModel
       .find(filter)
+      .collation(ROOM_NUMBER_COLLATION)
       .sort({ roomNumber: 1, _id: 1 })
       .skip(skipFor(page))
       .limit(PAGE_SIZE)
