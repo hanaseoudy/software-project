@@ -2,6 +2,14 @@ import { render, screen } from "@testing-library/react";
 
 import DesignSystemPage from "./page";
 
+// The reference-data demo loads its lists from the backend; no request is made in these tests.
+jest.mock("@/components/reference-data", () => ({
+  AirportPicker: ({ label }: { label: string }) => <div>{label}</div>,
+  CountryPicker: ({ label }: { label: string }) => <div>{label}</div>,
+  CityPicker: ({ label }: { label: string }) => <div>{label}</div>,
+  CurrencyPicker: ({ label }: { label: string }) => <div>{label}</div>,
+}));
+
 describe("/design-system (GEN-17)", () => {
   it("shows the whole agreed palette", () => {
     render(<DesignSystemPage />);
@@ -25,5 +33,13 @@ describe("/design-system (GEN-17)", () => {
     render(<DesignSystemPage />);
 
     expect(screen.getByLabelText("City")).toBeInTheDocument();
+  });
+
+  it("previews the reference-data pickers (GEN-12)", () => {
+    render(<DesignSystemPage />);
+
+    expect(screen.getByRole("heading", { name: "Reference-data pickers (GEN-12)" })).toBeInTheDocument();
+    expect(screen.getByText("Country")).toBeInTheDocument();
+    expect(screen.getByText("Currency")).toBeInTheDocument();
   });
 });

@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatAirportDateTime, formatAirportTime, formatMoney } from "@/lib/format";
 
+import { ReferenceDataDemo } from "./reference-data-demo";
+
 export const metadata: Metadata = {
   title: "Design system · Travel Planner",
   description: "GEN-17 palette, fonts and base components.",
@@ -143,6 +145,10 @@ export default function DesignSystemPage() {
             </tbody>
           </table>
         </div>
+      </Section>
+
+      <Section title="Reference-data pickers (GEN-12)">
+        <ReferenceDataDemo />
       </Section>
     </main>
   );
