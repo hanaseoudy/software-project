@@ -24,6 +24,15 @@ export class LoginResponseDto {
   })
   providerType!: string | null;
 
+  @ApiProperty({
+    type: String,
+    example: null,
+    nullable: true,
+    description:
+      'ACC-04, ACC-19, FLT-01, HTL-01: id of the airline or hotel the moderator manages (matches providerType); null for users and admins',
+  })
+  providerId!: string | null;
+
   @ApiProperty({ example: false, description: 'True when the user must change a temporary password (ACC-13)' })
   mustChangePassword!: boolean;
 

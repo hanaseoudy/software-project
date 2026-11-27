@@ -28,6 +28,7 @@ These run on every PR into `develop` or `main`:
 | Backend CI | `Backend e2e tests` | Starts a throwaway MongoDB inside the CI machine and runs `npm run test:e2e`. It never connects to the shared Atlas database. |
 | Frontend CI | `Frontend lint, type-check and build` | `npm ci`, `npm run lint`, `tsc --noEmit`, `npm run build` and `npm test` if it exists. It passes without doing anything until `frontend/package.json` exists (FND-1). |
 | PR checks | `Jira task link and PR size` | Requires a `TASK-<n>` key in the branch name or PR title. Warns when the PR is large. |
+| Claude Code Review | `claude-review` | AI review that posts comments on the PR (see section 4). **Not required:** it never blocks a merge. |
 
 Run the same commands locally before pushing so CI doesn't surprise you.
 
@@ -47,9 +48,22 @@ The Vercel bot then comments on each PR with the preview link and adds a `Vercel
 
 > **Note:** pages that call the API only work in a preview if the backend is deployed somewhere the preview can reach, and if the backend allows that origin (or the FND-2 `/api` rewrite proxy is used). Until then, previews are still useful for checking layout, the design system and mobile views.
 
-## 4. AI-assisted review (Hana, before the final review)
+## 4. AI-assisted review
 
-Run a first-pass AI review in Claude Code from the repository folder:
+### 4.1 Automatic review on every PR
+
+The `Claude Code Review` workflow (`.github/workflows/claude-code-review.yml`) reviews every PR when it is opened, updated, reopened or marked ready for review. It skips drafts and the `develop` → `main` release PR. Claude posts its findings as inline comments on the PR. It follows `CLAUDE.md`, `AGENTS.md`, the requirements in `docs/requirments/` and the frontend rules in `frontend/README.md`.
+
+- **For authors:** read the Claude comments and fix real problems before requesting review. If you think a comment is wrong, reply and explain; don't just resolve it. The comments are suggestions, not approvals.
+- **It never approves, pushes or merges.** The team leader still reviews and merges every PR.
+- **It is not a required check.** If it fails, times out or runs out of usage, the PR can still be merged.
+- **Ask follow-up questions:** write `@claude` in a PR comment (workflow `.github/workflows/claude.yml`), for example `@claude why is this a race condition?`.
+- It runs on the team leader's Claude subscription, stored as the repository secret `CLAUDE_CODE_OAUTH_TOKEN`. Never copy it anywhere.
+- **AI log:** this automatic review is logged once in the team leader's prompt log. Log your own AI use as usual.
+
+### 4.2 Manual review (Hana, before the final review)
+
+Run a deeper review in Claude Code from the repository folder:
 
 ```text
 /code-review <PR number>              # findings shown only to you, in the terminal

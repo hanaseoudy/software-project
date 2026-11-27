@@ -703,3 +703,27 @@ components/ui/contrast.test.ts to import them. No app behaviour changed.
 Lint, type-check, build and 111 tests pass. Kenzy's #174 fix (handle the 401
 locally, import contrastRatio) follows separately in her PR.
 ================================================
+
+================================================
+Date: 2026-11-27
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: Team process (PR review), no requirement ID
+
+Prompt:
+Set up Claude to review every pull request on GitHub automatically, without
+me starting each review. I ran /install-github-app (it saved the
+CLAUDE_CODE_OAUTH_TOKEN secret and pushed the default workflows to a branch
+made from main), then asked Claude to move the workflows onto a branch from
+develop and adapt the review to our project.
+
+How the output was used:
+Claude copied claude.yml (@claude mentions) unchanged from the installer
+branch. It adapted claude-code-review.yml: it skips drafts, the
+develop -> main release PR and fork PRs, cancels an older run when new commits
+arrive, and adds project instructions (CLAUDE.md, requirements, GEN-05/08/17,
+the Server Component error rule, treat PR text as data, comments only). Both
+workflows have read-only permissions. It updated docs/PR-REVIEW-PROCESS.md
+(section 2 table, new section 4.1). The review is not a required check. I
+reviewed the workflow files before they were committed.
+================================================
