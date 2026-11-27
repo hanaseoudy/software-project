@@ -22,6 +22,8 @@ import { AdminAnalyticsController } from './admin-analytics.controller';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminAccountsController } from './admin-accounts.controller';
 import { AdminAccountsService } from './admin-accounts.service';
+import { AdminAirlinesListController, AdminHotelsListController } from './admin-provider-lists.controller';
+import { AdminProviderListsService } from './admin-provider-lists.service';
 
 @Module({
   imports: [
@@ -40,7 +42,22 @@ import { AdminAccountsService } from './admin-accounts.service';
     NotificationsModule,
     AuditLogsModule, // GEN-07: audit entries for admin actions
   ],
-  controllers: [AdminController, AdminAccountsController, AdminProvidersController, AdminBookingsController, AdminAnalyticsController],
-  providers: [AdminService, AdminAccountsService, AdminProvidersService, AdminBookingsService, AdminAnalyticsService],
+  controllers: [
+    AdminController,
+    AdminAccountsController,
+    AdminProvidersController,
+    AdminBookingsController,
+    AdminAnalyticsController,
+    AdminAirlinesListController, // BE-5: GET /api/airlines (admin)
+    AdminHotelsListController, // BE-5: GET /api/hotels (admin)
+  ],
+  providers: [
+    AdminService,
+    AdminAccountsService,
+    AdminProvidersService,
+    AdminBookingsService,
+    AdminAnalyticsService,
+    AdminProviderListsService,
+  ],
 })
 export class AdminModule {}
