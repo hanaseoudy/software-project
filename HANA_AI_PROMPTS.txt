@@ -797,3 +797,37 @@ reported four pre-existing unused-import warnings. Temporary MongoDB and
 preview server were stopped. Future frontend-only checks follow Hana's
 clarification. Hana's manual review and CI remain pending.
 ================================================
+
+================================================
+Date: 2026-11-28
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: GEN-02, GEN-16 (GEN-17 shared styling)
+
+Prompt:
+Continue with FND-3 (TASK-135): shared form field and error display for
+backend field messages, including nested paths such as days.0.city.
+Approved the implementation plan, eight named files, and task branch.
+Use relevant frontend tests, lint and type-checking only; leave full
+regression checks to CI.
+
+How the output was used:
+Codex checked the official requirements, Jira and existing shared UI/error
+types. Added FormField with a render callback for control attributes,
+exact field-key matching, multiple backend messages, hints, unique IDs,
+required/disabled attributes and accessible label/error associations.
+Reused Label, Input, FieldErrors and the existing theme. Added an interactive
+design-system preview and README usage guidance. No new dependencies,
+endpoints, backend edits or changes to other shared form implementations.
+
+Verification:
+Frontend lint and TypeScript checks passed. All 19 focused tests passed
+across FormField, the design-system page and API error normalization.
+Tests cover nested keys, multiple errors, unique IDs, descriptions, clearing
+errors without losing values, events, select/textarea support, literal
+message rendering and theme contrast. git diff --check passed.
+Browser visual QA/screenshots remain pending because the browser connection
+was unavailable in this session. No backend tests, MongoDB setup or full
+regression runs were performed for FND-3. No commit or push performed.
+Hana's manual review and GitHub CI remain pending.
+================================================

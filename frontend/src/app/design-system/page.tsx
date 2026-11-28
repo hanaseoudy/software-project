@@ -9,6 +9,7 @@ import { formatAirportDateTime, formatAirportTime, formatMoney } from "@/lib/for
 
 import { FeedbackDemo } from "./feedback-demo";
 import { ReferenceDataDemo } from "./reference-data-demo";
+import { FormFieldDemo } from "./form-field-demo";
 
 export const metadata: Metadata = {
   title: "Design system · Travel Planner",
@@ -111,6 +112,10 @@ export default function DesignSystemPage() {
             <Button variant="neutral">Cancel</Button>
           </CardFooter>
         </Card>
+      </Section>
+
+      <Section title="Form fields and validation (GEN-02)">
+        <FormFieldDemo />
       </Section>
 
       <Section title="Formatters">
