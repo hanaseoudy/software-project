@@ -27,11 +27,17 @@ software-project/
       reference-data/ common/
       main.ts app.module.ts
     test/             # e2e tests (*.e2e-spec.ts) and setup-e2e.ts
-  frontend/           # Next.js app (created by FND-1 in Milestone 2)
+  frontend/           # Next.js app; structure and route map in frontend/README.md
+    src/app/          # routes in route groups: (public)/ (auth)/ (protected)/ (protected)/(user)/
+    src/components/   # shared components: ui/ feedback/ reference-data/ payments/
+    src/lib/          # api/ (apiFetch, serverFetch) and format/ (money, airport times)
+    src/test-utils/   # helpers for tests only
   docs/
     requirments/      # Folder name is intentionally spelled this way
+    PR-REVIEW-PROCESS.md
     postman/ api/
-  AI_PROMPTS.txt
+  AI_PROMPTS.txt      # shared AI log; personal logs: AI_PROMPTS_<Name>.txt, HANA_AI_PROMPTS.txt
+  CLAUDE.md AGENTS.md # AI instructions; AGENTS.md points here
   README.md
   .env.example
 ```
@@ -51,19 +57,20 @@ npm test                # unit tests (*.spec.ts next to the code)
 npm run test:e2e        # e2e tests; needs a disposable local MongoDB, see section 7
 ```
 
-From `frontend/` (once FND-1 has created it):
+From `frontend/` (copy `.env.example` to `.env.local` first; it sets `BACKEND_URL`):
 
 ```powershell
 npm install
-npm run dev
+npm run dev             # http://localhost:3001 (the backend stays on 3000)
 npm run lint
 npx tsc --noEmit        # type-check
 npm run build
+npm test                # Jest + React Testing Library (*.test.ts(x) next to the code)
 ```
 
 Swagger UI: `http://localhost:3000/api/docs` (when the server is running on port 3000).
 
-**Test status (verified 26 November 2026):** the old Jest ES-module problem is fixed. All unit tests and all e2e tests pass on `develop` and in CI. A failing test now means a real problem: investigate it, don't assume it is a known blocker.
+**Test status (verified 26 November 2026):** the old Jest ES-module problem is fixed. All unit tests and all e2e tests pass on `develop` and in CI. A failing test now means a real problem: investigate it, don't assume it is a known blocker. One e2e test (ITN-07/ITN-20 quorum) starts its own MongoDB and occasionally fails to start in CI with `Connection refused`; re-run the failed job once before investigating.
 
 ## 2. Source-of-truth hierarchy
 
@@ -129,7 +136,9 @@ Use Conventional Commits with the requirement ID, e.g. `feat(itineraries): add p
   - `Frontend lint, type-check and build`
   - `Jira task link and PR size`
 - Run the same commands locally before pushing. Never weaken a test, skip a check or edit a workflow to make CI pass.
+- **Automatic Claude review** (`Claude Code Review` workflow, not a required check): every non-draft PR gets inline comments on actionable problems: missing requirement rules, incorrect behaviour, API calls that don't match the backend, frontend-quality issues and weak or missing tests. Each comment says whether it was verified by reading the code or needs runtime or manual testing. Read every comment; fix real problems or reply explaining why not. Write `@claude <question>` in a PR comment to ask it something. It never approves, pushes or merges. PRs with a merge conflict are not reviewed (GitHub runs no PR workflows on them): merge `develop` first.
 - **Only the team leader (`@hanaseoudy`) reviews, approves and merges.** There are no peer reviewers and no CODEOWNERS. Never merge a PR, and never approve one on someone's behalf.
+- `develop` is the repository's default branch; `main` receives only milestone releases from `develop`.
 
 To bring updates from `develop` into a task branch, use `git fetch origin` and, after checking status and obtaining approval when necessary, `git merge origin/develop`. Report conflicts; do not resolve them silently.
 
@@ -200,24 +209,24 @@ These rules apply to every page in `frontend/`. Shared components are built in t
   | Cream | `#F5EFDC` | Main background |
   | Burgundy | `#63383C` | Primary buttons and headings |
   | Sage Green | `#A8B79A` | Secondary backgrounds and components |
-  | Olive Green | `#697D50` | Secondary buttons and accents |
+  | Olive Green | `#697D50` | Secondary-button borders and shadows, accents (never behind text, see contrast) |
   | Terracotta | `#C48772` | Decorative elements and accents |
   | Mustard Yellow | `#D9B65D` | Highlights |
   | Dark Brown | `#352C28` | Text, borders and shadows |
 
 - **Fonts:** **Fraunces** for headings, page titles and branding; **DM Sans** for body text, buttons, forms, tables and navigation. No other fonts.
+- **Contrast:** text needs at least **4.5:1** against its background (WCAG AA); borders and other UI parts at least 3:1. No palette text colour passes on Olive Green, so never put text on Olive. Test colours with the shared helper `contrastRatio` from `@/test-utils/contrast`; don't write your own.
 - **Responsive (GEN-16):** every page works on desktop, tablet and mobile (check about 375 px wide).
+- Theme tokens, button variants and the `/design-system` preview page: see `frontend/README.md`, "Design system".
 
 ### Reuse the shared foundation; never duplicate it
 
-Before building anything, check whether a shared piece already exists, and use it:
+`frontend/README.md` is the detailed, up-to-date guide to the frontend foundation (folder structure, route map, backend calls, errors, uploads). Read the relevant section before building a page. Before building anything, check whether a shared piece already exists, and use it:
 
-- the API client (all backend calls);
-- the auth context / current user (`GET /api/auth/me`) and route guards;
-- the layout and navbar per role, and the notification bell;
-- form field + backend error display, confirm dialog, empty state, pagination;
-- loading, success and error feedback;
-- image upload, the local-time formatter, the booking status badge, the reference-data pickers, and the report / admin content actions.
+- **Backend calls:** `apiFetch` (client components) and `serverFetch` (Server Components) from `@/lib/api`, with `ApiError`, `isApiError`, `isUnauthorized` and `Paginated<T>`. Never call `fetch` on the backend directly.
+- **Formatting:** `formatMoney` (PAY-04: `USD 640.00`, never converted) and `formatAirportDateTime` / `formatAirportTime` / `formatAirportDate` (GEN-06) from `@/lib/format`.
+- **Components:** `@/components/ui` (Neobrutalism), `@/components/feedback` (Spinner, LoadingState, ErrorState, toasts), `@/components/reference-data` (airport, country, city and currency pickers), `@/components/payments` (Stripe card form, hold countdown, policy acceptance, refund status).
+- **Still to come in their own tasks** (use them once merged; until then, stop and ask rather than writing your own): the auth context / current user (`GET /api/auth/me`), route guards and session recovery (FND-2), the layout and navbar per role, the notification bell, form field + backend error display, confirm dialog, empty state, pagination, image upload, the booking status badge, and the report / admin content actions.
 
 Anyone can build a shared component when it is their assigned task. Build it to be reusable: typed props, no page-specific logic, and a short usage example in the PR.
 
@@ -225,8 +234,10 @@ If a shared piece you need is missing or doesn't fit, **stop and ask** rather th
 
 ### Rules
 
-- **Auth:** the backend uses httpOnly cookies. Never store tokens in `localStorage`, `sessionStorage` or JS-readable cookies. All requests go through the API client, which sends cookies (`credentials: 'include'`) and handles 401 → refresh → `/login`.
-- **Backend URL:** read it from the environment variable defined by the foundation tasks; never hardcode `localhost`. Never put secrets in `NEXT_PUBLIC_*` variables, because they are sent to the browser.
+- **Auth:** the backend uses httpOnly cookies. Never store tokens in `localStorage`, `sessionStorage` or JS-readable cookies. In the browser, `apiFetch` sends cookies (`credentials: 'include'`) and handles 401 → one shared refresh → retry → `/login?reason=session-expired`. `serverFetch` never refreshes: on an expired session it throws `ApiError` 401.
+- **Errors in Server Components:** catch `ApiError` where you call `serverFetch` and **never re-throw it** (in production Next.js replaces it with a generic error and the status is lost). A page renders the session recovery component on 401; a component inside a page shows its own fallback for every error, 401 included. Details: `frontend/README.md`, "Errors in Server Components".
+- **Backend URL:** the browser calls relative paths (`/api/...`), which `next.config.ts` proxies to the server-only `BACKEND_URL`; no CORS is needed. Never hardcode `localhost` or the backend address in code. Never put secrets in `NEXT_PUBLIC_*` variables, because they are sent to the browser.
+- **Routes:** every planned URL already has a folder in its route group (`(public)`, `(auth)`, `(protected)`, `(protected)/(user)`); see the route map in `frontend/README.md`. Build a page in its existing folder. Route groups don't change URLs. If you add or move a route, update the route map in the same PR.
 - **Backend is the authority (GEN-13):** frontend validation and route guards are UX only. Don't skip backend validation, and don't rely on hidden buttons for security.
 - **Use the API as documented in Swagger.** Don't invent endpoints, fields, query parameters or status codes. If a page needs something the API doesn't provide, stop and ask; changing the backend is a separate, approved task.
 - **Validation errors (GEN-02):** show the backend's `{ message, errors: { field: [...] } }` next to each field, including nested paths such as `days.0.city`.
@@ -261,6 +272,25 @@ Example of what goes wrong otherwise: ACC-05 was changed to return `423 Locked` 
 
 Name tests after the requirement they prove (e.g. `ACC-05: fifth consecutive failure locks the account and returns 423`), not after the current implementation.
 
+### Test quality: a test must be able to fail
+
+A passing test only proves what it checks. The automatic review flags tests that can't catch a real bug, so write tests that:
+
+- take expected values (status codes, messages, limits, fields) from the **requirement text**, not from what the code currently returns;
+- don't mock the logic under test: mock only its edges (database, external services), and prefer e2e tests for rules that depend on the database (ownership, uniqueness, concurrency);
+- assert the **result** (response body, status code, database state), not only that a function was called;
+- cover the cases the requirement implies: success, validation `400`, unauthenticated `401`, forbidden or not-owner `403`, not found `404`, conflict `409`, and limits at and just past the boundary;
+- would fail if the requirement's key rule were removed from the code.
+
+Frontend tests live next to the code as `*.test.ts(x)` (Jest + React Testing Library). Mock `apiFetch`, not the component's own logic, and test what the user sees and does:
+
+- the loading, empty and error states;
+- the message for each backend error the page handles: field errors next to the right field (GEN-02), `401`, `403`, `404`, `409`;
+- the confirmation step before delete or cancel (GEN-03);
+- the exact request sent (path, method, body) and how the response is shown (`formatMoney`, airport times).
+
+A test that only checks that the component renders, or a snapshot as the only check, does not count.
+
 ### Writing and running e2e tests
 
 - Location: `backend/test/<feature>.e2e-spec.ts` (the file name must end in `.e2e-spec.ts`). Config: `backend/test/jest-e2e.json`; `backend/test/setup-e2e.ts` runs first.
@@ -280,7 +310,7 @@ Name tests after the requirement they prove (e.g. `ACC-05: fifth consecutive fai
 
 ## 8. AI-use logging
 
-Every task using AI must be logged with the fields below: in your **personal prompt log** if you have one (`AI_PROMPTS_<Name>.txt`, or `HANA_AI_PROMPTS.txt` for the team leader), otherwise in the shared **`AI_PROMPTS.txt`**. Commit the log entry in the same PR as the work.
+Every task using AI must be logged with the fields below: in your **personal prompt log** if you have one (`AI_PROMPTS_<Name>.txt`, or `HANA_AI_PROMPTS.txt` for the team leader), otherwise in the shared **`AI_PROMPTS.txt`**. Commit the log entry in the same PR as the work. A personal log is preferred: every PR that appends to the shared `AI_PROMPTS.txt` conflicts with the next one that does. If you resolve such a conflict, keep **both** entries.
 
 - Date
 - Student name

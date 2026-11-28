@@ -52,7 +52,17 @@ The Vercel bot then comments on each PR with the preview link and adds a `Vercel
 
 ### 4.1 Automatic review on every PR
 
-The `Claude Code Review` workflow (`.github/workflows/claude-code-review.yml`) reviews every PR when it is opened, updated, reopened or marked ready for review. It skips drafts and the `develop` → `main` release PR. Claude posts its findings as inline comments on the PR. It follows `CLAUDE.md`, `AGENTS.md`, the requirements in `docs/requirments/` and the frontend rules in `frontend/README.md`.
+The `Claude Code Review` workflow (`.github/workflows/claude-code-review.yml`) reviews every PR when it is opened, updated, reopened or marked ready for review. It skips drafts, PRs with a merge conflict (merge `develop` first) and the `develop` → `main` release PR. It follows `CLAUDE.md`, the requirements in `docs/requirments/` and the frontend rules in `frontend/README.md`. It posts **inline comments on actionable problems only** (no requirement-by-requirement report, no praise), in this priority order (Milestone 2 focus):
+
+1. **Requirement completeness:** the PR implements every rule of the official requirements it names (read from the Mandatory CSV), for the right roles, including how each error case and limit reaches the user.
+2. **Functional correctness:** the behaviour really meets the requirement wherever the logic lives. If a requirement says 10 per page, alphabetical order, a filter or a calculation, Claude reads the code that does it (frontend, or the backend service the page calls), not just that an endpoint exists.
+3. **API integration:** each backend call matches the real route, method, query parameters, request body and response fields; calls go through `apiFetch` / `serverFetch`.
+4. **Frontend quality:** shared components reused, GEN-17 design system and contrast, loading / empty / error states, accessibility, security, Server vs Client Components and the Server Component error rule.
+5. **Test quality:** important functionality without tests, or tests that could not fail (see `CLAUDE.md` section 7, "Test quality").
+
+To keep the cost down, it opens backend code only when a requirement or API call in the PR depends on it, and it doesn't repeat findings already posted on the PR.
+
+Each comment says how the finding was established: **verified by reading the code**, or **needs runtime or manual testing** (layout, mobile view, real backend responses). Claude reads the code; it does not run it, and it never claims something works just because the code looks right. CI runs the tests. Neither replaces the team leader's review.
 
 - **For authors:** read the Claude comments and fix real problems before requesting review. If you think a comment is wrong, reply and explain; don't just resolve it. The comments are suggestions, not approvals.
 - **It never approves, pushes or merges.** The team leader still reviews and merges every PR.
