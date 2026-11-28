@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import DesignSystemPage from "./page";
 
@@ -11,6 +11,20 @@ jest.mock("@/components/reference-data", () => ({
 }));
 
 describe("/design-system (GEN-17)", () => {
+  it("shows and clears backend-style field messages without losing entered values (GEN-02)", () => {
+    render(<DesignSystemPage />);
+    const email = screen.getByRole("textbox", { name: "Booking email (required)" });
+    fireEvent.change(email, { target: { value: "traveler@example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Show field errors" }));
+    expect(email).toHaveAttribute("aria-invalid", "true");
+    expect(email).toHaveAccessibleDescription("We'll use this to identify your booking. Enter a valid email address. Use the email address for this booking.");
+    expect(screen.getByRole("textbox", { name: "First-day city" })).toHaveAccessibleDescription("Choose a city for the first day.");
+    fireEvent.click(screen.getByRole("button", { name: "Clear field errors" }));
+    expect(email).not.toHaveAttribute("aria-invalid");
+    expect(email).toHaveValue("traveler@example.test");
+    expect(screen.queryByText("Choose a city for the first day.")).not.toBeInTheDocument();
+  });
+
   it("shows the whole agreed palette", () => {
     render(<DesignSystemPage />);
 

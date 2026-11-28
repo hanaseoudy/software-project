@@ -45,6 +45,7 @@ src/
     design-system/        GEN-17 preview page: palette, fonts, components, formatters
   components/ui/          Neobrutalism / shadcn components (button, card, input, label, badge, skeleton)
   components/feedback/    GEN-16 (FND-7): Spinner, LoadingState, ErrorState, useToast / ToastProvider
+  components/forms/       GEN-02/GEN-16 (FND-3): FormField, labelled controls with backend field errors
   components/reference-data/  GEN-12 (FND-10): AirportPicker, CountryPicker, CityPicker, CurrencyPicker
   components/payments/    <StripeCardForm /> (PAYC-1): shared Stripe card payment form
   lib/
@@ -212,6 +213,48 @@ Theme tokens are defined in `src/app/globals.css`; open **`/design-system`** to 
 - Buttons: `default` (Burgundy, primary), `secondary` (Olive Green border and shadow, Dark Brown text on Cream), `neutral` (Sage Green), `reverse`, `noShadow`.
 - Contrast: text must be at least 4.5:1 against its background (`src/components/ui/contrast.test.ts` checks every button and badge variant). To test your own colours, use the shared helper instead of writing your own: `import { contrastRatio } from "@/test-utils/contrast"` then `expect(contrastRatio("foreground", "mustard")).toBeGreaterThanOrEqual(4.5)` (token names without `--`). No palette text colour passes on Olive Green (best: Cream 3.93), so use Olive for borders, shadows and decoration, not behind text. On Terracotta only Dark Brown passes (4.57); on Mustard use Dark Brown (7.00) or Burgundy (5.00).
 - Add more Neobrutalism components with `npx shadcn@latest add https://neobrutalism.dev/r/<name>.json`, then replace any hardcoded `black`/`white` classes with theme tokens.
+
+## Form fields and backend validation (FND-3 / TASK-135)
+
+Use `FormField` from `@/components/forms` for a label, optional hint and all
+backend messages for one field. Pass `ApiError.fieldErrors` directly; dotted
+keys such as `days.0.city` are matched exactly, not traversed as objects.
+For a raw validated `{ message, errors }` response, pass its `errors` map.
+
+```tsx
+"use client";
+import { FormField } from "@/components/forms";
+import { Input } from "@/components/ui/input";
+import { type FieldErrors } from "@/lib/api";
+
+export function CityField({ errors }: { errors: FieldErrors }) {
+  return (
+    <FormField name="days.0.city" label="City" hint="Choose the first day's city." errors={errors} required>
+      {control => <Input {...control} />}
+    </FormField>
+  );
+}
+```
+
+Spread the supplied attributes onto the actual input, textarea, select or custom
+focusable control. They include `id`, `name`, `required`, `disabled`, `aria-invalid`
+and `aria-describedby`; the label, hint and error list use matching IDs. An
+explicit `id` is optional; otherwise IDs are generated uniquely. Use `describedBy`
+to include other help text without replacing the field's hint/error associations.
+
+In the owning form's error handler, use `isApiError(error)` and then
+`setErrors(error.fieldErrors)` to pass the normalized backend messages down.
+The owning form controls values, submission, loading, and when errors are cleared;
+passing an updated map or `{}` removes old messages without resetting the input.
+Use the existing `ErrorState` or toast for form-wide/request failures. This
+component adds no validation rules, form library or network calls. Existing
+reference-data pickers already own their label/error presentation: pass their
+`error` prop rather than wrapping them with a second label.
+
+Use the shared background or secondary-background tokens behind the field; its
+error text uses the theme's Burgundy token. Long messages wrap on narrow screens.
+The interactive `/design-system` preview shows multiple errors, a dotted field
+path, and clearing messages while preserving entered values.
 
 ## Calling the backend
 
