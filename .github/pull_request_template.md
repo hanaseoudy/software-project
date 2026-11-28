@@ -17,6 +17,10 @@ One Jira task = one branch = one PR. Target branch: develop.
 
 -
 
+## Screenshots (optional)
+
+<!-- Optional, not required for review. For frontend changes, screenshots of the states you built (data, empty, loading, error, validation errors) on desktop and mobile (~375px wide) help the reviewer. Delete this section if you have none. -->
+
 ## Endpoints
 
 <!-- Every API endpoint this PR calls or adds/changes. Write "None" if not applicable. -->
