@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { DM_Sans, Fraunces } from "next/font/google";
 import { ToastProvider } from "@/components/feedback";
+import { AuthProvider } from "@/components/auth";
+import { Navbar } from "@/components/layout/navbar";
 import "./globals.css";
 
 // GEN-17 fonts: Fraunces for headings and branding, DM Sans for everything else.
@@ -26,7 +28,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${fraunces.variable} ${dmSans.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col"><ToastProvider>{children}</ToastProvider></body>
+      <body className="flex min-h-full flex-col"><ToastProvider><AuthProvider><Navbar /><div id="page-content" tabIndex={-1} className="flex flex-1 flex-col">{children}</div></AuthProvider></ToastProvider></body>
     </html>
   );
 }

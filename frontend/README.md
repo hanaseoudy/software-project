@@ -37,7 +37,7 @@ Run the backend on port 3000 at the same time (`cd backend; npm run start:dev`).
 ```text
 src/
   app/                    routes (App Router); see "Route map"
-    layout.tsx            root layout (the only layout for now)
+    layout.tsx            root layout: shared auth provider, navbar and toasts
     (public)/             pages for everyone (guests and logged-in users)
     (auth)/               login, register, forgot password
     (protected)/          pages that need a login (any role) + admin/, airline/, hotel/
@@ -76,7 +76,7 @@ Every page from the Milestone 2 page inventories already has its folder under `s
 
 Folders in brackets, like `(public)`, are [route groups](https://nextjs.org/docs/app/api-reference/file-conventions/route-groups). They organise pages by who may open them, but they are **not part of the URL**: `src/app/(public)/hotels/page.tsx` is served at `/hotels`.
 
-| Group | Who can open it | Access rules (added by FND-2, not yet) |
+| Group | Who can open it | Access rules (FND-2 layouts) |
 | --- | --- | --- |
 | `(public)` | Everyone: guests and logged-in users | none |
 | `(auth)` | Guests (login, register, forgot password) | logged-in users are sent to their home page |
@@ -289,6 +289,63 @@ try {
 ```
 
 ## Session refresh on server-rendered pages (requirement for FND-2)
+
+### Shared auth and navigation (FND-2 / TASK-134)
+
+`AuthProvider` in the root layout loads `/auth/me` with `authRedirect: false`.
+It exposes `user` (including `role`, `providerType`, `providerId`), `status`
+(`loading`, `authenticated`, `guest`, `error`), `error`, `reload()` and `logout()`:
+
+```tsx
+"use client";
+import { useCurrentUser } from "@/components/auth";
+import { homeFor, safeReturnTo } from "@/lib/auth/navigation";
+
+// Inside a component; after a successful login/password/profile change:
+const { user, status, reload, logout } = useCurrentUser();
+// const signedIn = await reload();
+// if (signedIn) router.replace(safeReturnTo(returnTo, homeFor(signedIn)));
+```
+
+Identity stays in React memory. Never store credentials or tokens in browser storage.
+Use `reload()` after login or identity changes; it returns the current user or null.
+Network/server failures have `status: "error"`, so guards offer retry instead of
+mistaking an outage for a guest. Logout only clears identity after the backend
+confirms success, then reloads `/` to discard private client/router state.
+
+Group layouts use `RouteGuard` for guest-only, authenticated, user, admin, airline
+and hotel access. Both moderator areas check `role`, `providerType` and an assigned
+`providerId`. Guests go to login with their local path/query/fragment as `returnTo`.
+Use `safeReturnTo` before navigating to that parameter. Wrong-role users see the
+shared no-access error with a link to their own home. These are UX guards: Server
+Components still execute on the server, and every private page's API request must
+enforce authorization and ownership. Do not rely on a parent client layout to
+protect server data.
+
+`SessionExpiredNotice` is mounted in the auth layout and shows the expiry message
+on `/login?reason=session-expired` once the login page is implemented. FND-2 adds
+no login, dashboard or notifications page; those existing route folders belong to
+their separate tasks. Links to unfinished pages will return 404 until those tasks land.
+The navbar reuses the theme and shared components, has a mobile menu and a skip
+link, and selects navigation by role. The notification bell links directly to
+`/notifications`; it loads the unread count on mount/navigation and provides retry
+on failure. It does not poll in the background, which would keep idle sessions alive.
+
+Import `SessionRecovery` from `@/components/auth` in a protected server page:
+
+```tsx
+try {
+  booking = await serverFetch<Booking>(`/flight-bookings/${id}`);
+} catch (error) {
+  if (isUnauthorized(error)) return <SessionRecovery />;
+  return <ErrorState error={error} />;
+}
+```
+
+Keep the page's successful content server-rendered. The recovery component uses
+the existing shared `refreshSession()`, reloads identity, then calls `router.refresh()`.
+Refresh failure clears the auth context and navigates to login with expiry reason
+and return destination. A failed identity reload offers recovery feedback.
 
 **Why the server cannot refresh:**
 - The `refresh_token` cookie has path `/api/auth`, so the browser does **not** send it with page requests such as `/bookings`.

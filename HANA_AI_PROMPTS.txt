@@ -761,3 +761,39 @@ agent-specific rules, so the two files cannot disagree.
 docs/PR-REVIEW-PROCESS.md section 4.1 describes the review. I reviewed the
 files before they were committed.
 ================================================
+================================================
+Date: 2026-11-28
+Student: Hana Seoudy
+Tool: Codex
+Related Requirement: ACC-19, ACC-04, ACC-11, ACC-10, ACC-06,
+GEN-14, GEN-15, GEN-16, GEN-01 (GEN-17 shared styling)
+
+Prompt:
+Read CLAUDE.local.md, then implement our second task FND-2 (TASK-134).
+Approved the listed files and creation of the task branch from develop.
+Later clarified: for frontend-only tasks, run relevant frontend tests,
+type-checking and lint only; leave full regression to GitHub CI unless
+backend code changes or backend integration testing is specifically needed.
+
+How the output was used:
+Codex checked the official CSV, project PDF, Jira task and documented backend
+contracts. Added auth context/current-user hook, route-group guards, session
+recovery, expiry notice, responsive role navigation and notification count.
+Reused shared API/refresh helpers, theme, buttons and feedback components.
+Added tests for role boundaries, safe redirects, request races, recovery,
+logout failures and notification retry; documented integration examples.
+No backend or dependency files changed. No commit, push or PR was performed.
+
+Verification:
+Frontend lint and type-check passed. Initial full frontend suite: 206 tests
+passed; production build passed. After recovery/race improvements, all 38
+focused FND-2 tests passed; two additional URL-normalization cases were then
+added and all 15 navigation tests passed. Browser visual QA/screenshots could
+not run because the browser connection was unavailable. Login, dashboard
+and notification pages remain in their separate tasks.
+Before the frontend-only clarification, backend lint/build, 1665 unit tests
+and 418 e2e tests passed using a disposable local replica set. Backend lint
+reported four pre-existing unused-import warnings. Temporary MongoDB and
+preview server were stopped. Future frontend-only checks follow Hana's
+clarification. Hana's manual review and CI remain pending.
+================================================
