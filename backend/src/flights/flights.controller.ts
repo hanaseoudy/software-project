@@ -1,4 +1,3 @@
-
 import {
   Body,
   Controller,
@@ -25,6 +24,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -37,12 +37,16 @@ import { UpdateFlightDto } from './dto/update-flights.dto';
 import { UpdateCabinDto } from './dto/update-cabin.dto';
 import { SearchFlightsDto } from './dto/search-flights.dto';
 import { CancelFlightDto } from './dto/cancel-flight.dto';
- 
+import {
+  PaginatedResponseDto,
+  PaginationQueryDto,
+} from '../common/pagination/pagination';
+
 @ApiTags('Flights')
 @Controller('flights')
 export class FlightsController {
   constructor(private readonly flights: FlightsService) {}
- 
+
   @ApiOperation({
     summary: 'Create a new flight (Airline Moderator only)',
     description:
@@ -71,7 +75,7 @@ export class FlightsController {
   ) {
     return this.flights.create(userId.sub, dto);
   }
- 
+
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -110,7 +114,7 @@ export class FlightsController {
   ) {
     return this.flights.cancelFlight(id, user.sub, dto);
   }
- 
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR)
@@ -142,7 +146,7 @@ export class FlightsController {
   ) {
     return this.flights.update(id, user.sub, dto);
   }
- 
+
   @Post(':id/cabins')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiCookieAuth()
@@ -183,7 +187,7 @@ export class FlightsController {
     // req.user.sub is the moderator's ID extracted from the JWT token
     return this.flights.addCabin(flightId, user.sub, dto);
   }
- 
+
   @Patch(':id/cabins/:cabinId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR)
@@ -213,7 +217,7 @@ export class FlightsController {
   ) {
     return this.flights.updateCabin(id, cabinId, user.sub, dto);
   }
- 
+
   @Get(':id/bookings')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR)
@@ -240,7 +244,7 @@ export class FlightsController {
   ) {
     return this.flights.getModeratorFlightBookings(flightId, user.sub);
   }
- 
+
   @Get(':id/passengers/export')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.MODERATOR)
@@ -272,7 +276,7 @@ export class FlightsController {
     });
     return new StreamableFile(Buffer.from(csv, 'utf8'));
   }
- 
+
   @ApiOperation({
     summary: 'Search flights (public)',
     description:
@@ -292,7 +296,44 @@ export class FlightsController {
   search(@Query() query: SearchFlightsDto) {
     return this.flights.search(query);
   }
- 
+
+  @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.MODERATOR)
+  @ApiOperation({
+    summary: "List my airline's flights",
+    description:
+      'Returns the flights of the airline assigned to the logged-in moderator, ' +
+      'earliest departure first, 10 per page. The airline comes from the ' +
+      "moderator's assignment, never from the request.",
+  })
+  @ApiCookieAuth()
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Page number, starting at 1 (page size is fixed at 10)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of the airline flights',
+    type: PaginatedResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid page value' })
+  @ApiResponse({ status: 401, description: 'Not logged in' })
+  @ApiResponse({ status: 403, description: 'Not an airline moderator' })
+  @ApiResponse({
+    status: 404,
+    description: 'No airline assigned to this moderator',
+  })
+  listMyFlights(
+    @CurrentUser() user: AuthPayload,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.flights.listMyFlights(user.sub, query.page ?? 1);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get flight details by ID (FLT-17)' })
   @ApiParam({ name: 'id', description: 'MongoDB ObjectId of the flight' })
@@ -306,4 +347,3 @@ export class FlightsController {
     return this.flights.findOne(id);
   }
 }
- 

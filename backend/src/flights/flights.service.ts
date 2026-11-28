@@ -1,4 +1,3 @@
-
 // flights.service.ts
 import {
   BadRequestException,
@@ -48,10 +47,11 @@ import { PassengerType } from '../flight-bookings/schemas/passenger.schema';
 import { BookingType } from '../payments/enums/payment.enums';
 import { NotificationType } from '../notifications/enums/notification.enums';
 import { RefundsService, refundQuote } from '../payments/refunds.service';
+import { PAGE_SIZE, paginate, skipFor } from '../common/pagination/pagination';
 @Injectable()
 export class FlightsService {
   private readonly logger = new Logger(FlightsService.name);
- 
+
   constructor(
     @InjectModel(Flight.name)
     private readonly flightsModel: Model<FlightDocument>,
@@ -66,38 +66,38 @@ export class FlightsService {
     private readonly refundsService: RefundsService,
     private readonly notificationsService: NotificationsService,
   ) {}
- 
+
   async create(moderatorId: string, dto: CreateFlightsDto) {
     const airlineId = await this.getModeratorAirlineId(moderatorId);
     const { departureAirport, arrivalAirport } = await this.getAirports(
       dto.departureAirport,
       dto.arrivalAirport,
     );
- 
+
     this.assertRealLocalDateTime(dto.departureTime, 'departureTime');
     this.assertRealLocalDateTime(dto.arrivalTime, 'arrivalTime');
- 
+
     const departureUtc = fromZonedTime(
       dto.departureTime,
       departureAirport.timezone,
     );
     const arrivalUtc = fromZonedTime(dto.arrivalTime, arrivalAirport.timezone);
- 
+
     this.validateFlightSchedule(
       dto.departureAirport,
       dto.arrivalAirport,
       departureUtc,
       arrivalUtc,
     );
- 
+
     const departureLocalDate = dto.departureTime.split('T')[0]; // or via date-fns-tz
- 
+
     await this.ensureNoDuplicateFlight(
       airlineId,
       dto.flightNumber,
       departureLocalDate,
     );
- 
+
     let flight: FlightDocument;
     try {
       flight = await this.flightsModel.create({
@@ -117,14 +117,14 @@ export class FlightsService {
       }
       throw err;
     }
- 
+
     // Populate the references before returning the response
     const populatedFlight = await flight.populate([
       'airline',
       'departureAirport',
       'arrivalAirport',
     ]);
- 
+
     return formatFlightWithLocalTimes(populatedFlight);
   }
   /**
@@ -143,24 +143,24 @@ export class FlightsService {
         $set: { status: FlightStatus.DEPARTED },
       },
     );
- 
+
     if (result.modifiedCount > 0) {
       this.logger.log(
         `Transitioned ${result.modifiedCount} flight(s) from SCHEDULED to DEPARTED`,
       );
     }
   }
- 
+
   /**
    * FLT-30: Ensures a flight is currently Scheduled and has not passed its departure time.
    * Also lazily syncs the DB status if departureTime just passed before the next cron tick.
    */
- 
+
   async assertFlightScheduled(flight: FlightDocument): Promise<void> {
     if (flight.status === FlightStatus.CANCELLED) {
       throw new BadRequestException('Cannot modify or book a cancelled flight');
     }
- 
+
     if (
       flight.status === FlightStatus.DEPARTED ||
       new Date(flight.departureTime) <= new Date()
@@ -172,7 +172,7 @@ export class FlightsService {
       throw new BadRequestException('Cannot modify or book a departed flight');
     }
   }
- 
+
   async addCabin(flightId: string, userId: string, dto: AddCabinDto) {
     if (!isValidObjectId(flightId)) {
       throw new BadRequestException('Invalid flight ID format');
@@ -180,12 +180,12 @@ export class FlightsService {
     if (!isValidObjectId(userId)) {
       throw new BadRequestException('Invalid user ID format');
     }
- 
+
     const flight = await this.flightsModel.findById(flightId);
     if (!flight) {
       throw new NotFoundException('Flight not found');
     }
- 
+
     // 3. Security: Check if this moderator owns the airline that owns this flight
     const moderatorAirlineId = await this.getModeratorAirlineId(userId);
     if (flight.airline.toString() !== moderatorAirlineId.toString()) {
@@ -193,9 +193,9 @@ export class FlightsService {
         'You do not have permission to modify cabins for this flight',
       );
     }
- 
+
     await this.assertFlightScheduled(flight);
- 
+
     // 4. Rule: Each cabin category used at most once per flight
     const cabinExists = flight.cabins.some(
       (c) => c.cabinClass === dto.cabinClass,
@@ -205,13 +205,13 @@ export class FlightsService {
         `Cabin class ${dto.cabinClass} already exists on this flight`,
       );
     }
- 
+
     if (flight.status !== FlightStatus.SCHEDULED) {
       throw new ConflictException(
         'Cabins can only be added to Scheduled flights',
       );
     }
- 
+
     const updated = await this.flightsModel.findOneAndUpdate(
       { _id: flightId, 'cabins.cabinClass': { $ne: dto.cabinClass } },
       { $push: { cabins: { ...dto, bookedSeats: 0, heldSeats: 0 } } },
@@ -222,18 +222,18 @@ export class FlightsService {
         'Cabin could not be added: it may already exist or the flight changed. Please retry.',
       );
     }
- 
+
     return formatFlightWithLocalTimes(
       await updated.populate(['airline', 'departureAirport', 'arrivalAirport']),
     );
   }
- 
+
   // constructor: inject the Airline model next to the Flight model
- 
+
   async search(dto: SearchFlightsDto) {
     return this.searchRoutes(dto);
   }
- 
+
   // ITN-26: all destination airports participate in each leg's single query.
   // Legacy search keeps its original unpaginated, single-airport contract.
   async searchToAirports(
@@ -264,20 +264,20 @@ export class FlightsService {
       ...(result.return === undefined ? {} : { return: unique(result.return) }),
     };
   }
- 
+
   private async searchRoutes(
     dto: SearchFlightsDto,
     arrivalCodes?: readonly string[],
   ) {
     const { adults, children = 0, infants = 0 } = dto;
- 
+
     if (infants > adults) {
       throw new BadRequestException('Infants cannot outnumber adults');
     }
     if (dto.returnDate && dto.returnDate < dto.departureDate) {
       throw new BadRequestException('returnDate cannot be before departDate');
     }
- 
+
     if (
       dto.minPrice !== undefined &&
       dto.maxPrice !== undefined &&
@@ -285,12 +285,12 @@ export class FlightsService {
     ) {
       throw new BadRequestException('minPrice cannot be greater than maxPrice');
     }
- 
+
     const seatsNeeded = adults + children; // infants occupy no seat
     const party = { adults, children, infants };
- 
+
     const priceRange = { minPrice: dto.minPrice, maxPrice: dto.maxPrice };
- 
+
     const outboundRaw = await this.findLeg(
       dto.departureAirport,
       arrivalCodes ?? dto.arrivalAirport,
@@ -306,9 +306,9 @@ export class FlightsService {
       dto.sortOrder,
       arrivalCodes !== undefined,
     ); // ADDED (FLT-15)
- 
+
     if (!dto.returnDate) return { outbound };
- 
+
     const returningRaw = await this.findLeg(
       arrivalCodes ?? dto.arrivalAirport,
       dto.departureAirport,
@@ -318,35 +318,35 @@ export class FlightsService {
       dto.cabinClass,
       priceRange,
     );
- 
+
     const returning = this.sortFlights(
       returningRaw,
       dto.sortBy,
       dto.sortOrder,
       arrivalCodes !== undefined,
     ); // ADDED (FLT-15)
- 
+
     return { outbound, return: returning };
   }
- 
+
   async findOne(id: string) {
     if (!isValidObjectId(id)) {
       throw new BadRequestException('Invalid flight ID format');
     }
- 
+
     const flight = await this.flightsModel
       .findById(id)
       .populate('airline')
       .populate('departureAirport')
       .populate('arrivalAirport')
       .lean();
- 
+
     if (!flight) {
       throw new NotFoundException('Flight not found');
     }
- 
+
     const formatted = formatFlightWithLocalTimes(flight);
- 
+
     return {
       ...formatted,
       cabins: (formatted.cabins ?? []).map((c: any) => ({
@@ -364,7 +364,7 @@ export class FlightsService {
       },
     };
   }
- 
+
   /**
    * FLT-06: Cancels a moderator's Scheduled flight after confirmation,
    * cancels all Confirmed bookings with a 100% refund (PAY-03),
@@ -374,18 +374,18 @@ export class FlightsService {
     if (!isValidObjectId(flightId)) {
       throw new BadRequestException('Invalid flight ID format');
     }
- 
+
     // Reuses ownership check (403) + SCHEDULED status check (409)[cite: 3]
     const flight = await this.loadOwnedScheduledFlight(flightId, userId);
- 
+
     // FLT-30: Ensure departureTime hasn't already passed before the cron tick[cite: 2]
     await this.assertFlightScheduled(flight);
- 
+
     const cancellationReason =
       dto.reason?.trim() ||
       `Flight ${flight.flightNumber} cancelled by airline`;
     const now = new Date();
- 
+
     // 1. Transition flight status to CANCELLED (automatically hides it from GET /api/flights/search)[cite: 2]
     flight.status = FlightStatus.CANCELLED;
     flight.cabins.forEach((cabin) => {
@@ -393,7 +393,7 @@ export class FlightsService {
       cabin.heldSeats = 0;
     });
     await flight.save();
- 
+
     // 2. Find all active bookings (CONFIRMED or PENDING_PAYMENT) referencing this flight[cite: 3]
     const bookings = await this.flightBookingModel.find({
       $or: [{ outboundFlight: flight._id }, { returnFlight: flight._id }],
@@ -404,27 +404,27 @@ export class FlightsService {
         ],
       },
     });
- 
+
     const passengerUserIds = new Set<string>();
- 
+
     for (const booking of bookings) {
       const seatCount = booking.passengers.filter(
         (p) => p.type !== PassengerType.INFANT,
       ).length;
- 
+
       // Identify the OTHER leg if this is a round-trip booking so its seats are also freed
       const otherFlightId =
         booking.outboundFlight.toString() === flight._id.toString()
           ? booking.returnFlight
           : booking.outboundFlight;
- 
+
       if (booking.status === FlightBookingStatus.CONFIRMED) {
         booking.status = FlightBookingStatus.CANCELLED;
         booking.cancelledAt = now;
         booking.cancellationReason = cancellationReason;
         // issueRefund() only runs after the booking is persisted as CANCELLED.
         await booking.save();
- 
+
         // PAY-03: 100% of the amount charged (seat fares + baggage fees).
         const quote = refundQuote({
           paidAmount:
@@ -433,7 +433,7 @@ export class FlightsService {
             ) / 100,
           providerInitiated: true,
         });
- 
+
         try {
           await this.refundsService.issueRefund({
             bookingType: BookingType.FLIGHT,
@@ -450,7 +450,7 @@ export class FlightsService {
             }`,
           );
         }
- 
+
         if (otherFlightId) {
           await this.releaseSeatsOnOtherLeg(
             otherFlightId,
@@ -459,14 +459,14 @@ export class FlightsService {
             'bookedSeats',
           );
         }
- 
+
         passengerUserIds.add(booking.user.toString());
       } else if (booking.status === FlightBookingStatus.PENDING_PAYMENT) {
         // Release pending seat hold[cite: 7]
         booking.status = FlightBookingStatus.EXPIRED;
         booking.cancelledAt = now;
         booking.cancellationReason = cancellationReason;
- 
+
         if (otherFlightId) {
           await this.releaseSeatsOnOtherLeg(
             otherFlightId,
@@ -475,11 +475,11 @@ export class FlightsService {
             'heldSeats',
           );
         }
- 
+
         await booking.save();
       }
     }
- 
+
     // 3. Send in-app notifications to all passengers with Confirmed bookings (GEN-01)
     if (passengerUserIds.size > 0) {
       await this.notificationsService.createForMany(
@@ -496,20 +496,20 @@ export class FlightsService {
         },
       );
     }
- 
+
     const populated = await flight.populate([
       'airline',
       'departureAirport',
       'arrivalAirport',
     ]);
- 
+
     return {
       flight: formatFlightWithLocalTimes(populated),
       cancelledBookingsCount: passengerUserIds.size,
       releasedHoldsCount: bookings.length - passengerUserIds.size,
     };
   }
- 
+
   /**
    * Helper: Releases booked or held seats on the opposite leg of a round-trip booking
    * when one leg is cancelled by the airline.
@@ -530,7 +530,7 @@ export class FlightsService {
       },
     );
   }
- 
+
   /**
    * FLT-05: Fetches a flight by ID, verifies the moderator owns its airline,
    * and ensures the flight is still in Scheduled status before editing.
@@ -542,22 +542,22 @@ export class FlightsService {
     if (!isValidObjectId(userId)) {
       throw new BadRequestException('Invalid user ID format');
     }
- 
+
     const flight = await this.flightsModel.findById(flightId);
     if (!flight) throw new NotFoundException('Flight not found');
- 
+
     const airlineId = await this.getModeratorAirlineId(userId);
     if (flight.airline.toString() !== airlineId.toString()) {
       throw new ForbiddenException(
         'You do not have permission to modify this flight',
       );
     }
- 
+
     await this.assertFlightScheduled(flight);
- 
+
     return flight;
   }
- 
+
   /**
    * FLT-05: Updates departure/arrival airports and times on a moderator's Scheduled flight,
    * blocking airport changes once seats are booked or held, validating the new schedule in UTC,
@@ -565,7 +565,7 @@ export class FlightsService {
    */
   async update(flightId: string, userId: string, dto: UpdateFlightDto) {
     const flight = await this.loadOwnedScheduledFlight(flightId, userId);
- 
+
     // The local time depends on the airport's time zone, so a new airport needs its time re-sent.
     if (dto.departureAirport && !dto.departureTime) {
       throw new BadRequestException(
@@ -577,26 +577,26 @@ export class FlightsService {
         'Changing the arrival airport requires arrivalTime too',
       );
     }
- 
+
     const [oldDep, oldArr] = await Promise.all([
       this.airportModel.findById(flight.departureAirport),
       this.airportModel.findById(flight.arrivalAirport),
     ]);
- 
+
     if (!oldDep) throw new NotFoundException('Departure airport not found');
     if (!oldArr) throw new NotFoundException('Arrival airport not found');
- 
+
     const { departureAirport: dep, arrivalAirport: arr } =
       await this.getAirports(
         (dto.departureAirport ?? oldDep!.iataCode) as unknown as Airport,
         (dto.arrivalAirport ?? oldArr!.iataCode) as unknown as Airport,
       );
- 
+
     // FLT-05: Airports cannot be changed once the flight has any active booking
     const airportChanged =
       !dep._id.equals(flight.departureAirport) ||
       !arr._id.equals(flight.arrivalAirport);
- 
+
     if (airportChanged) {
       const hasBookings = await this.flightBookingModel.exists({
         $or: [{ outboundFlight: flight._id }, { returnFlight: flight._id }],
@@ -608,30 +608,30 @@ export class FlightsService {
           ],
         },
       });
- 
+
       if (hasBookings) {
         throw new ConflictException(
           'Airports cannot be changed once the flight has bookings',
         );
       }
     }
- 
+
     if (dto.departureTime) {
       this.assertRealLocalDateTime(dto.departureTime, 'departureTime');
     }
     if (dto.arrivalTime) {
       this.assertRealLocalDateTime(dto.arrivalTime, 'arrivalTime');
     }
- 
+
     const departureTime = dto.departureTime
       ? this.countryLocalToUtc(dto.departureTime, dep.timezone)
       : flight.departureTime;
     const arrivalTime = dto.arrivalTime
       ? this.countryLocalToUtc(dto.arrivalTime, arr.timezone)
       : flight.arrivalTime;
- 
+
     this.validateFlightSchedule(dep, arr, departureTime, arrivalTime);
- 
+
     const departureLocalDate = formatInTimeZone(
       departureTime,
       dep.timezone,
@@ -644,17 +644,17 @@ export class FlightsService {
         departureLocalDate,
       );
     }
- 
+
     const timeChanged =
       departureTime.getTime() !== flight.departureTime.getTime() ||
       arrivalTime.getTime() !== flight.arrivalTime.getTime();
- 
+
     flight.departureAirport = dep._id;
     flight.arrivalAirport = arr._id;
     flight.departureTime = departureTime;
     flight.arrivalTime = arrivalTime;
     flight.departureLocalDate = departureLocalDate;
- 
+
     try {
       await flight.save();
     } catch (err: any) {
@@ -665,7 +665,7 @@ export class FlightsService {
       }
       throw err;
     }
- 
+
     if (timeChanged) {
       const confirmedBookings = await this.flightBookingModel
         .find({
@@ -674,9 +674,9 @@ export class FlightsService {
         })
         .select('user')
         .lean();
- 
+
       const userIds = confirmedBookings.map((b: any) => b.user);
- 
+
       await this.notificationsService.createForMany(userIds, {
         type: NotificationType.FLIGHT_SCHEDULE_CHANGED,
         title: 'Flight schedule updated',
@@ -687,12 +687,12 @@ export class FlightsService {
         },
       });
     }
- 
+
     return formatFlightWithLocalTimes(
       await flight.populate(['airline', 'departureAirport', 'arrivalAirport']),
     );
   }
- 
+
   /**
    * FLT-05: Updates a cabin's seat capacity and/or price on a moderator's Scheduled flight,
    * requiring at least one field to be provided and preventing totalSeats from dropping
@@ -707,12 +707,12 @@ export class FlightsService {
     if (dto.totalSeats === undefined && dto.price === undefined) {
       throw new BadRequestException('Send totalSeats and/or price');
     }
- 
+
     const flight = await this.loadOwnedScheduledFlight(flightId, userId);
     const cabin = flight.cabins.find((c) => String((c as any)._id) === cabinId);
     if (!cabin) throw new NotFoundException('Cabin not found on this flight');
     const cabinWithId = cabin as typeof cabin & { _id: Types.ObjectId };
- 
+
     if (dto.totalSeats !== undefined) {
       const inUse = cabin.bookedSeats + cabin.heldSeats;
       if (dto.totalSeats < inUse) {
@@ -721,7 +721,7 @@ export class FlightsService {
         );
       }
     }
- 
+
     const set: Record<string, number> = {};
     if (dto.totalSeats !== undefined) {
       set['cabins.$.totalSeats'] = dto.totalSeats;
@@ -729,7 +729,7 @@ export class FlightsService {
     if (dto.price !== undefined) {
       set['cabins.$.price'] = dto.price;
     }
- 
+
     const updated = await this.flightsModel.findOneAndUpdate(
       {
         _id: flight._id,
@@ -752,32 +752,32 @@ export class FlightsService {
         'Flight or cabin seat counts changed during the update; reload and retry',
       );
     }
- 
+
     return formatFlightWithLocalTimes(
       await updated.populate(['airline', 'departureAirport', 'arrivalAirport']),
     );
   }
- 
+
   countryLocalToUtc(localDateTime: string, timezone: string): Date {
     // Ensure we handle both Date objects (if NestJS transformed it) and strings
     const str =
       typeof localDateTime === 'string'
         ? localDateTime
         : (localDateTime as Date).toISOString().slice(0, 19);
- 
+
     const [datePart, timePart] = str.split('T');
     const [y, m, d] = datePart.split('-').map(Number);
     const [hh, mm] = timePart.split(':').map(Number);
- 
+
     // Numeric arguments force TZDate to construct the timestamp strictly in `timezone`
     const zonedDate = TZDate.tz(timezone, y, m - 1, d, hh, mm, 0);
     return new Date(zonedDate.getTime());
   }
- 
+
   async getModeratorFlightBookings(flightId: string, moderatorId: string) {
     const flight = await this.loadModeratorFlight(flightId, moderatorId);
     const bookings = await this.findModeratorFlightBookings(flightId);
- 
+
     return {
       flightId: String(flight._id),
       flightNumber: flight.flightNumber,
@@ -800,7 +800,7 @@ export class FlightsService {
       })),
     };
   }
- 
+
   async getModeratorPassengerCsv(flightId: string, moderatorId: string) {
     const report = await this.getModeratorFlightBookings(flightId, moderatorId);
     const escapeCsv = (value: unknown) =>
@@ -817,14 +817,51 @@ export class FlightsService {
         ]),
       ),
     ];
- 
+
     return rows
-      .map((row) =>
-        row.map((value: unknown) => escapeCsv(value)).join(','),
-      )
+      .map((row) => row.map((value: unknown) => escapeCsv(value)).join(','))
       .join('\r\n');
   }
- 
+
+  async listMyFlights(moderatorId: string, page: number) {
+    const airlineId = await this.getModeratorAirlineId(moderatorId);
+    const filter = { airline: airlineId };
+
+    const [flights, total] = await Promise.all([
+      this.flightsModel
+        .find(filter)
+        .sort({ departureTime: 1, _id: 1 })
+        .skip(skipFor(page))
+        .limit(PAGE_SIZE)
+        .populate('airline')
+        .populate('departureAirport')
+        .populate('arrivalAirport')
+        .lean(),
+      this.flightsModel.countDocuments(filter),
+    ]);
+
+    const items = flights.map((f) => {
+      const formatted = formatFlightWithLocalTimes(f);
+      return {
+        ...formatted,
+        cabins: (formatted.cabins ?? []).map((c: any) => ({
+          cabinId: c._id,
+          cabinClass: c.cabinClass,
+          totalSeats: c.totalSeats,
+          bookedSeats: c.bookedSeats,
+          heldSeats: c.heldSeats,
+          seatsRemaining: c.totalSeats - c.bookedSeats - c.heldSeats,
+          price: c.price,
+          currency: c.currency,
+          freeBags: c.freeBags,
+          maxBagWeightKg: c.maxBagWeightKg,
+        })),
+      };
+    });
+
+    return paginate(items, total, page);
+  }
+
   private async loadModeratorFlight(
     flightId: string,
     moderatorId: string,
@@ -835,22 +872,22 @@ export class FlightsService {
     if (!isValidObjectId(moderatorId)) {
       throw new BadRequestException('Invalid user ID format');
     }
- 
+
     const flight = await this.flightsModel.findById(flightId).lean();
     if (!flight) {
       throw new NotFoundException('Flight not found');
     }
- 
+
     const airlineId = await this.getModeratorAirlineId(moderatorId);
     if (flight.airline.toString() !== airlineId.toString()) {
       throw new ForbiddenException(
         'You do not have permission to view this flight',
       );
     }
- 
+
     return flight as unknown as FlightDocument;
   }
- 
+
   private async findModeratorFlightBookings(flightId: string) {
     const flightObjectId = new Types.ObjectId(flightId);
     return this.flightBookingModel
@@ -860,16 +897,13 @@ export class FlightsService {
           { returnFlight: flightObjectId },
         ],
         status: {
-          $in: [
-            FlightBookingStatus.CONFIRMED,
-            FlightBookingStatus.CANCELLED,
-          ],
+          $in: [FlightBookingStatus.CONFIRMED, FlightBookingStatus.CANCELLED],
         },
       })
       .sort({ bookingReference: 1 })
       .lean();
   }
- 
+
   private async findLeg(
     fromCode: string | readonly string[],
     toCode: string | readonly string[],
@@ -919,7 +953,7 @@ export class FlightsService {
       .populate('departureAirport')
       .populate('arrivalAirport')
       .lean();
- 
+
     return flights
       .filter((f: any) => f.airline && f.airline.isActive !== false)
       .map((f: any) =>
@@ -946,7 +980,7 @@ export class FlightsService {
       )
       .filter((f: any) => f.cabins.length > 0);
   }
- 
+
   private tripPrice(
     fare: number,
     p: { adults: number; children: number; infants: number },
@@ -955,7 +989,7 @@ export class FlightsService {
     const infantCents = Math.round(cents * 0.1);
     return (cents * (p.adults + p.children) + infantCents * p.infants) / 100;
   }
- 
+
   private sortFlights(
     flights: any[],
     sortBy: FlightSortBy = FlightSortBy.DEPARTURE_TIME,
@@ -963,10 +997,10 @@ export class FlightsService {
     stableTies = false,
   ) {
     const dir = sortOrder === SortFlightOrder.DESC ? -1 : 1;
- 
+
     return [...flights].sort((a, b) => {
       let diff = 0;
- 
+
       if (sortBy === FlightSortBy.PRICE) {
         const minA = Math.min(...a.cabins.map((c: any) => c.fare));
         const minB = Math.min(...b.cabins.map((c: any) => c.fare));
@@ -986,14 +1020,14 @@ export class FlightsService {
           new Date(a.departureTime).getTime() -
           new Date(b.departureTime).getTime();
       }
- 
+
       return (
         diff * dir ||
         (stableTies ? String(a._id).localeCompare(String(b._id)) : 0)
       );
     });
   }
- 
+
   private async getModeratorAirlineId(userId: string) {
     if (!userId)
       throw new ForbiddenException('You are not assigned to an airline'); // new line
@@ -1001,14 +1035,14 @@ export class FlightsService {
       moderatorId: userId,
       providerType: ProviderType.AIRLINE,
     });
- 
+
     if (!assignment) {
       throw new ForbiddenException('You are not assigned to an airline');
     }
- 
+
     return assignment.providerId;
   }
- 
+
   private async getAirports(
     departureCode: CreateFlightsDto['departureAirport'],
     arrivalCode: CreateFlightsDto['arrivalAirport'],
@@ -1022,25 +1056,25 @@ export class FlightsService {
       departureIata === arrivalIata
         ? [departureIata]
         : [departureIata, arrivalIata];
- 
+
     const airports = await this.airportModel
       .find({ iataCode: { $in: codes } })
       .exec();
- 
+
     const airportByCode = new Map(
       airports.map((airport) => [airport.iataCode, airport]),
     );
- 
+
     const departureAirport = airportByCode.get(departureIata);
     const arrivalAirport = airportByCode.get(arrivalIata);
- 
+
     if (!departureAirport || !arrivalAirport) {
       throw new BadRequestException('One or both airports do not exist');
     }
- 
+
     return { departureAirport, arrivalAirport };
   }
- 
+
   private validateFlightSchedule(
     departureAirport: CreateFlightsDto['departureAirport'],
     arrivalAirport: CreateFlightsDto['arrivalAirport'],
@@ -1052,23 +1086,23 @@ export class FlightsService {
         'Departure and Arrival airport cannot be the same.',
       );
     }
- 
+
     if (arrivalUtc <= departureUtc) {
       throw new BadRequestException(
         'Arrival time cannot be before Departure time.',
       );
     }
- 
+
     if (departureUtc < new Date()) {
       throw new BadRequestException('Departure time cannot be in the past.');
     }
   }
- 
+
   private assertRealLocalDateTime(value: string, field: string): void {
     const [datePart, timePart] = value.split('T');
     const [y, m, d] = datePart.split('-').map(Number);
     const [hh, mm] = timePart.split(':').map(Number);
- 
+
     const probe = new Date(Date.UTC(y, m - 1, d, hh, mm));
     const isReal =
       probe.getUTCFullYear() === y &&
@@ -1076,12 +1110,12 @@ export class FlightsService {
       probe.getUTCDate() === d &&
       probe.getUTCHours() === hh &&
       probe.getUTCMinutes() === mm;
- 
+
     if (!isReal) {
       throw new BadRequestException(`${field} is not a real date and time`);
     }
   }
- 
+
   private async ensureNoDuplicateFlight(
     airlineId: ModeratorAssignment['providerId'],
     flightNumber: string,
@@ -1090,7 +1124,7 @@ export class FlightsService {
     const existingFlight = await this.flightsModel
       .exists({ airline: airlineId, flightNumber, departureLocalDate })
       .exec();
- 
+
     if (existingFlight) {
       throw new ConflictException(
         'A flight with this number already exists on this date',
