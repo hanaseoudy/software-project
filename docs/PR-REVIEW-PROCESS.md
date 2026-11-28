@@ -14,7 +14,7 @@ The team leader (Hana, `@hanaseoudy`) is the **only** person who reviews, approv
    Example: `feature/FLT-1-TASK-160-flight-search`.
 3. **Put the Jira key (`TASK-<n>`) in the branch name and the PR title.** Example title: `TASK-160 [FLT-1] Flight search page`. Jira uses the key to show the branch, PR and CI status in the task's **Development** panel. The `PR checks` workflow fails if the key is missing (except for `chore/` and `docs/` branches and the `develop` → `main` release PR).
 4. **Target `develop`.** Never `main`.
-5. **Fill in every section of the PR template:** Jira task and requirement IDs, desktop and mobile screenshots, the Vercel preview link, endpoints used, how you tested it, and the checklist (GEN-17 design system, no secrets, `AI_PROMPTS` log updated).
+5. **Fill in every section of the PR template:** Jira task and requirement IDs, what changed, endpoints used, how you tested it, and the checklist (GEN-17 design system, no secrets, `AI_PROMPTS` log updated).
 6. **Wait for CI to go green.** Fix any red check yourself before asking for review. A PR with a red check cannot be merged.
 7. **Request a review from `@hanaseoudy`.**
 
