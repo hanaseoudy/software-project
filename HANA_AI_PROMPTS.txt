@@ -727,3 +727,37 @@ workflows have read-only permissions. It updated docs/PR-REVIEW-PROCESS.md
 (section 2 table, new section 4.1). The review is not a required check. I
 reviewed the workflow files before they were committed.
 ================================================
+
+================================================
+Date: 2026-11-28
+Student: Hana Seoudy
+Tool: Claude (Claude Code)
+Related Requirement: Team process (PR review, AI instructions), no requirement ID
+
+Prompt:
+Improve the automatic Claude PR review for Milestone 2 (frontend) without
+much extra cost or complexity: keep one review step and prioritise requirement
+completeness, functional correctness wherever the logic lives (frontend or
+backend), API integration, frontend quality and test quality. Inspect backend
+code only when a requirement in the PR needs it, report only actionable
+findings, avoid duplicate comments, keep the 30-minute timeout, and say what
+was verified by reading code versus what needs runtime or manual testing.
+Also evaluate whether CLAUDE.md needs updating and make AGENTS.md read
+CLAUDE.md. (An earlier draft with a second summary-comment step was dropped
+at my request.) I resolve merge conflicts myself.
+
+How the output was used:
+claude-code-review.yml: same single step and timeout; only the review
+instructions changed (the priorities above) and read-only Read/Grep/Glob were
+allowed so Claude can open the requirements CSV and backend code.
+CLAUDE.md was updated to match what FND-1 and the shared-component tasks
+built: frontend structure and commands, apiFetch / serverFetch and the Server
+Component error rule, the BACKEND_URL proxy, route groups and the route map,
+4.5:1 contrast and the Olive rule, formatMoney, existing and upcoming shared
+components, the automatic review, develop as default branch, a "Test quality"
+section with frontend test expectations, and personal AI log advice.
+AGENTS.md now tells every agent to read CLAUDE.md in full first and keeps only
+agent-specific rules, so the two files cannot disagree.
+docs/PR-REVIEW-PROCESS.md section 4.1 describes the review. I reviewed the
+files before they were committed.
+================================================
