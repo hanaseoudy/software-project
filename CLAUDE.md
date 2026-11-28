@@ -129,7 +129,8 @@ Use Conventional Commits with the requirement ID, e.g. `feat(itineraries): add p
 
 - **One Jira task = one branch = one PR.** Keep PRs small; CI warns above about 800 changed lines.
 - PR title format: `TASK-<n> [<planning ID>] <short description>`, e.g. `TASK-160 [FLT-1] Flight search page`.
-- Fill in every section of `.github/pull_request_template.md`: Jira task, requirement IDs, desktop and mobile screenshots, Vercel preview link, endpoints, testing and the checklist. See `docs/PR-REVIEW-PROCESS.md`.
+- Fill in every section of `.github/pull_request_template.md`: Jira task, requirement IDs, what changed, endpoints, testing, the checklist and known limitations. See `docs/PR-REVIEW-PROCESS.md`.
+- **Screenshots (optional, non-blocking):** for frontend changes, add desktop and mobile (~375 px) screenshots of the states you built when you can. They help the reviewer but are a reminder, not a requirement: a PR is reviewed and can be merged without them.
 - Required CI checks on every PR into `develop`/`main` (all must be green before merge):
   - `Backend lint, build and unit tests`
   - `Backend e2e tests`

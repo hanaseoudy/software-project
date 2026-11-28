@@ -17,15 +17,9 @@ One Jira task = one branch = one PR. Target branch: develop.
 
 -
 
-## Screenshots (frontend changes)
+## Screenshots (optional)
 
-<!-- Drag images in here. Show every state you built: data, empty, loading, error, validation errors. -->
-
-| Desktop | Mobile (~375px wide) |
-| --- | --- |
-| | |
-
-**Vercel preview link:** <!-- paste the preview URL from the Vercel bot comment -->
+<!-- Optional, not required for review. For frontend changes, screenshots of the states you built (data, empty, loading, error, validation errors) on desktop and mobile (~375px wide) help the reviewer. Delete this section if you have none. -->
 
 ## Endpoints
 
